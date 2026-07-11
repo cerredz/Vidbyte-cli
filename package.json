@@ -1,0 +1,47 @@
+{
+  "name": "vidbyte-cli",
+  "version": "0.1.0",
+  "description": "Universal Vidbyte CLI: authentication, harness runs, and configuration for the Vidbyte platform.",
+  "type": "module",
+  "bin": {
+    "vidbyte": "./bin/vidbyte.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "smoke": "npm run build && node scripts/smoke.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cerredz/Vidbyte-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cerredz/Vidbyte-cli/issues"
+  },
+  "homepage": "https://github.com/cerredz/Vidbyte-cli#readme",
+  "keywords": [
+    "vidbyte",
+    "cli",
+    "harness",
+    "agents",
+    "claude-code",
+    "codex"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}
