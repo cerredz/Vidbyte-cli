@@ -4,7 +4,7 @@ This is the static half of the static/dynamic seam (commands/index.ts:23 review 
 the platform commands and the generic harness verbs (`run`, `status`, `list`, `catalog`)
 register here synchronously. Per-harness command subtrees are NOT built here — they depend
 on a manifest that arrives over the network, and are attached in a second pass by cli.py via
-the harness factory. Keep this file the home of the stable surface only.
+the HarnessRegistry. Keep this file the home of the stable surface only.
 """
 
 from __future__ import annotations

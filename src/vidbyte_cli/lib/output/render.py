@@ -7,7 +7,7 @@ for a specific command. Only this module and logger.py format terminal output.
 from __future__ import annotations
 
 from ...lib.errors.cli_error import not_implemented
-from ...types.api import HarnessRun, HarnessSummary
+from ...types.harness import HarnessRun, HarnessSummary
 
 
 class RunRenderer:

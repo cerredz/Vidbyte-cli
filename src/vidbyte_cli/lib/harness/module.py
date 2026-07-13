@@ -1,7 +1,7 @@
 """The HarnessModule protocol: the minimal contract the runtime depends on.
 
 Both a hand-written harness (via BaseHarness) and a manifest-generated one satisfy this,
-so the factory and the `harness catalog` discovery treat them identically.
+so the HarnessRegistry and the `harness catalog` discovery treat them identically.
 """
 
 from __future__ import annotations
