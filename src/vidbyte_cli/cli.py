@@ -13,9 +13,11 @@ import sys
 import click
 
 from .commands import register_all_commands
+from .harnesses import static_harness_map
 from .lib.errors.cli_error import CliError
+from .lib.harness.catalog import HarnessCatalog
 from .lib.harness.context import HarnessContext
-from .lib.harness.factory import attach_harness_namespace
+from .lib.harness.registry import HarnessRegistry
 from .lib.output.logger import logger
 
 CLI_VERSION = "0.1.0"
@@ -57,8 +59,10 @@ def main(argv: list[str] | None = None) -> None:
 
     namespace = peek_harness_namespace(argv)
     if namespace is not None:
+        ctx = HarnessContext.default()
+        registry = HarnessRegistry(static_harness_map(), HarnessCatalog(ctx))
         try:
-            attach_harness_namespace(harness_group, namespace, HarnessContext.default())
+            registry.attach(harness_group, namespace, ctx)
         except CliError as error:
             logger.error(str(error))
             sys.exit(error.exit_code)

@@ -7,7 +7,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from ...lib.errors.cli_error import not_implemented
-from ...types.api import HarnessRepoRef
+from ...types.harness import HarnessRepoRef
 
 
 class RepoInfo(BaseModel):

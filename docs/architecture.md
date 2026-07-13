@@ -59,9 +59,13 @@ lib/harness/types.py          HarnessCommandDef: a command as data + optional to
                               present hooks with sensible defaults
 lib/harness/manifest_harness.py  ManifestHarness(BaseHarness): satisfies the SAME contract
                               from a backend manifest, no per-command code
+lib/harness/invocation.py     InvocationBuilder: the one layer that turns CLI params + a
+                              command into a HarnessRunCreateRequest (parsing + agent-native
+                              errors), shared by every command
 lib/harness/catalog.py        HarnessCatalog: fetch + cache manifests under ~/.vidbyte/manifests
-lib/harness/factory.py        resolve a namespace to a HarnessModule (static wins, else
-                              manifest) and attach it to the command tree
+lib/harness/registry.py       HarnessRegistry: owns both sources (static map + catalog) and
+                              resolves a namespace to a HarnessModule (static wins, else
+                              manifest), then attaches it to the command tree
 ```
 
 ### Async registration
@@ -76,17 +80,19 @@ offline.
 ### Integrating a harness in `src/vidbyte_cli/harnesses/<name>/`
 
 Most harnesses need **no code here at all** — if the backend publishes a manifest, the
-factory serves it via `ManifestHarness`. A hand-written module exists only to enrich UX
-beyond what a manifest expresses. When you do write one, it is four steps (see
-`harnesses/job_applier/` for a worked example):
+`HarnessRegistry` serves it via `ManifestHarness`. A hand-written module exists only to
+enrich UX beyond what a manifest expresses. When you do write one, it is four steps (see
+`harnesses/software_engineering/` for the reference implementation, and the add-harness skill
+under `.claude/skills/` for the full standard):
 
 1. `types.py` — the harness's own pydantic models (its "custom dataclasses").
 2. `commands.py` — declare each command as a `HarnessCommandDef`; add a `to_invocation` /
    `present` hook only where the default doesn't fit.
-3. `<name>.py` — a `BaseHarness` subclass binding `name` + `description` + `commands()`.
+3. `harness.py` — a `BaseHarness` subclass binding `name` + `description` + `commands()`, and
+   `requires_repo = True` when the harness runs against the caller's checkout.
 4. Register the instance in `harnesses/__init__.py` (`HARNESSES`).
 
-Nothing in `commands/`, `cli.py`, or the click wiring changes — the factory discovers the
+Nothing in `commands/`, `cli.py`, or the click wiring changes — the registry discovers the
 module by namespace. That invariant is what makes integration formulaic.
 
 ## Backend contract

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ....types.api import HarnessRun, HarnessRunCreateRequest, HarnessSummary
+from ....types.harness import HarnessRun, HarnessRunCreateRequest, HarnessSummary
 from ....types.manifest import HarnessManifest
 from ..client import ApiClient
 

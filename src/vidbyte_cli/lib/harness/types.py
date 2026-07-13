@@ -12,14 +12,15 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
-from ...types.api import HarnessRepoRef, HarnessRun, HarnessRunCreateRequest
+from ...types.harness import HarnessRepoRef, HarnessRun, HarnessRunCreateRequest
 from ...types.manifest import ArgSpec, OptionSpec
 
 if TYPE_CHECKING:
     from .context import HarnessContext
 
-# Translate parsed CLI input + the current repo into a backend invocation envelope.
-ToInvocation = Callable[[dict[str, object], HarnessRepoRef], HarnessRunCreateRequest]
+# Translate parsed CLI input + the current repo (None for harnesses that don't run against
+# one) into a backend invocation envelope.
+ToInvocation = Callable[[dict[str, object], "HarnessRepoRef | None"], HarnessRunCreateRequest]
 # Present a finished run as a terminal string.
 Present = Callable[[HarnessRun, "HarnessContext"], str]
 

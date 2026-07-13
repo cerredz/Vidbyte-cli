@@ -77,13 +77,16 @@ exposes the varying parts as small typed hooks with defaults.
   default translation/presentation. The zero-code path.
 - **`HarnessCatalog`** — fetch + cache manifests under `~/.vidbyte/manifests`; enforces
   `min_cli_version`.
-- **`factory`** — `resolve_harness(name)`: hand-written module wins, else `ManifestHarness`.
+- **`InvocationBuilder`** — the single layer that turns parsed CLI params + a command into a
+  `HarnessRunCreateRequest`, with the shared parsing rules and agent-native error messages.
+- **`HarnessRegistry`** — owns both sources (the static hand-written map + the catalog) and
+  `resolve(name)`: hand-written module wins, else `ManifestHarness`.
 
 ### Integration model (`harnesses/<name>/`)
 
-Four steps, mirroring `harnesses/job_applier/`: `types.py` (data) → `commands.py`
-(declare + optional hooks) → `<name>.py` (`BaseHarness` subclass) → register in
-`harnesses/__init__.py`. Nothing else changes.
+Four steps, mirroring `harnesses/software_engineering/`: `types.py` (data) → `commands.py`
+(declare + optional hooks) → `harness.py` (`BaseHarness` subclass, `requires_repo` when it
+runs on the caller's checkout) → register in `harnesses/__init__.py`. Nothing else changes.
 
 ## CLI wiring (`cli.py`)
 

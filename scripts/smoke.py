@@ -12,8 +12,8 @@ INVOCATIONS = [
     ["--help"],
     ["--version"],
     ["harness", "--help"],
-    ["harness", "job-applier", "--help"],
-    ["harness", "job-applier", "apply", "--help"],
+    ["harness", "software-engineering", "--help"],
+    ["harness", "software-engineering", "fix", "--help"],
     ["connect", "--help"],
     ["config", "--help"],
 ]
