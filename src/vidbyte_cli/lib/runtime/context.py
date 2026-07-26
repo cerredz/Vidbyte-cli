@@ -31,6 +31,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ..api.client import ApiClient
 from ..api.endpoints.auth import AuthEndpoints
@@ -52,11 +53,24 @@ from ..errors.handler import ErrorHandler
 from ..harness.context import HarnessContext
 from ..io import IOStreams
 from ..io.terminal import TerminalCapabilities, TerminalPolicy
+from ..operations import IdempotencyKeyFactory, OperationJournal, OperationJournalRecorder
 from ..output.formats import ColorMode, OutputFormat
 from ..output.manager import OutputManager, OutputPolicy
+from ..polling import Poller
 
 _HarnessFactory = Callable[[], HarnessContext]
 _VerifierFactory = Callable[[], CredentialVerifier]
+
+if TYPE_CHECKING:
+    from ...features.research.application import (
+        ResearchExportService,
+        ResearchQueryService,
+        ResearchService,
+        ResearchWatcher,
+    )
+    from ...features.research.domain import ResearchGateway
+
+    _ResearchGatewayFactory = Callable[[], ResearchGateway]
 
 
 @dataclass(frozen=True)
@@ -83,6 +97,7 @@ class ApplicationContext:
         environment: Mapping[str, str] | None = None,
         paths: VidbytePaths | None = None,
         verifier_factory: _VerifierFactory | None = None,
+        research_gateway_factory: _ResearchGatewayFactory | None = None,
     ) -> None:
         self.streams = streams
         self.environment = dict(os.environ if environment is None else environment)
@@ -101,6 +116,15 @@ class ApplicationContext:
         self._errors = ErrorHandler(self._output)
         self._harness_factory = factory or self._build_harness_context
         self._harness_context: HarnessContext | None = None
+        self._research_gateway_factory = research_gateway_factory
+        self._research_gateway: ResearchGateway | None = None
+        self._research_watcher: ResearchWatcher | None = None
+        self._research_service: ResearchService | None = None
+        self._research_queries: ResearchQueryService | None = None
+        self._research_exports: ResearchExportService | None = None
+        self._idempotency: IdempotencyKeyFactory | None = None
+        self._operation_recorder: OperationJournalRecorder | None = None
+        self._exit_code = 0
 
     def configure(self, options: InvocationOptions, config: ResolvedConfig) -> None:
         if self._harness_context is not None and options != self.options:
@@ -202,10 +226,85 @@ class ApplicationContext:
             self._harness_context = self._harness_factory()
         return self._harness_context
 
+    def research_gateway(self) -> ResearchGateway:
+        """Resolve the feature adapter only when a research command executes."""
+        if self._research_gateway is None:
+            if self._research_gateway_factory is None:
+                from ..errors import CliError, CliErrorCode
+
+                raise CliError(
+                    CliErrorCode.NOT_IMPLEMENTED,
+                    "Research command execution is not enabled in this CLI build.",
+                    hint="Use the command help now; API execution arrives in the next stack PR.",
+                )
+            self._research_gateway = self._research_gateway_factory()
+        return self._research_gateway
+
+    def research_watcher(self) -> ResearchWatcher:
+        if self._research_watcher is None:
+            from ...features.research.application import ResearchWatcher
+            from ...features.research.presentation import ResearchProgressObserver
+
+            self._research_watcher = ResearchWatcher(
+                self.research_gateway(),
+                Poller(),
+                ResearchProgressObserver(self.output()),
+            )
+        return self._research_watcher
+
+    def research_service(self) -> ResearchService:
+        if self._research_service is None:
+            from ...features.research.application import ResearchService
+
+            self._research_service = ResearchService(
+                self.research_gateway(),
+                self._idempotency_provider(),
+                self._research_operation_recorder(),
+                self.research_watcher(),
+            )
+        return self._research_service
+
+    def research_query_service(self) -> ResearchQueryService:
+        if self._research_queries is None:
+            from ...features.research.application import ResearchQueryService
+
+            self._research_queries = ResearchQueryService(self.research_gateway())
+        return self._research_queries
+
+    def research_export_service(self) -> ResearchExportService:
+        if self._research_exports is None:
+            from ...features.research.application import ResearchExportService
+
+            self._research_exports = ResearchExportService(
+                self.research_gateway(),
+                self._idempotency_provider(),
+                self._research_operation_recorder(),
+            )
+        return self._research_exports
+
+    def set_exit_code(self, value: int) -> None:
+        """Set a successful command's documented non-error outcome status."""
+        if not 0 <= value <= 255:
+            raise ValueError("CLI exit codes must be between 0 and 255.")
+        self._exit_code = value
+
+    def exit_code(self) -> int:
+        return self._exit_code
+
     def close(self) -> None:
         if self._api_client is not None:
             self._api_client.close()
             self._api_client = None
+
+    def _idempotency_provider(self) -> IdempotencyKeyFactory:
+        if self._idempotency is None:
+            self._idempotency = IdempotencyKeyFactory()
+        return self._idempotency
+
+    def _research_operation_recorder(self) -> OperationJournalRecorder:
+        if self._operation_recorder is None:
+            self._operation_recorder = OperationJournalRecorder(OperationJournal(self.paths()))
+        return self._operation_recorder
 
     def _build_output(self) -> OutputManager:
         terminal_policy = TerminalPolicy(

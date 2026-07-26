@@ -161,6 +161,24 @@ package gates startup/packaging evidence rather than proof of use-case correctne
 constraint and residual risk are recorded in
 `docs/design/python-cli-research-harness-program.md`.
 
+## Research feature slice
+
+The research product uses a vertical slice because its persistent thread/source/artifact
+model is richer than the generic manifest-driven harness contract:
+
+```text
+features/research/domain          strict transport-free vocabulary and status policy
+features/research/application     mutation, query, export, and watch use cases
+features/research/commands        Click-only input adapters and static command registration
+features/research/presentation    versioned documents, human views, coarse transitions
+features/research/infrastructure  final API route adapter (PR 7)
+```
+
+Domain and application imports remain independent of Click and HTTPX. Command registration
+does no credential, filesystem, or network work. Large artifact reads require `--output`;
+replacement additionally requires `--force`. Detailed agent-event telemetry remains
+web-only, while the CLI watcher emits only status/source/artifact-count transitions.
+
 ### Integrating a harness in `src/vidbyte_cli/harnesses/<name>/`
 
 Most harnesses need **no code here at all** — if the backend publishes a manifest, the

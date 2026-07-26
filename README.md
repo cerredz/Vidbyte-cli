@@ -49,8 +49,17 @@ diagnostics, and errors use stderr. JSON and JSONL documents include `schema_ver
 | `vidbyte-cli harness status <run_id>` | Show a run's status, events, and result |
 | `vidbyte-cli harness list` | List your runs |
 | `vidbyte-cli harness catalog` | List the harnesses available to run |
+| `vidbyte-cli research start\|add\|resume` | Start or continue persistent research work |
+| `vidbyte-cli research status\|watch <run_id>` | Inspect or watch a research run |
+| `vidbyte-cli research runs\|threads\|sources\|artifacts` | Inspect a research portfolio |
+| `vidbyte-cli research export ...` | Export artifacts, threads, or the portfolio |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
+
+The research command tree is staged behind `VIDBYTE_EXPERIMENTAL_RESEARCH=1` in PR 6.
+Its help, prompt/file/stdin input rules, filters, cursor queries, and export shape are
+available, while execution intentionally returns `NOT_IMPLEMENTED` until the API adapter
+lands in the final stack PR.
 
 ## Configuration
 
@@ -86,6 +95,12 @@ work; sources and artifacts remain separately addressable and do not automatical
 later model context. The domain supports start/add/resume, status and cursor queries,
 capability discovery, and artifact/thread/portfolio export without binding those behaviors
 to Click or an HTTP route shape.
+
+Research commands consume exactly one prompt source: a positional value, `--prompt-file`,
+or positional `-` for explicit stdin. Mutations wait by default, accept a bounded local
+`--timeout`, and support one reusable `--idempotency-key`. A timeout or interrupt stops only
+the local wait. `--exit-status` opts scripts into statuses 3 and 5 for partial and
+credit-exhausted terminal outcomes.
 
 ## Architecture
 

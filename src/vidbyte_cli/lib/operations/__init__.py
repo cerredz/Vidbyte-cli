@@ -2,5 +2,11 @@
 
 from .idempotency import IdempotencyKeyFactory
 from .journal import OperationJournal, PendingOperation
+from .recorder import OperationJournalRecorder
 
-__all__ = ["IdempotencyKeyFactory", "OperationJournal", "PendingOperation"]
+__all__ = [
+    "IdempotencyKeyFactory",
+    "OperationJournal",
+    "OperationJournalRecorder",
+    "PendingOperation",
+]
