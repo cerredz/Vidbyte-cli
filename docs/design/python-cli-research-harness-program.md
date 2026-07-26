@@ -1346,6 +1346,7 @@ the same existing file. No source file is deleted in this program.
 | CREATE | 1 | `src/vidbyte_cli/lib/io/README.md` | IO ownership, file index, non-goals, and decision log |
 | CREATE | 1 | `src/vidbyte_cli/lib/io/__init__.py` | IO package boundary |
 | CREATE | 1 | `src/vidbyte_cli/lib/io/streams.py` | Injected stdin/stdout/stderr model |
+| CREATE | 1 | `src/vidbyte_cli/lib/harness/README.md` | Generic harness ownership, file index, non-goals, and decision log |
 | CREATE | 2 | `src/vidbyte_cli/lib/io/terminal.py` | TTY/color/cursor capability detection |
 | CREATE | 2 | `src/vidbyte_cli/lib/io/prompt.py` | Exclusive positional/file/stdin prompt resolution |
 | CREATE | 2 | `src/vidbyte_cli/lib/output/README.md` | Output ownership, file index, non-goals, and decision log |
@@ -1413,6 +1414,7 @@ the same existing file. No source file is deleted in this program.
 | MODIFY | 1 | `src/vidbyte_cli/__init__.py` | Version export through metadata provider |
 | MODIFY | 1 | `src/vidbyte_cli/__main__.py` | Thin return-code-to-SystemExit shim |
 | MODIFY | 1,2,6,7 | `src/vidbyte_cli/cli.py` | Delegate bootstrap to `CliApplication` and register research |
+| CREATE | 1 | `src/vidbyte_cli/commands/README.md` | Static command ownership, file index, non-goals, and decision log |
 | MODIFY | 1,6,7 | `src/vidbyte_cli/commands/__init__.py` | Context-aware registration and research feature attachment |
 | MODIFY | 3,4 | `src/vidbyte_cli/commands/auth/login.py` | Safe token input, verify-before-write, typed output |
 | MODIFY | 3 | `src/vidbyte_cli/commands/auth/logout.py` | Idempotent multi-store clearing |
@@ -1436,7 +1438,7 @@ the same existing file. No source file is deleted in this program.
 | MODIFY | 2,4 | `src/vidbyte_cli/lib/errors/__init__.py` | Export typed errors/handler |
 | MODIFY | 2,4 | `src/vidbyte_cli/lib/errors/cli_error.py` | Stable code, hint, retryability, request ID, safe cause |
 | MODIFY | 4 | `src/vidbyte_cli/lib/git/repo_info.py` | Implement safe git inspection |
-| MODIFY | 4 | `src/vidbyte_cli/lib/harness/base.py` | Generic poller/idempotency/output integration |
+| MODIFY | 1,4 | `src/vidbyte_cli/lib/harness/base.py` | Keep Click typing strict; later add generic polling/idempotency/output integration |
 | MODIFY | 4 | `src/vidbyte_cli/lib/harness/catalog.py` | Typed fetch/cache/version-skew behavior |
 | MODIFY | 4 | `src/vidbyte_cli/lib/harness/context.py` | Reuse application services rather than construct globals |
 | MODIFY | 4 | `src/vidbyte_cli/lib/harness/errors.py` | Map transport/domain errors without leaking internals |

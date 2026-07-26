@@ -1,10 +1,52 @@
-"""BaseHarness: the boilerplate every harness shares, written once.
+"""FILE: src/vidbyte_cli/lib/harness/base.py
 
-A harness author extends this and implements `commands()`. The base owns everything that is
-identical for every harness: turning command definitions into a click command tree
-(`register`), and the submit -> (await) -> present -> map-errors lifecycle every command runs
-(`dispatch`). All of that lives on the class — there are no loose module-level helpers
-(resolves the base.py:150 review comment). Authors never touch click or httpx directly.
+PURPOSE: Implements the lifecycle shared by every hand-written and manifest-backed harness:
+build a Click subtree, guard execution, translate inputs, submit a backend run, optionally
+wait, present the result, and normalize failures. Harness-specific command definitions and
+result policy do not belong in this base class.
+
+ROLE IN CODEBASE: harnesses/* and ManifestHarness subclass BaseHarness. HarnessRegistry
+calls register(); generated Click callbacks call dispatch(). HarnessContext supplies
+credentials, repository inspection, endpoints, logging, and rendering. InvocationBuilder
+creates the wire request, while harness/errors.py maps unexpected backend failures.
+
+ARCHITECTURE NOTE: This is the mechanism side of the mechanism/policy split documented in
+docs/architecture.md. Static and manifest harnesses intentionally converge here so the
+runtime does not branch after namespace resolution.
+
+FUNCTION INVENTORY (reviewed 2026-07-26):
+- BaseHarness.commands(ctx) -> list[HarnessCommandDef]: subclass command declaration contract.
+- BaseHarness.register(parent, ctx) -> None: builds one side-effect-free Click subtree.
+- BaseHarness.dispatch(command_def, params, ctx) -> None: executes the shared backend lifecycle.
+
+COMMON MODIFICATION PATTERNS: Add a concern here only when every harness needs it, then
+update HarnessContext, HarnessCommandDef, docs/architecture.md, and this header together.
+Add per-harness behavior through command hooks or a policy module instead.
+
+WHAT NOT TO DO IN THIS FILE:
+1. Do not define a specific harness's commands; harnesses/* or feature slices own them.
+2. Do not call HTTPX directly; HarnessEndpoints and lib/api own transport.
+3. Do not print or call sys.exit; output collaborators and runtime own those boundaries.
+4. Do not load manifests; HarnessCatalog and HarnessRegistry own resolution.
+5. Do not perform service construction while building the Click tree.
+6. Do not execute backend-provided code; manifests are data only.
+
+KNOWN EDGE CASES: A harness can be repository-free, boolean options need Click flag
+semantics, and required options with no default must omit Click's default parameter.
+Backend failures are normalized while an existing CliError is preserved unchanged.
+
+COMMON ERRORS RAISED BY THIS FILE: CliError can come from credential guards, repository
+inspection, invocation validation, endpoint calls, waiting, or presentation. Other
+exceptions are converted by map_harness_error() before leaving dispatch().
+
+RELATED DOCS:
+- https://github.com/cerredz/Vidbyte-cli/blob/main/docs/architecture.md explains the generic
+  harness mechanism and policy boundary.
+- https://github.com/cerredz/Vidbyte-cli/blob/main/docs/design/harness-runtime-and-cli-scaffold.md
+  records the original accepted runtime design.
+
+TESTS: No dedicated feature tests are added under the approved no-tests workflow.
+scripts/smoke.py builds a static harness subtree; scripts/run_ci.py runs strict typing.
 """
 
 from __future__ import annotations
@@ -23,115 +65,130 @@ from .errors import map_harness_error
 from .invocation import InvocationBuilder
 from .types import HarnessCommandDef
 
+_CommandDef = HarnessCommandDef
+_Context = HarnessContext
+_Params = dict[str, object]
+_Repo = HarnessRepoRef
+_Request = HarnessRunCreateRequest
+
 
 class BaseHarness(ABC):
-    # Every harness declares a namespace and a set of commands; the base does the rest.
+    """Common registration and backend-dispatch mechanism for harness policy modules."""
+
     name: str
     description: str
-    # Not every harness runs against a git repo (resolves the base.py:47 review comment). A
-    # harness that operates on the caller's checkout (e.g. software-engineering) sets this
-    # True; dispatch then attaches the repo ref. Others submit with no repo.
     requires_repo: ClassVar[bool] = False
-
-    # The shared translation layer: one instance is enough since it is stateless.
     _invocation: ClassVar[InvocationBuilder] = InvocationBuilder()
-
-    _CLICK_TYPES: ClassVar[dict[OptionType, click.ParamType[object]]] = {
+    _CLICK_TYPES: ClassVar[dict[OptionType, click.ParamType]] = {
         "string": click.STRING,
         "number": click.FLOAT,
         "path": click.Path(),
     }
 
     @abstractmethod
-    def commands(self, ctx: HarnessContext) -> list[HarnessCommandDef]:
-        # The command surface of this harness (static list, or mapped from a manifest).
+    def commands(self, ctx: _Context) -> list[_CommandDef]:
+        # Subclasses declare policy as data while the base owns registration and execution.
         raise NotImplementedError
 
-    def register(self, parent: click.Group, ctx: HarnessContext) -> None:
-        # Builds `vidbyte-cli harness <name> <command> ...` under the given parent group.
+    def register(self, parent: click.Group, ctx: _Context) -> None:
+        # Tree construction remains free of credential, repository, and network access.
         group = click.Group(name=self.name, help=self.description)
         for command_def in self.commands(ctx):
             group.add_command(self._build_click_command(command_def, ctx))
         parent.add_command(group)
 
-    def dispatch(
-        self, command_def: HarnessCommandDef, params: dict[str, object], ctx: HarnessContext
-    ) -> None:
-        # The uniform lifecycle every harness command follows. This is the shared "command
-        # structure" made literal: guard -> translate -> submit -> (await) -> present.
-        ctx.require_api_key()  # fail fast before any repo/network work
-        repo = ctx.repo.as_repo_ref() if self.requires_repo else None
-        request = self._to_invocation(command_def, params, repo)
-        endpoints = ctx.harness_endpoints()
+    # @intent backend-harness-dispatch-boundary
+    # This method is the client-side boundary for starting a billable, persistent backend
+    # harness run. Authentication must fail before repository inspection or network work so
+    # an unauthenticated invocation cannot perform surprising local or remote operations.
+    #
+    # Static and manifest-backed commands must use the same path. A plausible rewrite that
+    # lets one source submit directly would bypass generic request translation, waiting,
+    # safe presentation, or backend error normalization and make harness behavior depend on
+    # how its namespace was discovered.
+    #
+    # Keep CliError passthrough intact: those errors are already classified as user-safe.
+    # Every other exception is normalized at this boundary so the runtime never needs to
+    # understand provider- or harness-specific failure classes.
+    def dispatch(self, command: _CommandDef, params: _Params, ctx: _Context) -> None:
+        # Orchestrate the shared lifecycle while leaf methods own translation and rendering.
+        ctx.require_api_key()
         try:
-            submitted = endpoints.create_run(request)
-            result = self._wait_for_run(submitted) if command_def.mode == "await" else submitted
-            output = (
-                command_def.present(result, ctx)
-                if command_def.present
-                else ctx.render.render_status(result)
-            )
-            ctx.logger.info(output)
+            result = self._submit_run(command, params, ctx)
+            self._present_run(command, result, ctx)
         except CliError:
             raise
-        except Exception as error:  # noqa: BLE001 - normalize any backend failure
+        except Exception as error:  # noqa: BLE001 - normalize the backend boundary.
             raise map_harness_error(error) from error
 
-    def _to_invocation(
-        self,
-        command_def: HarnessCommandDef,
-        params: dict[str, object],
-        repo: HarnessRepoRef | None,
-    ) -> HarnessRunCreateRequest:
-        # Uses the command's own translation hook, or the shared invocation layer's default.
-        if command_def.to_invocation is not None:
-            return command_def.to_invocation(params, repo)
-        return self._invocation.build(self.name, command_def, params, repo)
+    def _submit_run(self, command: _CommandDef, params: _Params, ctx: _Context) -> HarnessRun:
+        # Create one request and optionally resolve its backend run before presentation.
+        repo = ctx.repo.as_repo_ref() if self.requires_repo else None
+        request = self._to_invocation(command, params, repo)
+        submitted = ctx.harness_endpoints().create_run(request)
+        if command.mode == "await":
+            return self._wait_for_run(submitted)
+        return submitted
+
+    def _present_run(self, command: _CommandDef, run: HarnessRun, ctx: _Context) -> None:
+        # Prefer a command-specific presenter and otherwise use the shared status renderer.
+        if command.present is not None:
+            output = command.present(run, ctx)
+        else:
+            output = ctx.render.render_status(run)
+        ctx.logger.info(output)
+
+    def _to_invocation(self, command: _CommandDef, params: _Params, repo: _Repo | None) -> _Request:
+        # Use a command's translation hook only when the shared envelope mapping is insufficient.
+        if command.to_invocation is not None:
+            return command.to_invocation(params, repo)
+        return self._invocation.build(self.name, command, params, repo)
 
     def _wait_for_run(self, run: HarnessRun) -> HarnessRun:
-        # Polls the run to a terminal state with backoff; shared by every `await`-mode command.
+        # Polling is intentionally scaffolded until the generic HTTP/polling platform PR.
         raise not_implemented("harness run waiting")
 
-    def _build_click_command(
-        self, command_def: HarnessCommandDef, ctx: HarnessContext
-    ) -> click.Command:
-        # Renders one HarnessCommandDef into a click command. Pure: no I/O, so the whole tree
-        # (and its --help) builds without touching credentials or the network.
+    def _build_click_command(self, command: _CommandDef, ctx: _Context) -> click.Command:
+        # Render one typed definition into Click objects without touching runtime services.
         params: list[click.Parameter] = []
-        for arg in command_def.args:
-            params.append(click.Argument([arg.name.replace("-", "_")], required=arg.required))
-        for opt in command_def.options:
-            params.append(self._build_click_option(opt))
+        for argument in command.args:
+            name = argument.name.replace("-", "_")
+            params.append(click.Argument([name], required=argument.required))
+        for option in command.options:
+            params.append(self._build_click_option(option))
 
         def callback(**kwargs: object) -> None:
-            self.dispatch(command_def, kwargs, ctx)
+            self.dispatch(command, kwargs, ctx)
 
         callback_typed: Callable[..., None] = callback
         return click.Command(
-            name=command_def.name,
+            name=command.name,
             params=params,
-            help=command_def.description,
+            help=command.description,
             callback=callback_typed,
         )
 
-    def _build_click_option(self, opt: OptionSpec) -> click.Option:
-        # One manifest OptionSpec -> one click.Option.
-        decl = [f"--{opt.name}"]
-        if opt.type == "boolean":
-            return click.Option(decl, is_flag=True, default=bool(opt.default), help=opt.description)
-        if opt.default is not None:
+    def _build_click_option(self, option: OptionSpec) -> click.Option:
+        # Preserve Click's distinction between no default and an explicit default of None.
+        declaration = [f"--{option.name}"]
+        if option.type == "boolean":
             return click.Option(
-                decl,
-                type=self._CLICK_TYPES[opt.type],
-                required=opt.required,
-                default=opt.default,
-                help=opt.description,
+                declaration,
+                is_flag=True,
+                default=bool(option.default),
+                help=option.description,
             )
-        # Do NOT pass `default` when there is none: giving click an explicit default=None makes
-        # it treat the option as defaulted and silently skips the `required` check.
+        if option.default is not None:
+            return click.Option(
+                declaration,
+                type=self._CLICK_TYPES[option.type],
+                required=option.required,
+                default=option.default,
+                help=option.description,
+            )
         return click.Option(
-            decl,
-            type=self._CLICK_TYPES[opt.type],
-            required=opt.required,
-            help=opt.description,
+            declaration,
+            type=self._CLICK_TYPES[option.type],
+            required=option.required,
+            help=option.description,
         )

@@ -8,8 +8,11 @@ results. It is written in Python (click + pydantic + httpx).
 
 ```text
 pyproject.toml [project.scripts]   console entry `vidbyte-cli` -> vidbyte_cli.cli:main
-src/vidbyte_cli/cli.py             program bootstrap + central error trap (owns sys.exit)
-                                   + two-pass argv peek that attaches a harness subtree
+src/vidbyte_cli/cli.py             thin reusable entry function returning an integer status
+src/vidbyte_cli/__main__.py        outer `python -m` SystemExit boundary
+src/vidbyte_cli/lib/runtime/       invocation composition, version, dispatch, error trap
+                                   + two-pass argv inspection/one-harness attachment
+src/vidbyte_cli/lib/io/            injected stdin/stdout/stderr channels
 src/vidbyte_cli/commands/<group>/  one class per command: register() + execute()
 src/vidbyte_cli/lib/api/client.py  ApiClient: base URL, API-key header, envelope unwrapping
 src/vidbyte_cli/lib/api/endpoints/ typed endpoint groups (harness, auth, ...) on ApiClient
@@ -31,13 +34,20 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
 2. **All HTTP goes through `ApiClient`** via a typed endpoint group. New backend surfaces
    get a new file in `lib/api/endpoints/`, never inline requests.
 3. **Errors are raised, not printed.** Anything user-facing raises `CliError(message,
-   exit_code)`; the trap in `cli.py` renders it and exits. Unexpected errors exit 70.
+   exit_code)`; `CliApplication` renders it and returns a status. Unexpected errors return
+   70 without exposing a traceback.
 4. **Secrets never log.** The API key may not appear in log lines, error messages, or
    rendered output.
 5. **Paths have one source of truth.** Anything under `~/.vidbyte` resolves through
    `VidbytePaths`.
 6. **Adding a static command group** = new folder under `commands/`, one class per command,
    registered in `commands/__init__.py`. Nothing else changes.
+7. **Reusable code does not terminate the process.** `CliApplication.run()` and `cli.main()`
+   return an integer. Only generated console wrappers and `__main__.py` raise `SystemExit`.
+8. **Process channels are injected.** Runtime and presentation code use `IOStreams`; direct
+   writes to `sys.stdout`/`sys.stderr` stay at verification-script or outer process edges.
+9. **One invocation owns one dependency graph.** `ApplicationContext` is constructed per
+   run and creates optional harness services lazily, so help/version paths stay offline.
 
 ## The harness runtime (dynamic commands)
 
@@ -71,11 +81,23 @@ lib/harness/registry.py       HarnessRegistry: owns both sources (static map + c
 ### Async registration
 
 click builds its command tree synchronously, but a manifest arrives over the network. The
-CLI does a **two-pass argv peek** in `cli.py`: pass 1 registers the static surface; pass 2,
-only when argv is `harness <name> ...`, loads that one harness (cache-first) and attaches
-its subtree before parsing. So `vidbyte-cli login` never touches the network, and only the
-invoked harness loads. Manifests are cached under `~/.vidbyte/manifests` so `--help` works
-offline.
+CLI does a **two-pass argv inspection** in `lib/runtime/application.py`: pass 1 registers
+the static surface; pass 2, only when argv is `harness <name> ...`, loads that one harness
+(cache-first) and attaches its subtree before parsing. So `vidbyte-cli login` never touches
+the network, and only the invoked harness loads. Manifests are cached under
+`~/.vidbyte/manifests` so `--help` works offline.
+
+## Verification boundary
+
+`scripts/run_ci.py` is the one local and remote verification entry point. It runs Ruff,
+strict mypy, byte compilation, offline CLI smoke, distribution build, Twine metadata checks,
+and an installed-wheel smoke outside the source checkout. `.github/workflows/ci.yml` supplies
+the OS/Python matrix and invokes that script without duplicating its steps.
+
+The approved program intentionally adds no feature test files. This makes the smoke and
+package gates startup/packaging evidence rather than proof of use-case correctness; the
+constraint and residual risk are recorded in
+`docs/design/python-cli-research-harness-program.md`.
 
 ### Integrating a harness in `src/vidbyte_cli/harnesses/<name>/`
 
