@@ -25,6 +25,7 @@ src/vidbyte_cli/lib/output/        versioned documents + invocation output manag
 src/vidbyte_cli/lib/errors/        stable codes, CliError metadata, central handler
 src/vidbyte_cli/lib/harness/       the harness runtime (see below)
 src/vidbyte_cli/harnesses/         hand-written harness modules (see below)
+src/vidbyte_cli/features/          product-owned domain/application/adapters/presentation
 src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
 ```
 
@@ -66,6 +67,8 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
     idempotency key, serialized body, and request identity across attempts.
 16. **Local cancellation is not remote cancellation.** Interrupted polling preserves the
     accepted operation record and prints a recovery command.
+17. **Feature policy is transport-free.** Research domain and application packages import
+    neither Click nor HTTPX; command and gateway adapters point inward.
 
 ## Output and failure contracts
 
