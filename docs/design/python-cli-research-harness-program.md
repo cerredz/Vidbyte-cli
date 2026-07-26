@@ -431,7 +431,8 @@ class IOStreams:
 `src/vidbyte_cli/lib/output/models.py`,
 `src/vidbyte_cli/lib/output/manager.py`,
 `src/vidbyte_cli/lib/errors/codes.py`,
-`src/vidbyte_cli/lib/errors/handler.py`, existing logger/renderer/error/bootstrap files
+`src/vidbyte_cli/lib/errors/handler.py`,
+`src/vidbyte_cli/lib/runtime/options.py`, existing logger/renderer/error/bootstrap files
 **Type:** New + Modified
 
 #### What it does
@@ -1360,6 +1361,7 @@ the same existing file. No source file is deleted in this program.
 | CREATE | 2 | `src/vidbyte_cli/lib/errors/README.md` | Error ownership, file index, non-goals, and decision log |
 | CREATE | 2 | `src/vidbyte_cli/lib/errors/codes.py` | Stable error and exit-code vocabulary |
 | CREATE | 2 | `src/vidbyte_cli/lib/errors/handler.py` | Central exception rendering/mapping |
+| CREATE | 2 | `src/vidbyte_cli/lib/runtime/options.py` | Service-free root-option preflight and typed callback values |
 | CREATE | 3 | `src/vidbyte_cli/lib/config/README.md` | Configuration ownership, file index, non-goals, and decision log |
 | CREATE | 3 | `src/vidbyte_cli/lib/config/models.py` | Typed profiles and config schema |
 | CREATE | 3 | `src/vidbyte_cli/lib/config/resolver.py` | Precedence and provenance resolution |
@@ -1411,9 +1413,10 @@ the same existing file. No source file is deleted in this program.
 | MODIFY | 1,2,3,4 | `pyproject.toml` | Dependencies, metadata, lint/type/build settings, console entry |
 | MODIFY | 3,6,7 | `.env.example` | Config/auth variables and temporary research rollout gate |
 | MODIFY | 1 | `.gitignore` | Python build/CI/local-state artifacts |
-| MODIFY | 1,3,6,7 | `README.md` | Python setup, platform behavior, research commands, API integration |
+| MODIFY | 1,2,3,6,7 | `README.md` | Python setup, platform behavior, research commands, API integration |
 | MODIFY | 1,2,3,4,5,6,7 | `docs/architecture.md` | Final dependency rules and feature-slice architecture |
 | MODIFY | 1 | `docs/design/harness-runtime-and-cli-scaffold.md` | Mark earlier scaffold design as superseded for CLI evolution |
+| MODIFY | 2 | `docs/design/python-cli-research-harness-program.md` | Record the isolated root-option preflight discovered during implementation |
 | MODIFY | 1,2,4,6,7 | `scripts/smoke.py` | Offline help/version/format/research/package smoke coverage |
 | MODIFY | 1 | `src/vidbyte_cli/__init__.py` | Version export through metadata provider |
 | MODIFY | 1 | `src/vidbyte_cli/__main__.py` | Thin return-code-to-SystemExit shim |
@@ -1441,15 +1444,21 @@ the same existing file. No source file is deleted in this program.
 | MODIFY | 3 | `src/vidbyte_cli/lib/config/paths.py` | Platformdirs locations and legacy compatibility |
 | MODIFY | 2,4 | `src/vidbyte_cli/lib/errors/__init__.py` | Export typed errors/handler |
 | MODIFY | 2,4 | `src/vidbyte_cli/lib/errors/cli_error.py` | Stable code, hint, retryability, request ID, safe cause |
+| MODIFY | 2 | `src/vidbyte_cli/lib/harness/invocation.py` | Raise stable typed usage errors for missing inputs |
+| MODIFY | 2 | `src/vidbyte_cli/lib/io/README.md` | Index prompt and terminal capability ownership |
+| MODIFY | 2 | `src/vidbyte_cli/lib/io/__init__.py` | Export prompt and terminal contracts |
 | MODIFY | 4 | `src/vidbyte_cli/lib/git/repo_info.py` | Implement safe git inspection |
 | MODIFY | 1,4 | `src/vidbyte_cli/lib/harness/base.py` | Keep Click typing strict; later add generic polling/idempotency/output integration |
 | MODIFY | 4 | `src/vidbyte_cli/lib/harness/catalog.py` | Typed fetch/cache/version-skew behavior |
-| MODIFY | 4 | `src/vidbyte_cli/lib/harness/context.py` | Reuse application services rather than construct globals |
-| MODIFY | 4 | `src/vidbyte_cli/lib/harness/errors.py` | Map transport/domain errors without leaking internals |
+| MODIFY | 2,4 | `src/vidbyte_cli/lib/harness/context.py` | Share invocation services and later reuse transport/polling collaborators |
+| MODIFY | 2,4 | `src/vidbyte_cli/lib/harness/errors.py` | Safe generic fallback and later typed transport/domain mapping |
 | MODIFY | 4 | `src/vidbyte_cli/lib/harness/types.py` | Explicit command mode semantics for read/submit/wait |
 | MODIFY | 2 | `src/vidbyte_cli/lib/output/__init__.py` | Export output contracts |
 | MODIFY | 2 | `src/vidbyte_cli/lib/output/logger.py` | Delegate to injected output manager/streams |
 | MODIFY | 2,4 | `src/vidbyte_cli/lib/output/render.py` | Generic run/list/catalog presenters |
+| MODIFY | 2 | `src/vidbyte_cli/lib/runtime/README.md` | Index root-option and output/error composition ownership |
+| MODIFY | 2 | `src/vidbyte_cli/lib/runtime/application.py` | Parse root policy, inject Click streams, and delegate failures |
+| MODIFY | 2 | `src/vidbyte_cli/lib/runtime/context.py` | Own invocation output, terminal, and error collaborators |
 | MODIFY | 4 | `src/vidbyte_cli/types/api.py` | Stable transport/error/pagination compatibility models |
 | MODIFY | 4 | `src/vidbyte_cli/types/harness.py` | Generic harness states/progress needed by watcher |
 | MODIFY | 4 | `src/vidbyte_cli/types/manifest.py` | Strict manifest/version validation |

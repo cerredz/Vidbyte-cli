@@ -1,9 +1,8 @@
 """FILE: src/vidbyte_cli/lib/runtime/application.py
 
-PURPOSE: Orchestrates one complete CLI invocation: build the static Click tree, lazily attach
-one requested harness namespace, dispatch arguments, and translate failures into return
-codes. This file owns lifecycle and process-boundary policy; individual command behavior
-and output formatting belong elsewhere.
+PURPOSE: Orchestrates one complete CLI invocation: parse global policy, build the static
+Click tree, lazily attach one requested harness namespace, dispatch arguments, and delegate
+all failures to the central handler.
 
 ROLE IN CODEBASE: cli.py creates CliApplication and returns its status. commands/__init__.py
 registers the static tree; harnesses/__init__.py, HarnessCatalog, and HarnessRegistry provide
@@ -18,10 +17,11 @@ FUNCTION INVENTORY (reviewed 2026-07-26):
 - ArgumentInspector.harness_namespace(argv) -> str | None: identifies a dynamic namespace.
 - CliApplication(context) -> CliApplication: composes an invocation runner.
 - CliApplication.run(argv) -> int: executes the invocation and returns a process code.
+- CliApplication._configure_context(...) -> None: binds validated root option policy.
 
 COMMON MODIFICATION PATTERNS: Add global options in _build_program(), add reusable services
-to ApplicationContext, and extend failure policy in the centralized exception branches.
-Command-specific options and use cases must stay in their owning command or feature slice.
+to ApplicationContext, and extend failure policy through ErrorHandler. Command-specific
+options and use cases must stay in their owning command or feature slice.
 
 WHAT NOT TO DO IN THIS FILE:
 1. Do not implement command business logic; commands and features own that behavior.
@@ -34,8 +34,8 @@ KNOWN EDGE CASES: Global flags can appear before the harness group, generic harn
 must not be interpreted as namespaces, and Click exceptions need their native exit codes.
 Unexpected failures deliberately return EX_SOFTWARE without exposing a traceback.
 
-COMMON ERRORS RAISED BY THIS FILE: CliError represents safe user-facing failures from
-commands or dynamic registration. ClickException represents parsing/usage failures.
+COMMON ERRORS RAISED BY THIS FILE: Command, dynamic-registration, and Click parsing failures
+are allowed to reach the one ErrorHandler boundary.
 
 RELATED DOCS:
 - https://github.com/cerredz/Vidbyte-cli/blob/main/docs/design/python-cli-research-harness-program.md
@@ -51,42 +51,40 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Sequence
+from contextlib import redirect_stderr, redirect_stdout
 
 import click
 
 from ...commands import register_all_commands
 from ...harnesses import static_harness_map
-from ..errors.cli_error import CliError
+from ..errors.cli_error import usage_error
 from ..harness.catalog import HarnessCatalog
 from ..harness.registry import HarnessRegistry
 from ..io import IOStreams
-from .context import ApplicationContext
+from ..output.formats import ColorMode, OutputFormat
+from .context import ApplicationContext, InvocationOptions
+from .options import RootInspection, RootOptionInspector, RootOptionValues
 from .version import current_version
 
 _GENERIC_HARNESS_VERBS = frozenset({"run", "status", "list", "catalog"})
-_INTERNAL_ERROR_EXIT_CODE = 70
 
 
 class ArgumentInspector:
     """Extract routing facts before Click parses the complete command tree."""
 
-    def harness_namespace(self, argv: Sequence[str]) -> str | None:
-        # Dynamic attachment is needed only for `harness <namespace>`, never generic verbs.
-        arguments = list(argv[1:])
-        if "harness" not in arguments:
+    def harness_namespace(self, arguments: Sequence[str]) -> str | None:
+        # Root option values cannot be mistaken for the actual top-level harness command.
+        if not arguments or arguments[0] != "harness":
             return None
-        remaining = arguments[arguments.index("harness") + 1 :]
+        remaining = arguments[1:]
         return self._first_namespace(remaining)
 
     def _first_namespace(self, arguments: Sequence[str]) -> str | None:
-        # Skip options before choosing the first positional token after the harness group.
-        for token in arguments:
-            if token.startswith("-"):
-                continue
-            if token in _GENERIC_HARNESS_VERBS:
-                return None
-            return token
-        return None
+        # Harness-group options cannot donate their values as dynamic namespace candidates.
+        if not arguments or arguments[0].startswith("-"):
+            return None
+        namespace = arguments[0]
+        return None if namespace in _GENERIC_HARNESS_VERBS else namespace
 
 
 class CliApplication:
@@ -97,6 +95,7 @@ class CliApplication:
         self._context = context or ApplicationContext(IOStreams.system())
         self._streams = self._context.streams
         self._inspector = ArgumentInspector()
+        self._root_inspector = RootOptionInspector()
 
     def run(self, argv: Sequence[str] | None = None) -> int:
         # Orchestrate tree construction, lazy attachment, and Click dispatch in one trap.
@@ -104,18 +103,18 @@ class CliApplication:
         try:
             program = self._build_program()
             harness_group = register_all_commands(program)
-            self._attach_harness(arguments, harness_group)
+            inspection = self._preconfigure(arguments)
+            if (
+                inspection is not None
+                and inspection.attach_allowed
+                and not inspection.exits_before_command
+            ):
+                self._attach_harness(inspection.command_arguments, harness_group)
             return self._invoke(program, arguments)
-        except CliError as error:
-            return self._render_cli_error(error)
-        except click.ClickException as error:
-            return self._render_click_error(error)
-        except click.exceptions.Abort:
-            self._streams.write_error("Aborted.")
-            return 1
-        except Exception:  # noqa: BLE001 - the process boundary must contain internal bugs.
-            self._streams.write_error("Unexpected internal error.")
-            return _INTERNAL_ERROR_EXIT_CODE
+        except KeyboardInterrupt as error:
+            return self._context.error_handler().handle(error)
+        except Exception as error:  # noqa: BLE001 - the process boundary contains all failures.
+            return self._context.error_handler().handle(error)
 
     def _build_program(self) -> click.Group:
         # Root callbacks receive ApplicationContext without constructing optional services.
@@ -123,35 +122,72 @@ class CliApplication:
 
         @click.group(name="vidbyte-cli", help="Universal Vidbyte CLI: auth, harness runs, config")
         @click.version_option(current_version(), "--version")
-        @click.option("--json", "as_json", is_flag=True, help="machine-readable output (reserved)")
+        @click.option(
+            "--format",
+            "output_format",
+            type=click.Choice([item.value for item in OutputFormat], case_sensitive=False),
+        )
+        @click.option("--json", "as_json", is_flag=True, help="Alias for --format json.")
+        @click.option("--profile", type=str, help="Use a named configuration profile.")
+        @click.option("--no-input", is_flag=True, help="Never prompt for interactive input.")
+        @click.option(
+            "--color",
+            type=click.Choice([item.value for item in ColorMode], case_sensitive=False),
+            default=ColorMode.AUTO.value,
+            show_default=True,
+        )
+        @click.option("--debug", is_flag=True, help="Show redacted internal stack frames.")
         @click.pass_context
-        def program(click_context: click.Context, as_json: bool) -> None:
-            # JSON policy lands in PR 2; the invocation context is available immediately.
-            del as_json
+        def program(click_context: click.Context, /, **values: object) -> None:
+            # Bind root policy only after Click validates all primitive option values.
+            self._configure_context(RootOptionValues.from_click(values))
             click_context.obj = application_context
 
         return program
 
-    def _attach_harness(self, argv: Sequence[str], harness_group: click.Group) -> None:
+    def _attach_harness(self, arguments: Sequence[str], harness_group: click.Group) -> None:
         # Load at most one requested harness and keep every unrelated command network-free.
-        namespace = self._inspector.harness_namespace(argv)
+        namespace = self._inspector.harness_namespace(arguments)
         if namespace is None:
             return
         harness_context = self._context.harness_context()
         registry = HarnessRegistry(static_harness_map(), HarnessCatalog(harness_context))
         registry.attach(harness_group, namespace, harness_context)
 
+    def _preconfigure(self, argv: Sequence[str]) -> RootInspection | None:
+        # Invalid root syntax stays service-free and is later rendered by Click.
+        inspection = self._root_inspector.inspect(argv)
+        if inspection is None:
+            return None
+        self._configure_context(inspection.values)
+        return inspection
+
     def _invoke(self, program: click.Group, argv: Sequence[str]) -> int:
-        # standalone_mode=False lets the application map every failure to a return code.
-        program.main(args=list(argv[1:]), prog_name="vidbyte-cli", standalone_mode=False)
+        # Click has process-default streams, so bind them to the invocation-owned channels.
+        with redirect_stdout(self._streams.stdout), redirect_stderr(self._streams.stderr):
+            program.main(args=list(argv[1:]), prog_name="vidbyte-cli", standalone_mode=False)
         return 0
 
-    def _render_cli_error(self, error: CliError) -> int:
-        # CliError is explicitly safe for users; richer structured rendering arrives in PR 2.
-        self._streams.write_error(str(error))
-        return error.exit_code
+    def _configure_context(self, values: RootOptionValues) -> None:
+        # --json is a compatibility alias, not an independent output mode.
+        resolved_format = self._resolve_output_format(values.output_format, values.as_json)
+        self._context.configure(
+            InvocationOptions(
+                output_format=resolved_format,
+                profile=values.profile,
+                no_input=values.no_input,
+                color=ColorMode(values.color),
+                debug=values.debug,
+            )
+        )
 
-    def _render_click_error(self, error: click.ClickException) -> int:
-        # Preserve Click's familiar usage rendering while directing it to injected stderr.
-        error.show(file=self._streams.stderr)
-        return error.exit_code
+    def _resolve_output_format(self, value: str | None, as_json: bool) -> OutputFormat:
+        # Reject only genuinely conflicting values; duplicate JSON intent is harmless.
+        if as_json and value not in {None, OutputFormat.JSON.value}:
+            raise usage_error(
+                "--json conflicts with the selected --format value.",
+                "Remove --json or use --format json.",
+            )
+        if as_json:
+            return OutputFormat.JSON
+        return OutputFormat(value or OutputFormat.HUMAN.value)

@@ -1,8 +1,41 @@
-"""The services a harness command needs, injected rather than reached for.
+"""FILE: src/vidbyte_cli/lib/harness/context.py
 
-Dependency injection is the extensibility seam: when a harness needs a new capability, it
-is added here once, not to every harness subclass. Building the command tree never touches
-these services — only `dispatch` does — so `--help` stays free of credential or network I/O.
+PURPOSE: Defines the services used by the generic harness command lifecycle and wires its
+default collaborators on demand. Command-tree construction receives this object but must
+not touch stateful services until dispatch.
+
+ROLE IN CODEBASE: BaseHarness uses credentials, repository inspection, endpoints, rendering,
+and logging through this context. ApplicationContext creates the default graph lazily and
+shares its OutputManager through Logger.
+
+ARCHITECTURE NOTE: This is the extensibility seam for legacy and manifest-backed harnesses.
+It remains separate from ApplicationContext because harness dependencies are optional.
+
+FUNCTION INVENTORY (reviewed 2026-07-26):
+- HarnessContext.require_api_key() -> str: returns a stored key or raises a safe auth error.
+- HarnessContext.harness_endpoints() -> HarnessEndpoints: builds authenticated endpoints.
+- HarnessContext.manifest_cache_dir() -> str: returns the catalog cache location.
+- HarnessContext.default(output) -> HarnessContext: wires default lazy harness services.
+
+COMMON MODIFICATION PATTERNS: Add only capabilities shared by all harnesses, preserve lazy
+construction, and update lib/harness/README.md plus BaseHarness integration.
+
+WHAT NOT TO DO IN THIS FILE:
+1. Do not perform API calls while constructing the context.
+2. Do not print, call sys.exit, or create a process-global logger.
+3. Do not expose API keys through errors, output, or repr customization.
+4. Do not add research-specific services; the research feature owns those.
+5. Do not read root CLI flags directly; ApplicationContext owns resolved policy.
+
+KNOWN EDGE CASES: Help and version paths never request this context. Missing credentials
+must fail before repository inspection or network work.
+
+RELATED DOCS:
+https://github.com/cerredz/Vidbyte-cli/blob/main/docs/architecture.md
+explains the generic harness dependency boundary.
+
+TESTS: No dedicated feature tests are added under the approved no-tests workflow.
+scripts/smoke.py exercises static harness registration without service calls.
 """
 
 from __future__ import annotations
@@ -14,13 +47,17 @@ from ..api.endpoints.harness import HarnessEndpoints
 from ..auth.credentials import CredentialStore
 from ..config.paths import VidbytePaths
 from ..errors.cli_error import CliError
+from ..errors.codes import CliErrorCode, ExitCode
 from ..git.repo_info import RepoInspector
-from ..output.logger import Logger, logger
+from ..output.logger import Logger
+from ..output.manager import OutputManager
 from ..output.render import RunRenderer
 
 
 @dataclass
 class HarnessContext:
+    """Lazy-service graph shared by generic harness commands."""
+
     credentials: CredentialStore
     repo: RepoInspector
     logger: Logger
@@ -28,27 +65,32 @@ class HarnessContext:
     base_url: str | None = None
 
     def require_api_key(self) -> str:
-        # Guard: the stored API key, or a clean CliError if the user is not logged in.
-        creds = self.credentials.read()
-        if creds is None:
-            raise CliError("Not logged in. Run 'vidbyte-cli login' first.")
-        return creds.api_key
+        # Authentication fails before any repository or backend work.
+        credentials = self.credentials.read()
+        if credentials is None:
+            raise CliError(
+                CliErrorCode.AUTH_REQUIRED,
+                "Authentication is required.",
+                ExitCode.AUTHENTICATION,
+                hint="Run 'vidbyte-cli login' first.",
+            )
+        return credentials.api_key
 
     def harness_endpoints(self) -> HarnessEndpoints:
-        # An authenticated harness endpoint group; requires a logged-in user.
+        # The current scaffold creates endpoints on dispatch, never command-tree construction.
         client = ApiClient(base_url=self.base_url, api_key=self.require_api_key())
         return HarnessEndpoints(client)
 
     def manifest_cache_dir(self) -> str:
-        # Where the catalog caches downloaded manifests.
+        # VidbytePaths remains the single owner of legacy catalog locations.
         return str(VidbytePaths.manifests_dir())
 
     @staticmethod
-    def default() -> HarnessContext:
-        # Wires the real services; used by the CLI entry point.
+    def default(output: OutputManager) -> HarnessContext:
+        # Wire the generic runtime around the invocation-owned output policy.
         return HarnessContext(
             credentials=CredentialStore(),
             repo=RepoInspector(),
-            logger=logger,
+            logger=Logger(output),
             render=RunRenderer(),
         )

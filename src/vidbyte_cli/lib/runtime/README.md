@@ -38,8 +38,11 @@ startup-time side effect.
   dispatch, and centralized return-code mapping. Open this for global lifecycle or error
   boundary changes. Command-specific behavior must remain outside the composition root.
 - `context.py` - Stores dependencies for one invocation and lazily creates the existing
-  harness context only when required. Open this when adding a reusable platform service.
-  Never turn it into a process-global service locator.
+  harness context only when required. It also binds root options, output, and the error
+  handler. Open this when adding a reusable platform service; never make it process-global.
+- `options.py` - Performs the service-free root-option scan needed before dynamic harness
+  attachment and reconstructs Click callback values. Open whenever a root flag changes so
+  the preflight parser cannot drift from the public command.
 - `version.py` - Resolves the installed distribution version with a source-tree fallback.
   Open this for package-renaming or metadata-resolution behavior. Normal release numbers
   remain owned by `pyproject.toml`.
@@ -48,3 +51,6 @@ startup-time side effect.
 
 - 2026-07-26 - Moved process exit out of reusable runtime code - embedding callers now receive an integer status.
 - 2026-07-26 - Preserved lazy one-harness attachment - unrelated help and platform commands remain network-free.
+- 2026-07-26 - Bound root output and interaction flags per invocation - help stays offline while command output shares one policy.
+- 2026-07-26 - Delegated every boundary failure to ErrorHandler - safe messages and exit statuses no longer diverge by command.
+- 2026-07-26 - Split root preflight parsing from application dispatch - option values cannot masquerade as harness namespaces.

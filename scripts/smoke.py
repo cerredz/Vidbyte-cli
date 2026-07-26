@@ -13,10 +13,13 @@ smoke verification. The rationale is in docs/design/python-cli-research-harness-
 
 FUNCTION INVENTORY (reviewed 2026-07-26):
 - SmokeRunner.run() -> int: launches every declared invocation and reports the first failure.
+- SmokeRunner._invoke_python(arguments) -> completed command: runs from this worktree source.
+- SmokeRunner._validate(case, result) -> str | None: checks status and stream contracts.
+- SmokeRunner._validate_machine_error(code, serialized) -> str | None: validates envelopes.
 - main() -> int: constructs and runs the smoke verifier.
 
-COMMON MODIFICATION PATTERNS: Add a help or version invocation when the public command tree
-gains a stable group. Keep cases credential-free and avoid live API operations.
+COMMON MODIFICATION PATTERNS: Add a case when the public tree, exit vocabulary, or global
+output contract changes. Keep cases credential-free and avoid live API operations.
 
 WHAT NOT TO DO IN THIS FILE:
 1. Do not call real Vidbyte routes or require API keys.
@@ -24,8 +27,9 @@ WHAT NOT TO DO IN THIS FILE:
 3. Do not treat startup smoke coverage as feature correctness.
 4. Do not bypass the public `python -m vidbyte_cli` entry point.
 
-KNOWN EDGE CASES: Subprocess output is captured so a failed case can print the exact stderr.
-The source package must be installed or made importable by the invoking environment.
+KNOWN EDGE CASES: Subprocess output is captured so a failed case can print both channels.
+The script prepends this checkout's src directory so stacked worktrees cannot use a stale
+editable install.
 
 RELATED DOCS:
 https://github.com/cerredz/Vidbyte-cli/blob/main/docs/design/python-cli-research-harness-program.md
@@ -40,17 +44,67 @@ from __future__ import annotations
 import subprocess
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
+from json import JSONDecodeError, loads
+from os import environ, pathsep
+from pathlib import Path
 
 _CompletedCommand = subprocess.CompletedProcess[str]
+_IMPORT_CODE = (
+    "import sys; import vidbyte_cli; "
+    "assert 'click' not in sys.modules; assert 'httpx' not in sys.modules; "
+    "import vidbyte_cli.lib.output; import vidbyte_cli.lib.io; import vidbyte_cli.lib.errors"
+)
 
-_INVOCATIONS: tuple[tuple[str, ...], ...] = (
-    ("--help",),
-    ("--version",),
-    ("harness", "--help"),
-    ("harness", "software-engineering", "--help"),
-    ("harness", "software-engineering", "fix", "--help"),
-    ("connect", "--help"),
-    ("config", "--help"),
+
+@dataclass(frozen=True)
+class SmokeCase:
+    """One public invocation and its stable process/error expectations."""
+
+    arguments: tuple[str, ...]
+    expected_exit: int = 0
+    error_code: str | None = None
+    machine_error: bool = False
+
+
+_CASES: tuple[SmokeCase, ...] = (
+    SmokeCase(("--help",)),
+    SmokeCase(("--version",)),
+    SmokeCase(("harness", "--help")),
+    SmokeCase(
+        ("harness", "--not-an-option", "namespace"), expected_exit=2, error_code="INVALID_ARGUMENT"
+    ),
+    SmokeCase(("harness", "software-engineering", "--help")),
+    SmokeCase(("harness", "software-engineering", "fix", "--help")),
+    SmokeCase(("connect", "--help")),
+    SmokeCase(("config", "--help")),
+    SmokeCase(("doctor",), expected_exit=1, error_code="NOT_IMPLEMENTED"),
+    SmokeCase(
+        ("--json", "doctor"), expected_exit=1, error_code="NOT_IMPLEMENTED", machine_error=True
+    ),
+    SmokeCase(
+        ("--format", "jsonl", "doctor"),
+        expected_exit=1,
+        error_code="NOT_IMPLEMENTED",
+        machine_error=True,
+    ),
+    SmokeCase(
+        ("--format", "json", "not-a-command"),
+        expected_exit=2,
+        error_code="INVALID_ARGUMENT",
+        machine_error=True,
+    ),
+    SmokeCase(
+        ("--format", "json", "--not-an-option"),
+        expected_exit=2,
+        error_code="INVALID_ARGUMENT",
+        machine_error=True,
+    ),
+    SmokeCase(
+        ("--json", "--format", "human", "doctor"),
+        expected_exit=2,
+        error_code="INVALID_ARGUMENT",
+    ),
 )
 
 
@@ -59,32 +113,96 @@ class SmokeRunner:
 
     def run(self) -> int:
         # Stop at the first broken public invocation and preserve its diagnostic output.
-        for arguments in _INVOCATIONS:
-            result = self._invoke(arguments)
-            if result.returncode != 0:
-                self._report_failure(arguments, result)
+        import_result = self._invoke_python(("-c", _IMPORT_CODE))
+        if import_result.returncode != 0:
+            self._report_import_failure(import_result)
+            return 1
+        sys.stdout.write("ok: package import boundaries\n")
+        for case in _CASES:
+            result = self._invoke(case.arguments)
+            validation_error = self._validate(case, result)
+            if validation_error is not None:
+                self._report_failure(case, result, validation_error)
                 return 1
-            self._report_success(arguments)
+            self._report_success(case)
         sys.stdout.write("smoke passed\n")
         return 0
 
     def _invoke(self, arguments: Sequence[str]) -> _CompletedCommand:
         # Launch a fresh process so import and executable-boundary failures remain visible.
+        return self._invoke_python(("-m", "vidbyte_cli", *arguments))
+
+    def _invoke_python(self, arguments: Sequence[str]) -> _CompletedCommand:
+        # Prepend this worktree's source so stacked branches cannot use a stale editable install.
+        process_environment = dict(environ)
+        source_root = str(Path(__file__).resolve().parents[1] / "src")
+        existing_python_path = process_environment.get("PYTHONPATH")
+        process_environment["PYTHONPATH"] = (
+            f"{source_root}{pathsep}{existing_python_path}" if existing_python_path else source_root
+        )
         return subprocess.run(
-            [sys.executable, "-m", "vidbyte_cli", *arguments],
+            [sys.executable, *arguments],
             capture_output=True,
             text=True,
             check=False,
+            env=process_environment,
         )
 
-    def _report_failure(self, arguments: Sequence[str], result: _CompletedCommand) -> None:
-        # CI needs the exact invocation and stderr to route a startup failure quickly.
-        sys.stderr.write(f"FAIL: {' '.join(arguments)} (exit {result.returncode})\n")
+    def _report_import_failure(self, result: _CompletedCommand) -> None:
+        # Import-order regressions need both channels because Python may use either.
+        sys.stderr.write("FAIL: package import boundaries\n")
+        sys.stderr.write(result.stdout)
         sys.stderr.write(result.stderr)
 
-    def _report_success(self, arguments: Sequence[str]) -> None:
+    def _validate(self, case: SmokeCase, result: _CompletedCommand) -> str | None:
+        # Stable exit and error shape checks make this useful without becoming a feature suite.
+        if result.returncode != case.expected_exit:
+            return f"expected exit {case.expected_exit}, got {result.returncode}"
+        if case.error_code is None:
+            return None
+        if result.stdout:
+            return "error invocation wrote to stdout"
+        if case.machine_error:
+            return self._validate_machine_error(case.error_code, case.expected_exit, result.stderr)
+        expected_label = f"Error [{case.error_code}]"
+        return None if expected_label in result.stderr else f"missing '{expected_label}'"
+
+    def _validate_machine_error(
+        self, error_code: str, expected_exit: int, serialized: str
+    ) -> str | None:
+        # Machine failures must remain one valid versioned document on stderr.
+        try:
+            document = loads(serialized)
+        except JSONDecodeError:
+            return "machine error was not valid JSON"
+        if not isinstance(document, dict):
+            return "machine error was not a JSON object"
+        if document.get("schema_version") != 1 or document.get("kind") != "error":
+            return "machine error envelope was not schema_version=1 kind=error"
+        data = document.get("data", {})
+        if not isinstance(data, dict):
+            return "machine error data was not a JSON object"
+        if data.get("code") != error_code:
+            return f"missing error code {error_code}"
+        if data.get("exit_code") != expected_exit:
+            return f"missing exit code {expected_exit}"
+        return None
+
+    def _report_failure(
+        self,
+        case: SmokeCase,
+        result: _CompletedCommand,
+        validation_error: str,
+    ) -> None:
+        # CI needs the exact invocation and stderr to route a startup failure quickly.
+        arguments = " ".join(case.arguments)
+        sys.stderr.write(f"FAIL: {arguments}: {validation_error}\n")
+        sys.stderr.write(result.stdout)
+        sys.stderr.write(result.stderr)
+
+    def _report_success(self, case: SmokeCase) -> None:
         # One compact line per case makes cross-platform CI progress easy to scan.
-        sys.stdout.write(f"ok: vidbyte-cli {' '.join(arguments)}\n")
+        sys.stdout.write(f"ok: vidbyte-cli {' '.join(case.arguments)}\n")
 
 
 def main() -> int:

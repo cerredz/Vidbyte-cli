@@ -12,15 +12,15 @@ src/vidbyte_cli/cli.py             thin reusable entry function returning an int
 src/vidbyte_cli/__main__.py        outer `python -m` SystemExit boundary
 src/vidbyte_cli/lib/runtime/       invocation composition, version, dispatch, error trap
                                    + two-pass argv inspection/one-harness attachment
-src/vidbyte_cli/lib/io/            injected stdin/stdout/stderr channels
+src/vidbyte_cli/lib/io/            injected streams, terminal capabilities, prompt input
 src/vidbyte_cli/commands/<group>/  one class per command: register() + execute()
 src/vidbyte_cli/lib/api/client.py  ApiClient: base URL, API-key header, envelope unwrapping
 src/vidbyte_cli/lib/api/endpoints/ typed endpoint groups (harness, auth, ...) on ApiClient
 src/vidbyte_cli/lib/auth/          CredentialStore (~/.vidbyte/credentials.json)
 src/vidbyte_cli/lib/config/        ConfigStore + VidbytePaths (single source of ~/.vidbyte)
 src/vidbyte_cli/lib/git/           RepoInspector: origin URL, HEAD sha, branch, dirty state
-src/vidbyte_cli/lib/output/        Logger + renderers (only modules that format output)
-src/vidbyte_cli/lib/errors/        CliError with exit codes
+src/vidbyte_cli/lib/output/        versioned documents + invocation output manager
+src/vidbyte_cli/lib/errors/        stable codes, CliError metadata, central handler
 src/vidbyte_cli/lib/harness/       the harness runtime (see below)
 src/vidbyte_cli/harnesses/         hand-written harness modules (see below)
 src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
@@ -33,9 +33,9 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
    `sys.exit` directly.
 2. **All HTTP goes through `ApiClient`** via a typed endpoint group. New backend surfaces
    get a new file in `lib/api/endpoints/`, never inline requests.
-3. **Errors are raised, not printed.** Anything user-facing raises `CliError(message,
-   exit_code)`; `CliApplication` renders it and returns a status. Unexpected errors return
-   70 without exposing a traceback.
+3. **Errors are raised, not printed.** Anything user-facing raises a classified `CliError`;
+   `ErrorHandler` renders it and returns a status. Unexpected errors return 70 without
+   exposing exception values. `--debug` adds redacted stack frames only.
 4. **Secrets never log.** The API key may not appear in log lines, error messages, or
    rendered output.
 5. **Paths have one source of truth.** Anything under `~/.vidbyte` resolves through
@@ -48,6 +48,48 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
    writes to `sys.stdout`/`sys.stderr` stay at verification-script or outer process edges.
 9. **One invocation owns one dependency graph.** `ApplicationContext` is constructed per
    run and creates optional harness services lazily, so help/version paths stay offline.
+10. **Machine output is versioned.** Every JSON/JSONL record includes `schema_version` and
+    `kind`. Human prose is not an automation contract.
+11. **Stdout is results-only.** Progress, warnings, diagnostics, and all errors use stderr.
+    JSON emits one final result; JSONL alone may stream state-transition result records.
+12. **Prompt input is explicit.** A command accepts one positional value, UTF-8 file, or
+    explicit `-` stdin marker, reads at most 20,001 characters, and never prompts merely
+    because stdin is redirected.
+
+## Output and failure contracts
+
+Root presentation flags must precede the command:
+
+```text
+--format human|json|jsonl|none
+--json
+--profile NAME
+--no-input
+--color auto|always|never
+--debug
+```
+
+`--json` is exactly an alias for `--format json`; pairing it with another format is a usage
+error. `none` suppresses results and transitions but not actionable failures. Terminal
+control is disabled when stderr is not a TTY, `TERM=dumb`, or `NO_COLOR` is present, even
+when color was requested.
+
+Base exit statuses are stable:
+
+| Status | Meaning |
+| --- | --- |
+| `0` | success (including a normal downstream broken pipe) |
+| `1` | operational failure |
+| `2` | invalid command usage |
+| `3` | partial research outcome when `--exit-status` is requested |
+| `4` | authentication failure |
+| `5` | credit exhaustion |
+| `70` | internal software error |
+| `130` | user interrupt |
+
+Machine errors are version-1 `kind=error` documents on stderr with a stable code, exit
+status, safe message, retryability, and optional hint/request ID. Private causes are never
+serialized.
 
 ## The harness runtime (dynamic commands)
 

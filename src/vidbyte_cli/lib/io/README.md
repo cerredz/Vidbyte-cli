@@ -36,7 +36,13 @@ error path.
 - `streams.py` - Defines the immutable stdin/stdout/stderr bundle and small write methods.
   Open this when changing physical stream injection or flush behavior. Formatting, color,
   and machine-document decisions do not belong in this file.
+- `terminal.py` - Defines terminal policy and detects interactive, color, and cursor
+  capabilities from injected streams/environment. Open for platform checks, not rendering.
+- `prompt.py` - Resolves one bounded positional, UTF-8 file, or explicit-stdin prompt.
+  Open for generic prompt source policy; research field validation belongs to its feature.
 
 ## Logs
 
 - 2026-07-26 - Bound streams per invocation instead of at module import - preserves redirection and embedding behavior.
+- 2026-07-26 - Made stdin use explicit and bounded - redirected input cannot hang commands accidentally.
+- 2026-07-26 - Centralized terminal capability detection - non-TTY, TERM=dumb, and NO_COLOR paths disable control sequences.

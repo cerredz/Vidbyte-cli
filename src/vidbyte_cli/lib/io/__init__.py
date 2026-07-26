@@ -12,6 +12,8 @@ contract, following docs/design/python-cli-research-harness-program.md.
 
 FUNCTION INVENTORY (reviewed 2026-07-26):
 - IOStreams: invocation-owned stdin, stdout, and stderr channels.
+- PromptInputResolver: exclusive bounded prompt-source reader.
+- TerminalCapabilities, TerminalPolicy: terminal detection result and input policy.
 
 COMMON MODIFICATION PATTERNS: Re-export a new I/O contract only after adding it to the
 io/README.md file index and confirming it is useful outside its implementation module.
@@ -32,6 +34,8 @@ TESTS: No dedicated feature tests are added under the approved no-tests workflow
 scripts/smoke.py validates import and command startup.
 """
 
+from .prompt import PromptInputResolver
 from .streams import IOStreams
+from .terminal import TerminalCapabilities, TerminalPolicy
 
-__all__ = ["IOStreams"]
+__all__ = ["IOStreams", "PromptInputResolver", "TerminalCapabilities", "TerminalPolicy"]
