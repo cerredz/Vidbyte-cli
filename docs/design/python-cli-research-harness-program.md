@@ -956,16 +956,20 @@ class ResearchRunRequest(BaseModel):
     size: ResearchSize = ResearchSize.SMALL
     target_sources: int | None = Field(default=None, ge=1, le=1000)
     search_calls: int | None = Field(default=None, ge=1, le=100)
-    resource_kinds: list[ResearchKind] = Field(default_factory=lambda: [ResearchKind.PAPER, ResearchKind.WEB])
+    resource_kinds: list[ResearchKind] = Field(
+        default_factory=lambda: [ResearchKind.PAPER, ResearchKind.WEB]
+    )
     include_domains: list[str] = Field(default_factory=list, max_length=50)
     exclude_domains: list[str] = Field(default_factory=list, max_length=50)
     published_after: date | None = None
     language: str = Field(default="en", min_length=2, max_length=12)
 
+
 class ResearchRunAccepted(BaseModel):
     thread_id: str
     run_id: str
     status: ResearchStatus
+
 
 class CursorPage(BaseModel, Generic[TModel]):
     items: list[TModel]
