@@ -32,11 +32,14 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from ..api.client import ApiClient
+from ..api.endpoints.auth import AuthEndpoints
+from ..api.endpoints.harness import HarnessEndpoints
 from ..auth import (
+    ApiCredentialVerifier,
     CredentialResolver,
     CredentialStore,
     CredentialVerifier,
-    PendingCredentialVerifier,
 )
 from ..config import (
     ConfigResolver,
@@ -90,8 +93,9 @@ class ApplicationContext:
         self._config_resolver: ConfigResolver | None = None
         self._credential_store: CredentialStore | None = None
         self._credential_resolver: CredentialResolver | None = None
+        self._api_client: ApiClient | None = None
         self._migration: StateMigration | None = None
-        self._verifier_factory = verifier_factory or PendingCredentialVerifier
+        self._verifier_factory = verifier_factory or ApiCredentialVerifier
         self._verifier: CredentialVerifier | None = None
         self._output = self._build_output()
         self._errors = ErrorHandler(self._output)
@@ -156,6 +160,37 @@ class ApplicationContext:
             self._verifier = self._verifier_factory()
         return self._verifier
 
+    def api_client(self) -> ApiClient:
+        if self._api_client is None:
+            config = self.resolved_config()
+            resolved = self.credential_resolver().resolve(config.profile, config.api_url)
+            if resolved is None:
+                from ..errors import CliError, CliErrorCode, ExitCode
+
+                raise CliError(
+                    CliErrorCode.AUTH_REQUIRED,
+                    "Authentication is required.",
+                    ExitCode.AUTHENTICATION,
+                    hint="Run 'vidbyte-cli login' first.",
+                )
+            if resolved.source.value == "restricted_file":
+                self.output().warning(
+                    "Using credentials from the permission-restricted file fallback."
+                )
+            self._api_client = ApiClient(
+                config.api_url,
+                resolved.credentials.secret_value(),
+                timeout_seconds=config.request_timeout_seconds,
+                diagnostic=self.output().diagnostic if self.options.debug else None,
+            )
+        return self._api_client
+
+    def auth_endpoints(self) -> AuthEndpoints:
+        return AuthEndpoints(self.api_client())
+
+    def harness_endpoints(self) -> HarnessEndpoints:
+        return HarnessEndpoints(self.api_client())
+
     def output(self) -> OutputManager:
         return self._output
 
@@ -166,6 +201,11 @@ class ApplicationContext:
         if self._harness_context is None:
             self._harness_context = self._harness_factory()
         return self._harness_context
+
+    def close(self) -> None:
+        if self._api_client is not None:
+            self._api_client.close()
+            self._api_client = None
 
     def _build_output(self) -> OutputManager:
         terminal_policy = TerminalPolicy(
@@ -183,4 +223,5 @@ class ApplicationContext:
             paths=self.paths(),
             base_url=self.options.api_url,
             profile=self.options.profile,
+            endpoint_factory=self.harness_endpoints,
         )

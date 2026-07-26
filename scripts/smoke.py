@@ -71,6 +71,7 @@ _CASES: tuple[SmokeCase, ...] = (
     SmokeCase(("--help",)),
     SmokeCase(("--version",)),
     SmokeCase(("harness", "--help")),
+    SmokeCase(("harness", "run", "--help")),
     SmokeCase(
         ("harness", "--not-an-option", "namespace"), expected_exit=2, error_code="INVALID_ARGUMENT"
     ),

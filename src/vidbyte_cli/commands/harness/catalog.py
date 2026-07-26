@@ -1,22 +1,40 @@
-"""`vidbyte-cli harness catalog` — the harnesses available to run.
+"""FILE: src/vidbyte_cli/commands/harness/catalog.py
 
-Distinct from `harness list` (your runs). Added to resolve the naming collision flagged in
-the harness/list.ts:11 review comment.
+PURPOSE: Lists generic harnesses available to the current account.
+
+TESTS: No feature tests are added under the approved no-tests workflow.
 """
 
 from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.output import OutputDocument
+from ...lib.runtime.context import ApplicationContext
 
 
 class HarnessCatalogCommand:
     def register(self, parent: click.Group) -> None:
         @parent.command(name="catalog", help="List the harnesses available to run")
-        def _run() -> None:
-            self.execute()
+        @click.pass_obj
+        def _run(context: ApplicationContext) -> None:
+            self.execute(context)
 
-    def execute(self) -> None:
-        # Will fetch the available-harness catalog and render it as an aligned table.
-        raise not_implemented("'vidbyte-cli harness catalog'")
+    def execute(self, context: ApplicationContext) -> None:
+        harnesses = context.harness_endpoints().list_catalog()
+        context.output().result(
+            OutputDocument(
+                kind="harness.catalog",
+                data={
+                    "harnesses": [
+                        {
+                            "name": item.name,
+                            "version": item.version,
+                            "description": item.description,
+                        }
+                        for item in harnesses
+                    ]
+                },
+            ),
+            context.harness_context().render.render_catalog(harnesses),
+        )

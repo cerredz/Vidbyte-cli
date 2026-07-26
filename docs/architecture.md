@@ -16,6 +16,8 @@ src/vidbyte_cli/lib/io/            injected streams, terminal capabilities, prom
 src/vidbyte_cli/commands/<group>/  one class per command: register() + execute()
 src/vidbyte_cli/lib/api/client.py  ApiClient: base URL, API-key header, envelope unwrapping
 src/vidbyte_cli/lib/api/endpoints/ typed endpoint groups (harness, auth, ...) on ApiClient
+src/vidbyte_cli/lib/operations/   idempotency identity + prompt-free recovery journal
+src/vidbyte_cli/lib/polling/      cancellation-aware generic remote-resource watching
 src/vidbyte_cli/lib/auth/          scoped env/keyring/restricted-file credential boundary
 src/vidbyte_cli/lib/config/        typed profiles, provenance, native paths, safe migration
 src/vidbyte_cli/lib/git/           RepoInspector: origin URL, HEAD sha, branch, dirty state
@@ -60,6 +62,11 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
 14. **Configuration is typed and attributable.** Command → environment → selected profile
     → default profile → built-in precedence is recorded per field.
 
+15. **Retries preserve logical identity.** A mutation is retryable only with one stable
+    idempotency key, serialized body, and request identity across attempts.
+16. **Local cancellation is not remote cancellation.** Interrupted polling preserves the
+    accepted operation record and prints a recovery command.
+
 ## Output and failure contracts
 
 Root presentation flags must precede the command:
@@ -94,6 +101,11 @@ Base exit statuses are stable:
 Machine errors are version-1 `kind=error` documents on stderr with a stable code, exit
 status, safe message, retryability, and optional hint/request ID. Private causes are never
 serialized.
+
+HTTP successes are bounded to 5 MB, require JSON content types, and validate as direct DTOs
+or explicit envelopes. Error mapping uses status and stable metadata rather than backend
+prose. Retryable statuses and transport failures receive at most three attempts with
+bounded exponential backoff; POST requires an idempotency key.
 
 ## The harness runtime (dynamic commands)
 

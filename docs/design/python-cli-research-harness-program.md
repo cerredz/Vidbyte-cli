@@ -583,8 +583,9 @@ class StateMigration:
 `src/vidbyte_cli/lib/polling/`,
 `src/vidbyte_cli/lib/operations/`,
 `src/vidbyte_cli/lib/runtime/clock.py`,
-`src/vidbyte_cli/lib/runtime/signals.py`, existing API, auth, git, harness, renderer, and
-command files
+`src/vidbyte_cli/lib/runtime/signals.py`,
+`src/vidbyte_cli/lib/harness/watcher.py`, existing API, auth, git, harness, renderer,
+runtime composition, generic command, smoke, README, and architecture files
 **Type:** New + Modified
 
 #### What it does
