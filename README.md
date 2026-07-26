@@ -56,10 +56,10 @@ diagnostics, and errors use stderr. JSON and JSONL documents include `schema_ver
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 
-The research command tree is staged behind `VIDBYTE_EXPERIMENTAL_RESEARCH=1` in PR 6.
-Its help, prompt/file/stdin input rules, filters, cursor queries, and export shape are
-available, while execution intentionally returns `NOT_IMPLEMENTED` until the API adapter
-lands in the final stack PR.
+The research command tree and API adapter are enabled by default.
+`VIDBYTE_EXPERIMENTAL_RESEARCH=0` is an emergency rollback switch that hides the namespace.
+Help and version paths remain credential- and network-free; research execution resolves the
+selected profile credential only when a command actually calls the API.
 
 ## Configuration
 
@@ -77,6 +77,11 @@ Effective precedence is command option, environment, selected profile, default p
 then built-in default. `vidbyte-cli config get <key>` reports the effective value;
 `vidbyte-cli config set <key> <value>` accepts `api_url`, `output_format`, `color`, and
 `request_timeout_seconds`.
+
+The CLI maps its descriptive `research_paper` / `web_page` resource-kind values to the
+backend's confirmed `paper` / `web` wire values only inside the research API adapter.
+Provider credentials are never accepted as research command fields or serialized into a
+run request.
 
 ## Network and recovery
 

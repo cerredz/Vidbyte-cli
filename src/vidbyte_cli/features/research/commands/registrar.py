@@ -4,8 +4,8 @@ PURPOSE: Builds the complete static research command tree without constructing s
 credentials, storage, or network clients.
 
 ROLE IN CODEBASE: commands/register_all_commands calls this registrar with the invocation
-environment. PR 6 exposes the tree only behind VIDBYTE_EXPERIMENTAL_RESEARCH; PR 7 enables
-the production adapter and changes the default.
+environment. PR 7 enables the production tree by default while retaining an explicit
+VIDBYTE_EXPERIMENTAL_RESEARCH=0 rollback switch.
 
 ARCHITECTURE NOTE: Every group and command is attached synchronously. Merely rendering help
 cannot resolve a research gateway or make an API request.
@@ -38,7 +38,7 @@ from .queries import (
     ResearchWatchCommand,
 )
 
-_ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
+_DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
 
 
 class ResearchCommandRegistrar:
@@ -66,8 +66,8 @@ class ResearchCommandRegistrar:
         parent.add_command(research)
 
     def _enabled(self, environment: Mapping[str, str]) -> bool:
-        value = environment.get("VIDBYTE_EXPERIMENTAL_RESEARCH", "")
-        return value.strip().lower() in _ENABLED_VALUES
+        value = environment.get("VIDBYTE_EXPERIMENTAL_RESEARCH")
+        return value is None or value.strip().lower() not in _DISABLED_VALUES
 
     def _register_queries(self, research: click.Group) -> None:
         runs = click.Group(name="runs", help="Inspect research runs")

@@ -171,13 +171,18 @@ features/research/domain          strict transport-free vocabulary and status po
 features/research/application     mutation, query, export, and watch use cases
 features/research/commands        Click-only input adapters and static command registration
 features/research/presentation    versioned documents, human views, coarse transitions
-features/research/infrastructure  final API route adapter (PR 7)
+features/research/infrastructure  route constructors, wire DTOs, and production gateway
 ```
 
 Domain and application imports remain independent of Click and HTTPX. Command registration
 does no credential, filesystem, or network work. Large artifact reads require `--output`;
 replacement additionally requires `--force`. Detailed agent-event telemetry remains
 web-only, while the CLI watcher emits only status/source/artifact-count transitions.
+
+The production gateway is lazy: static help registration does not resolve a credential or
+construct an HTTP client. Confirmed mutation DTO vocabulary is translated at this boundary,
+including `research_paper` to `paper` and `web_page` to `web`. Read, capability, and export
+routes are isolated forward contracts until their backend implementation lands.
 
 ### Integrating a harness in `src/vidbyte_cli/harnesses/<name>/`
 
@@ -206,6 +211,25 @@ The CLI targets the Vidbyte public API-key surface (`Authorization` via Vidbyte 
 - `GET /harness/list` — the caller's runs
 - `GET /harness/{name}/manifest` — a harness's command surface (drives dynamic commands)
 - `GET /harness/catalog` — the available harnesses (distinct from the caller's runs)
+
+Research mutations confirmed from Vidbyte PR #284:
+
+- `POST /research/run`
+- `POST /research/threads/{thread_id}/run`
+- `POST /research/runs/{run_id}/continue`
+
+Forward read/export contracts assumed by the approved CLI design:
+
+- `GET /research/runs/{run_id}` and `GET /research/runs`
+- `GET /research/threads`
+- `GET /research/threads/{thread_id}/sources`
+- `GET /research/threads/{thread_id}/artifacts`
+- `GET /research/artifacts/{artifact_id}`
+- `GET /research/capabilities`
+- `POST /research/exports` and `GET /research/exports/{export_id}`
+
+All return direct DTOs; list routes return `{items, next_cursor}`. Missing capability/export
+contracts map to an API-version error instead of falling back to browser-only behavior.
 
 Models in `types/api.py` and `types/manifest.py` mirror the backend DTOs; keep them in sync
 with `backend/lib/dtos/harness.py` when the routes ship. The full system design lives in

@@ -99,8 +99,8 @@ _CASES: tuple[SmokeCase, ...] = (
     SmokeCase(("research", "export", "status", "--help")),
     SmokeCase(
         ("research", "start", "offline smoke prompt", "--no-wait"),
-        expected_exit=1,
-        error_code="NOT_IMPLEMENTED",
+        expected_exit=4,
+        error_code="AUTH_REQUIRED",
     ),
     SmokeCase(("doctor",)),
     SmokeCase(("--json", "doctor")),

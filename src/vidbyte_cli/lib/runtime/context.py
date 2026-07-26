@@ -15,6 +15,8 @@ FUNCTION INVENTORY (reviewed 2026-07-26):
 - configure(options, resolved_config) -> None: binds validated invocation policy.
 - config_store()/credential_store()/migration(): lazy platform services.
 - output()/error_handler()/harness_context(): invocation presentation/runtime services.
+- research_*(): lazily compose the production gateway and feature use cases.
+- set_exit_code()/exit_code(): carry successful nonzero outcome status to the runner.
 
 WHAT NOT TO DO IN THIS FILE:
 1. Do not execute command use cases or API calls.
@@ -230,14 +232,11 @@ class ApplicationContext:
         """Resolve the feature adapter only when a research command executes."""
         if self._research_gateway is None:
             if self._research_gateway_factory is None:
-                from ..errors import CliError, CliErrorCode
+                from ...features.research.infrastructure import ApiResearchGateway
 
-                raise CliError(
-                    CliErrorCode.NOT_IMPLEMENTED,
-                    "Research command execution is not enabled in this CLI build.",
-                    hint="Use the command help now; API execution arrives in the next stack PR.",
-                )
-            self._research_gateway = self._research_gateway_factory()
+                self._research_gateway = ApiResearchGateway(self.api_client())
+            else:
+                self._research_gateway = self._research_gateway_factory()
         return self._research_gateway
 
     def research_watcher(self) -> ResearchWatcher:
