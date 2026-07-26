@@ -1334,6 +1334,7 @@ the same existing file. No source file is deleted in this program.
 |--------|----|-----------|--------|
 | CREATE | 1 | `docs/design/python-cli-research-harness-program.md` | Source of truth for the seven-PR program |
 | CREATE | 1 | `.github/workflows/ci.yml` | Cross-platform Python quality/package gate |
+| CREATE | 1 | `scripts/README.md` | Verification-script ownership, file index, non-goals, and decision log |
 | CREATE | 1 | `scripts/run_ci.py` | Canonical local CI orchestrator |
 | CREATE | 1 | `src/vidbyte_cli/README.md` | Package boundary, routing index, non-goals, and decision log |
 | CREATE | 1 | `src/vidbyte_cli/lib/README.md` | Reusable CLI platform boundary and routing index |
