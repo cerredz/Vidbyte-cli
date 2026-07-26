@@ -53,7 +53,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import click
 
@@ -79,7 +79,9 @@ class BaseHarness(ABC):
     description: str
     requires_repo: ClassVar[bool] = False
     _invocation: ClassVar[InvocationBuilder] = InvocationBuilder()
-    _CLICK_TYPES: ClassVar[dict[OptionType, click.ParamType]] = {
+    # Click 8.4 made ParamType generic while our supported Click 8.1 baseline is not.
+    # Keep the compatibility boundary dynamic; all values remain concrete Click types.
+    _CLICK_TYPES: ClassVar[dict[OptionType, Any]] = {
         "string": click.STRING,
         "number": click.FLOAT,
         "path": click.Path(),
