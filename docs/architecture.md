@@ -16,8 +16,8 @@ src/vidbyte_cli/lib/io/            injected streams, terminal capabilities, prom
 src/vidbyte_cli/commands/<group>/  one class per command: register() + execute()
 src/vidbyte_cli/lib/api/client.py  ApiClient: base URL, API-key header, envelope unwrapping
 src/vidbyte_cli/lib/api/endpoints/ typed endpoint groups (harness, auth, ...) on ApiClient
-src/vidbyte_cli/lib/auth/          CredentialStore (~/.vidbyte/credentials.json)
-src/vidbyte_cli/lib/config/        ConfigStore + VidbytePaths (single source of ~/.vidbyte)
+src/vidbyte_cli/lib/auth/          scoped env/keyring/restricted-file credential boundary
+src/vidbyte_cli/lib/config/        typed profiles, provenance, native paths, safe migration
 src/vidbyte_cli/lib/git/           RepoInspector: origin URL, HEAD sha, branch, dirty state
 src/vidbyte_cli/lib/output/        versioned documents + invocation output manager
 src/vidbyte_cli/lib/errors/        stable codes, CliError metadata, central handler
@@ -38,8 +38,8 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
    exposing exception values. `--debug` adds redacted stack frames only.
 4. **Secrets never log.** The API key may not appear in log lines, error messages, or
    rendered output.
-5. **Paths have one source of truth.** Anything under `~/.vidbyte` resolves through
-   `VidbytePaths`.
+5. **Paths have one source of truth.** Platform-native config/cache/state/data and legacy
+   `~/.vidbyte` compatibility locations resolve through `VidbytePaths`.
 6. **Adding a static command group** = new folder under `commands/`, one class per command,
    registered in `commands/__init__.py`. Nothing else changes.
 7. **Reusable code does not terminate the process.** `CliApplication.run()` and `cli.main()`
@@ -53,8 +53,12 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
 11. **Stdout is results-only.** Progress, warnings, diagnostics, and all errors use stderr.
     JSON emits one final result; JSONL alone may stream state-transition result records.
 12. **Prompt input is explicit.** A command accepts one positional value, UTF-8 file, or
-    explicit `-` stdin marker, reads at most 20,001 characters, and never prompts merely
-    because stdin is redirected.
+   explicit `-` stdin marker, reads at most 20,001 characters, and never prompts merely
+   because stdin is redirected.
+13. **Secrets have separate precedence.** Credentials resolve environment → scoped OS
+    keyring → warned restricted file. Environment credentials are never implicitly stored.
+14. **Configuration is typed and attributable.** Command → environment → selected profile
+    → default profile → built-in precedence is recorded per field.
 
 ## Output and failure contracts
 
@@ -114,7 +118,7 @@ lib/harness/manifest_harness.py  ManifestHarness(BaseHarness): satisfies the SAM
 lib/harness/invocation.py     InvocationBuilder: the one layer that turns CLI params + a
                               command into a HarnessRunCreateRequest (parsing + agent-native
                               errors), shared by every command
-lib/harness/catalog.py        HarnessCatalog: fetch + cache manifests under ~/.vidbyte/manifests
+lib/harness/catalog.py        HarnessCatalog: fetch + cache manifests in native user cache
 lib/harness/registry.py       HarnessRegistry: owns both sources (static map + catalog) and
                               resolves a namespace to a HarnessModule (static wins, else
                               manifest), then attaches it to the command tree
@@ -126,8 +130,9 @@ click builds its command tree synchronously, but a manifest arrives over the net
 CLI does a **two-pass argv inspection** in `lib/runtime/application.py`: pass 1 registers
 the static surface; pass 2, only when argv is `harness <name> ...`, loads that one harness
 (cache-first) and attaches its subtree before parsing. So `vidbyte-cli login` never touches
-the network, and only the invoked harness loads. Manifests are cached under
-`~/.vidbyte/manifests` so `--help` works offline.
+the network, and only the invoked harness loads. Manifests are cached under the
+platform-native user cache directory so `--help` works offline; the historical
+`~/.vidbyte/manifests` path remains readable and migratable.
 
 ## Verification boundary
 

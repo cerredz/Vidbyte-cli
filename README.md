@@ -4,9 +4,9 @@ The universal Vidbyte CLI: authenticate, run Vidbyte harnesses against your repo
 and manage configuration. Harnesses execute entirely on the Vidbyte backend — this CLI
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
-> **Status:** Python platform scaffold. Commands that have not reached their implementation
-> PR return a typed "not implemented yet" error. Executable lifecycle, injected process I/O,
-> human/machine output, safe error handling, package versioning, and CI are production-shaped.
+> **Status:** Python platform scaffold. Local configuration, profiles, platform paths,
+> credential resolution, and logout are implemented. Login's verify-before-store HTTP seam
+> and other network commands are completed by the next stacked PR.
 
 ## Install (development)
 
@@ -29,7 +29,7 @@ Root options precede the command, for example
 | --- | --- |
 | `--format human\|json\|jsonl\|none` | Select human, one-document, streaming, or suppressed result output |
 | `--json` | Alias for `--format json`; conflicts with any non-JSON `--format` |
-| `--profile NAME` | Select a configuration profile (storage and precedence land in PR 3) |
+| `--profile NAME` | Select a configuration and credential scope |
 | `--no-input` | Prevent interactive prompting |
 | `--color auto\|always\|never` | Select color preference subject to terminal safety |
 | `--debug` | Show redacted stack frames without exception values or locals |
@@ -59,7 +59,15 @@ diagnostics, and errors use stderr. JSON and JSONL documents include `schema_ver
 | `VIDBYTE_API_URL` | API host (default `https://api.vidbyte.ai`) |
 | `VIDBYTE_API_KEY` | API key; overrides the stored credential for the current shell |
 
-State lives under `~/.vidbyte/` (`credentials.json`, `config.json`, `manifests/`).
+Non-secret profile configuration, manifest cache, and restricted fallback credentials use
+the operating system's standard application directories. The CLI continues to read
+`~/.vidbyte/` and copies compatible legacy state through a verified, source-preserving
+migration. API keys use the OS keyring when one is available.
+
+Effective precedence is command option, environment, selected profile, default profile,
+then built-in default. `vidbyte-cli config get <key>` reports the effective value;
+`vidbyte-cli config set <key> <value>` accepts `api_url`, `output_format`, `color`, and
+`request_timeout_seconds`.
 
 ## Architecture
 
@@ -85,8 +93,8 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 
 ## Follow-ups
 
-- Implement the stores, `ApiClient` requests, the catalog fetch/cache, and the
-  `harness run/status/list` behavior once the backend routes ship.
+- Implement `ApiClient` requests, credential verification, catalog fetch/cache, and the
+  `harness run/status/list` behavior in the reusable HTTP platform PR.
 - The console command is `vidbyte-cli` (not `vidbyte`) to avoid the bin/name collision with
   the `vidbyte-skills` package; confirm before publishing.
 - Confirm the production API host.

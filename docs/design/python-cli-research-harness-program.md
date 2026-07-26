@@ -506,9 +506,13 @@ class PromptInputResolver:
 **File(s):** `src/vidbyte_cli/lib/config/models.py`,
 `src/vidbyte_cli/lib/config/resolver.py`,
 `src/vidbyte_cli/lib/config/migration.py`,
+`src/vidbyte_cli/lib/config/atomic.py`,
 `src/vidbyte_cli/lib/auth/resolver.py`,
-`src/vidbyte_cli/lib/auth/keyring_store.py`, existing config/auth commands and stores,
-`pyproject.toml`, `.env.example`
+`src/vidbyte_cli/lib/auth/keyring_store.py`,
+`src/vidbyte_cli/lib/auth/input.py`,
+`src/vidbyte_cli/lib/auth/verifier.py`, existing config/auth commands and stores,
+runtime composition/options, harness credential/path adapter, smoke checks,
+`pyproject.toml`, `.env.example`, README and architecture documentation
 **Type:** New + Modified
 
 #### What it does

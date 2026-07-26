@@ -63,10 +63,12 @@ class HarnessContext:
     logger: Logger
     render: RunRenderer
     base_url: str | None = None
+    profile: str = "default"
+    paths: VidbytePaths | None = None
 
     def require_api_key(self) -> str:
         # Authentication fails before any repository or backend work.
-        credentials = self.credentials.read()
+        credentials = self.credentials.read(self.profile, self.base_url or "https://api.vidbyte.ai")
         if credentials is None:
             raise CliError(
                 CliErrorCode.AUTH_REQUIRED,
@@ -74,7 +76,7 @@ class HarnessContext:
                 ExitCode.AUTHENTICATION,
                 hint="Run 'vidbyte-cli login' first.",
             )
-        return credentials.api_key
+        return credentials.secret_value()
 
     def harness_endpoints(self) -> HarnessEndpoints:
         # The current scaffold creates endpoints on dispatch, never command-tree construction.
@@ -83,14 +85,25 @@ class HarnessContext:
 
     def manifest_cache_dir(self) -> str:
         # VidbytePaths remains the single owner of legacy catalog locations.
-        return str(VidbytePaths.manifests_dir())
+        paths = self.paths or VidbytePaths.default()
+        return str(paths.manifests_dir())
 
     @staticmethod
-    def default(output: OutputManager) -> HarnessContext:
+    def default(
+        output: OutputManager,
+        *,
+        credentials: CredentialStore | None = None,
+        paths: VidbytePaths | None = None,
+        base_url: str | None = None,
+        profile: str = "default",
+    ) -> HarnessContext:
         # Wire the generic runtime around the invocation-owned output policy.
         return HarnessContext(
-            credentials=CredentialStore(),
+            credentials=credentials or CredentialStore(paths=paths),
             repo=RepoInspector(),
             logger=Logger(output),
             render=RunRenderer(),
+            base_url=base_url,
+            profile=profile,
+            paths=paths,
         )

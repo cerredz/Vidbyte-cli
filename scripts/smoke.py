@@ -78,16 +78,9 @@ _CASES: tuple[SmokeCase, ...] = (
     SmokeCase(("harness", "software-engineering", "fix", "--help")),
     SmokeCase(("connect", "--help")),
     SmokeCase(("config", "--help")),
-    SmokeCase(("doctor",), expected_exit=1, error_code="NOT_IMPLEMENTED"),
-    SmokeCase(
-        ("--json", "doctor"), expected_exit=1, error_code="NOT_IMPLEMENTED", machine_error=True
-    ),
-    SmokeCase(
-        ("--format", "jsonl", "doctor"),
-        expected_exit=1,
-        error_code="NOT_IMPLEMENTED",
-        machine_error=True,
-    ),
+    SmokeCase(("doctor",)),
+    SmokeCase(("--json", "doctor")),
+    SmokeCase(("--format", "jsonl", "doctor")),
     SmokeCase(
         ("--format", "json", "not-a-command"),
         expected_exit=2,
@@ -140,6 +133,14 @@ class SmokeRunner:
         process_environment["PYTHONPATH"] = (
             f"{source_root}{pathsep}{existing_python_path}" if existing_python_path else source_root
         )
+        # Keep smoke read-only and isolated from a developer's actual profile/keyring.
+        smoke_root = Path(__file__).resolve().parents[1] / ".smoke-state"
+        process_environment["XDG_CONFIG_HOME"] = str(smoke_root / "config")
+        process_environment["XDG_CACHE_HOME"] = str(smoke_root / "cache")
+        process_environment["XDG_DATA_HOME"] = str(smoke_root / "data")
+        process_environment["XDG_STATE_HOME"] = str(smoke_root / "state")
+        process_environment["LOCALAPPDATA"] = str(smoke_root / "local")
+        process_environment["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
         return subprocess.run(
             [sys.executable, *arguments],
             capture_output=True,

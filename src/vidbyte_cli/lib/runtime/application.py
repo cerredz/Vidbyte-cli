@@ -57,6 +57,7 @@ import click
 
 from ...commands import register_all_commands
 from ...harnesses import static_harness_map
+from ..config import ConfigOverrides
 from ..errors.cli_error import usage_error
 from ..harness.catalog import HarnessCatalog
 from ..harness.registry import HarnessRegistry
@@ -133,8 +134,7 @@ class CliApplication:
         @click.option(
             "--color",
             type=click.Choice([item.value for item in ColorMode], case_sensitive=False),
-            default=ColorMode.AUTO.value,
-            show_default=True,
+            default=None,
         )
         @click.option("--debug", is_flag=True, help="Show redacted internal stack frames.")
         @click.pass_context
@@ -159,7 +159,8 @@ class CliApplication:
         inspection = self._root_inspector.inspect(argv)
         if inspection is None:
             return None
-        self._configure_context(inspection.values)
+        if not inspection.exits_before_command:
+            self._configure_context(inspection.values)
         return inspection
 
     def _invoke(self, program: click.Group, argv: Sequence[str]) -> int:
@@ -170,18 +171,33 @@ class CliApplication:
 
     def _configure_context(self, values: RootOptionValues) -> None:
         # --json is a compatibility alias, not an independent output mode.
-        resolved_format = self._resolve_output_format(values.output_format, values.as_json)
-        self._context.configure(
-            InvocationOptions(
-                output_format=resolved_format,
+        explicit_format = self._resolve_output_format(values.output_format, values.as_json)
+        explicit_color = ColorMode(values.color) if values.color is not None else None
+        resolved = self._context.config_resolver().resolve(
+            ConfigOverrides(
                 profile=values.profile,
-                no_input=values.no_input,
-                color=ColorMode(values.color),
-                debug=values.debug,
+                output_format=explicit_format,
+                color=explicit_color,
             )
         )
+        self._context.configure(
+            InvocationOptions(
+                output_format=resolved.output_format,
+                profile=resolved.profile,
+                api_url=resolved.api_url,
+                request_timeout_seconds=resolved.request_timeout_seconds,
+                no_input=values.no_input,
+                color=resolved.color,
+                debug=values.debug,
+            ),
+            resolved,
+        )
 
-    def _resolve_output_format(self, value: str | None, as_json: bool) -> OutputFormat:
+    def _resolve_output_format(
+        self,
+        value: str | None,
+        as_json: bool,
+    ) -> OutputFormat | None:
         # Reject only genuinely conflicting values; duplicate JSON intent is harmless.
         if as_json and value not in {None, OutputFormat.JSON.value}:
             raise usage_error(
@@ -190,4 +206,4 @@ class CliApplication:
             )
         if as_json:
             return OutputFormat.JSON
-        return OutputFormat(value or OutputFormat.HUMAN.value)
+        return OutputFormat(value) if value is not None else None

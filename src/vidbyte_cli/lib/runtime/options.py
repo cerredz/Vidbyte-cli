@@ -54,7 +54,7 @@ class RootOptionValues:
     as_json: bool
     profile: str | None
     no_input: bool
-    color: str
+    color: str | None
     debug: bool
 
     @classmethod
@@ -65,7 +65,7 @@ class RootOptionValues:
             as_json=cast(bool, values["as_json"]),
             profile=cast(str | None, values["profile"]),
             no_input=cast(bool, values["no_input"]),
-            color=cast(str, values["color"]),
+            color=cast(str | None, values["color"]),
             debug=cast(bool, values["debug"]),
         )
 
@@ -88,7 +88,7 @@ class _RootOptionState:
     as_json: bool = False
     profile: str | None = None
     no_input: bool = False
-    color: str = ColorMode.AUTO.value
+    color: str | None = None
     debug: bool = False
 
     def freeze(self) -> RootOptionValues:
@@ -197,7 +197,7 @@ class RootOptionInspector:
     def _valid(self, state: _RootOptionState) -> bool:
         # Invalid choice values stay service-free and are later explained by Click.
         valid_formats = {None, *(item.value for item in OutputFormat)}
-        valid_colors = {item.value for item in ColorMode}
+        valid_colors = {None, *(item.value for item in ColorMode)}
         return state.output_format in valid_formats and state.color in valid_colors
 
     def _invalid_inspection(self, state: _RootOptionState) -> RootInspection | None:
