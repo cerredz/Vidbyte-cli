@@ -1,5 +1,12 @@
 # Harness Runtime and CLI Scaffold
 
+> **Status: Superseded for CLI platform evolution.** This document remains the historical
+> source for the accepted generic harness abstraction. The approved seven-PR Python CLI
+> platform and research feature program now lives in
+> [python-cli-research-harness-program.md](python-cli-research-harness-program.md). Where the
+> two documents differ on executable lifecycle, I/O, configuration, HTTP, polling,
+> idempotency, research commands, or verification, the newer approved document governs.
+
 Design for the universal Vidbyte CLI and the per-harness sub-CLI runtime it hosts.
 
 ## Goal

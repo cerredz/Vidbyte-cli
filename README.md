@@ -4,19 +4,21 @@ The universal Vidbyte CLI: authenticate, run Vidbyte harnesses against your repo
 and manage configuration. Harnesses execute entirely on the Vidbyte backend — this CLI
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
-> **Status:** scaffold. Every command parses its arguments fully, then exits `1` with a
-> clear "not implemented yet" message. The command surface, layering, types, and the
-> harness runtime are in place so they can be reviewed before behavior lands.
+> **Status:** Python platform scaffold. Commands that have not reached their implementation
+> PR still return a clear "not implemented yet" error, while the executable lifecycle,
+> injected process I/O, package versioning, and canonical CI gate are production-shaped.
 
 ## Install (development)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+python -m venv .venv
+source .venv/bin/activate                          # Windows: .venv\Scripts\activate
+python -m pip install -e ".[dev]"
 vidbyte-cli --help
 ```
 
-The console command is `vidbyte-cli`.
+The console command is `vidbyte-cli`. The reusable Python entry function returns an integer
+status; only the generated console wrapper and `python -m vidbyte_cli` terminate a process.
 
 ## Commands
 
@@ -48,12 +50,20 @@ with the commands described by a backend manifest and built at runtime, so new h
 need no CLI release. See [docs/architecture.md](docs/architecture.md) for the layering
 rules and [how to integrate a harness](docs/architecture.md#integrating-a-harness-in-srcvidbyte_cliharnessesname).
 
+The application composition root lives in `src/vidbyte_cli/lib/runtime`. It constructs one
+invocation context, binds stdin/stdout/stderr through `lib/io`, builds the static Click tree,
+and attaches only the requested dynamic harness namespace.
+
 ## Verify
 
 ```bash
-python -m compileall src     # compiles clean
-python scripts/smoke.py      # boots the CLI and renders every help screen
+python -m pip install -e ".[dev]"
+python scripts/run_ci.py
 ```
+
+The canonical gate runs Ruff lint/format checks, strict mypy, byte compilation, offline
+command smoke checks, sdist/wheel build, Twine metadata validation, and an installed-wheel
+smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS.
 
 ## Follow-ups
 

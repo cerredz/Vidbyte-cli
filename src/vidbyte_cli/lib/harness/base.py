@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import click
 
@@ -36,7 +36,9 @@ class BaseHarness(ABC):
     # The shared translation layer: one instance is enough since it is stateless.
     _invocation: ClassVar[InvocationBuilder] = InvocationBuilder()
 
-    _CLICK_TYPES: ClassVar[dict[OptionType, click.ParamType[object]]] = {
+    # click 8.4 made ParamType generic; our supported 8.1 baseline is not. Keep the value
+    # type dynamic across that range — every entry is still a concrete click type.
+    _CLICK_TYPES: ClassVar[dict[OptionType, Any]] = {
         "string": click.STRING,
         "number": click.FLOAT,
         "path": click.Path(),
