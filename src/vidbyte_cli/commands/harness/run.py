@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class HarnessRunCommand:
@@ -25,4 +25,4 @@ class HarnessRunCommand:
     def execute(self, name: str, task: str) -> None:
         # Will inspect the repo, submit {harness: name, command: "run", args: {task}}, and
         # stream status until done.
-        raise not_implemented("'vidbyte-cli harness run'")
+        raise NotImplementedFeature("'vidbyte-cli harness run'")

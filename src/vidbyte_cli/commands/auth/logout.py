@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class LogoutCommand:
@@ -15,4 +15,4 @@ class LogoutCommand:
 
     def execute(self) -> None:
         # Will clear the credential store (idempotent) and confirm to the user.
-        raise not_implemented("'vidbyte-cli logout'")
+        raise NotImplementedFeature("'vidbyte-cli logout'")

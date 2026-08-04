@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class ConfigGetCommand:
@@ -16,4 +16,4 @@ class ConfigGetCommand:
 
     def execute(self, key: str) -> None:
         # Will read the value from the config store and print it.
-        raise not_implemented("'vidbyte-cli config get'")
+        raise NotImplementedFeature("'vidbyte-cli config get'")

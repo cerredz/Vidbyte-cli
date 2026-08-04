@@ -13,9 +13,10 @@ from ..api.client import ApiClient
 from ..api.endpoints.harness import HarnessEndpoints
 from ..auth.credentials import CredentialStore
 from ..config.paths import VidbytePaths
-from ..errors.cli_error import CliError
+from ..errors.failures import AuthenticationRequired
 from ..git.repo_info import RepoInspector
-from ..output.logger import Logger, logger
+from ..output.logger import Logger
+from ..output.manager import OutputManager
 from ..output.render import RunRenderer
 
 
@@ -31,7 +32,7 @@ class HarnessContext:
         # Guard: the stored API key, or a clean CliError if the user is not logged in.
         creds = self.credentials.read()
         if creds is None:
-            raise CliError("Not logged in. Run 'vidbyte-cli login' first.")
+            raise AuthenticationRequired()
         return creds.api_key
 
     def harness_endpoints(self) -> HarnessEndpoints:
@@ -44,11 +45,12 @@ class HarnessContext:
         return str(VidbytePaths.manifests_dir())
 
     @staticmethod
-    def default() -> HarnessContext:
-        # Wires the real services; used by the CLI entry point.
+    def default(output: OutputManager) -> HarnessContext:
+        # Wires the real services around this invocation's output policy. The logger is no
+        # longer a process global, so a harness cannot bypass the selected format.
         return HarnessContext(
             credentials=CredentialStore(),
             repo=RepoInspector(),
-            logger=logger,
+            logger=Logger(output),
             render=RunRenderer(),
         )

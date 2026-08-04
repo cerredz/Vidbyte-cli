@@ -20,9 +20,11 @@ affect every command, global option, harness attachment, exit status, and startu
 - `__init__.py` — re-exports only version contracts that are safe during `import
   vidbyte_cli`. Keep application and command dependencies out.
 - `application.py` — `CliApplication`: builds the tree, attaches at most one harness,
-  dispatches click, and maps every failure to a return code.
-- `context.py` — `ApplicationContext`: invocation-scoped services, created lazily. Never let
-  it become a process-global service locator.
+  dispatches click, and sends every failure to the one `ErrorHandler`.
+- `context.py` — `ApplicationContext`: invocation-scoped services and resolved root policy,
+  created lazily. Never let it become a process-global service locator.
+- `options.py` — `RootOptionInspector`: a service-free read of the root-option prefix, run
+  before an optional harness context can exist.
 - `version.py` — resolves the installed distribution version, with a source-tree fallback.
   Release numbers stay owned by `pyproject.toml`.
 
@@ -31,3 +33,5 @@ affect every command, global option, harness attachment, exit status, and startu
 - 2026-07-26 — Moved process exit out of reusable runtime code; embedding callers now get an
   integer status.
 - 2026-07-26 — Preserved lazy one-harness attachment so unrelated commands stay network-free.
+- 2026-07-26 — Read root options before attachment, so `--profile harness` and invalid root
+  syntax can no longer trigger dynamic harness construction.

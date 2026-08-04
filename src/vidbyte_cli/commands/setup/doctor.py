@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class DoctorCommand:
@@ -16,4 +16,4 @@ class DoctorCommand:
     def execute(self) -> None:
         # Will report the resolved API host, whether credentials are present and valid
         # (via /auth/whoami), and whether cwd is a usable git repo.
-        raise not_implemented("'vidbyte-cli doctor'")
+        raise NotImplementedFeature("'vidbyte-cli doctor'")

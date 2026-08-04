@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class LoginCommand:
@@ -18,4 +18,4 @@ class LoginCommand:
     def execute(self, api_key: str | None) -> None:
         # Will resolve the key (flag > env > hidden prompt), verify it via /auth/whoami, then
         # persist it — verify-before-write so an invalid key never lands on disk.
-        raise not_implemented("'vidbyte-cli login'")
+        raise NotImplementedFeature("'vidbyte-cli login'")

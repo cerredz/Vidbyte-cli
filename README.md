@@ -5,8 +5,9 @@ and manage configuration. Harnesses execute entirely on the Vidbyte backend — 
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
 > **Status:** Python platform scaffold. Commands that have not reached their implementation
-> PR still return a clear "not implemented yet" error, while the executable lifecycle,
-> injected process I/O, package versioning, and canonical CI gate are production-shaped.
+> PR return a typed "not implemented yet" error, while the executable lifecycle, injected
+> process I/O, human/machine output, safe error handling, package versioning, and the
+> canonical CI gate are production-shaped.
 
 ## Install (development)
 
@@ -19,6 +20,26 @@ vidbyte-cli --help
 
 The console command is `vidbyte-cli`. The reusable Python entry function returns an integer
 status; only the generated console wrapper and `python -m vidbyte_cli` terminate a process.
+
+## Global options
+
+Root options precede the command: `vidbyte-cli --format json --profile work harness list`.
+
+| Option | Behavior |
+| --- | --- |
+| `--format human\|json\|jsonl\|none` | Human, one-document, streaming, or suppressed results |
+| `--json` | Alias for `--format json`; conflicts with any other `--format` value |
+| `--profile NAME` | Select a configuration profile (storage and precedence land in PR 3) |
+| `--no-input` | Never prompt for interactive input |
+| `--color auto\|always\|never` | Color preference, subject to terminal safety |
+| `--debug` | Show redacted stack frames — never exception values, causes, or locals |
+
+Results are the only thing written to stdout; progress, warnings, diagnostics, and errors go
+to stderr. JSON and JSONL records carry `schema_version` and `kind`, and machine errors use
+that same envelope.
+
+Every error also carries `description`, `trace`, and `file_path` — non-sensitive fields that
+let an agent calling this CLI diagnose and correct its own invocation.
 
 ## Commands
 
@@ -51,8 +72,9 @@ need no CLI release. See [docs/architecture.md](docs/architecture.md) for the la
 rules and [how to integrate a harness](docs/architecture.md#integrating-a-harness-in-srcvidbyte_cliharnessesname).
 
 The application composition root lives in `src/vidbyte_cli/lib/runtime`. It constructs one
-invocation context, binds stdin/stdout/stderr through `lib/io`, builds the static Click tree,
-and attaches only the requested dynamic harness namespace.
+invocation context, binds stdin/stdout/stderr through `lib/io`, resolves output and error
+policy, builds the static Click tree, and attaches only the requested dynamic harness
+namespace.
 
 ## Verify
 

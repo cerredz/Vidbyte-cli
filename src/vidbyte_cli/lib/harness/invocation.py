@@ -17,7 +17,7 @@ layer the repo standardizes on (resolves the base.py:48 review comment).
 from __future__ import annotations
 
 from ...types.harness import HarnessRepoRef, HarnessRunCreateRequest
-from ..errors.cli_error import CliError
+from ..errors.failures import MissingHarnessArgument
 from .types import HarnessCommandDef
 
 
@@ -60,14 +60,7 @@ class InvocationBuilder:
     ) -> object:
         value = self._pick(params, name)
         if required and value is None:
-            raise self._missing_argument(command_def, name)
+            # Agent-native: MissingHarnessArgument names the exact argument and command, and
+            # exits 2 so a programmatic caller can tell "I called it wrong" from a failure.
+            raise MissingHarnessArgument(command_def.name, name)
         return value
-
-    def _missing_argument(self, command_def: HarnessCommandDef, name: str) -> CliError:
-        # Agent-native: name the exact argument and command, and exit 2 (usage error) so a
-        # programmatic caller can distinguish "I called it wrong" from a backend failure.
-        return CliError(
-            f"Missing required argument '{name}' for command '{command_def.name}'. "
-            f"Pass it positionally, e.g. `{command_def.name} <{name}>`.",
-            exit_code=2,
-        )

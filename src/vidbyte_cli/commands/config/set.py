@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class ConfigSetCommand:
@@ -17,4 +17,4 @@ class ConfigSetCommand:
 
     def execute(self, key: str, value: str) -> None:
         # Will persist the key/value pair to the config store.
-        raise not_implemented("'vidbyte-cli config set'")
+        raise NotImplementedFeature("'vidbyte-cli config set'")
