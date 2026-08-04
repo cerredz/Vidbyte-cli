@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class HarnessCatalogCommand:
@@ -19,4 +19,4 @@ class HarnessCatalogCommand:
 
     def execute(self) -> None:
         # Will fetch the available-harness catalog and render it as an aligned table.
-        raise not_implemented("'vidbyte-cli harness catalog'")
+        raise NotImplementedFeature("'vidbyte-cli harness catalog'")

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class ConnectGithubCommand:
@@ -22,4 +22,4 @@ class ConnectGithubCommand:
 
     def execute(self) -> None:
         # Will start the GitHub install flow, open the verification URL, and poll to linked.
-        raise not_implemented("'vidbyte-cli connect github'")
+        raise NotImplementedFeature("'vidbyte-cli connect github'")

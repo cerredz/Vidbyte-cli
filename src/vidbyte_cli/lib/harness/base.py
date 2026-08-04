@@ -17,7 +17,8 @@ import click
 
 from ...types.harness import HarnessRepoRef, HarnessRun, HarnessRunCreateRequest
 from ...types.manifest import OptionSpec, OptionType
-from ..errors.cli_error import CliError, not_implemented
+from ..errors.cli_error import CliError
+from ..errors.failures import NotImplementedFeature
 from .context import HarnessContext
 from .errors import map_harness_error
 from .invocation import InvocationBuilder
@@ -92,7 +93,7 @@ class BaseHarness(ABC):
 
     def _wait_for_run(self, run: HarnessRun) -> HarnessRun:
         # Polls the run to a terminal state with backoff; shared by every `await`-mode command.
-        raise not_implemented("harness run waiting")
+        raise NotImplementedFeature("harness run waiting")
 
     def _build_click_command(
         self, command_def: HarnessCommandDef, ctx: HarnessContext

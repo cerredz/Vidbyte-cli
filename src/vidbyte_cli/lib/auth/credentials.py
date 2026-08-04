@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class Credentials(BaseModel):
@@ -17,12 +17,12 @@ class Credentials(BaseModel):
 class CredentialStore:
     def read(self) -> Credentials | None:
         # Returns stored credentials, or None when the user has never logged in.
-        raise not_implemented("credential store reads")
+        raise NotImplementedFeature("credential store reads")
 
     def write(self, credentials: Credentials) -> None:
         # Persists credentials with owner-only file permissions where supported.
-        raise not_implemented("credential store writes")
+        raise NotImplementedFeature("credential store writes")
 
     def clear(self) -> None:
         # Deletes stored credentials; safe to call when none exist.
-        raise not_implemented("credential store clearing")
+        raise NotImplementedFeature("credential store clearing")

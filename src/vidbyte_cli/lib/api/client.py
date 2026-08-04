@@ -12,7 +12,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from ..errors.cli_error import not_implemented
+from ..errors.failures import NotImplementedFeature
 
 DEFAULT_API_URL = "https://api.vidbyte.ai"
 
@@ -28,12 +28,12 @@ class ApiClient:
 
     def get(self, path: str, model: type[TModel]) -> TModel:
         # Performs an authenticated GET, unwraps the envelope, validates into `model`.
-        raise not_implemented("api client requests")
+        raise NotImplementedFeature("api client requests")
 
     def get_list(self, path: str, model: type[TModel]) -> list[TModel]:
         # GET returning a list payload, each item validated into `model`.
-        raise not_implemented("api client requests")
+        raise NotImplementedFeature("api client requests")
 
     def post(self, path: str, body: BaseModel, model: type[TModel]) -> TModel:
         # Performs an authenticated POST, unwraps the envelope, validates into `model`.
-        raise not_implemented("api client requests")
+        raise NotImplementedFeature("api client requests")

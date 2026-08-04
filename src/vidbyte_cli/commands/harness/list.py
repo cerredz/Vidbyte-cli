@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class HarnessListCommand:
@@ -20,4 +20,4 @@ class HarnessListCommand:
 
     def execute(self) -> None:
         # Will fetch the caller's runs and render them as a summary table.
-        raise not_implemented("'vidbyte-cli harness list'")
+        raise NotImplementedFeature("'vidbyte-cli harness list'")

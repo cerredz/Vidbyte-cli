@@ -6,19 +6,19 @@ for a specific command. Only this module and logger.py format terminal output.
 
 from __future__ import annotations
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 from ...types.harness import HarnessRun, HarnessSummary
 
 
 class RunRenderer:
     def render_status(self, run: HarnessRun) -> str:
         # Formats one run's status, latest events, and result into a terminal block.
-        raise not_implemented("run status rendering")
+        raise NotImplementedFeature("run status rendering")
 
     def render_list(self, runs: list[HarnessRun]) -> str:
         # Formats a list of runs into an aligned summary table.
-        raise not_implemented("run list rendering")
+        raise NotImplementedFeature("run list rendering")
 
     def render_catalog(self, harnesses: list[HarnessSummary]) -> str:
         # Formats the available-harness catalog into an aligned table.
-        raise not_implemented("harness catalog rendering")
+        raise NotImplementedFeature("harness catalog rendering")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class HarnessStatusCommand:
@@ -16,4 +16,4 @@ class HarnessStatusCommand:
 
     def execute(self, run_id: str) -> None:
         # Will fetch the run from the backend and render its status block.
-        raise not_implemented("'vidbyte-cli harness status'")
+        raise NotImplementedFeature("'vidbyte-cli harness status'")
