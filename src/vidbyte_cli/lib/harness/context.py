@@ -3,6 +3,9 @@
 Dependency injection is the extensibility seam: when a harness needs a new capability, it
 is added here once, not to every harness subclass. Building the command tree never touches
 these services — only `dispatch` does — so `--help` stays free of credential or network I/O.
+
+The profile and base URL travel together because a credential is scoped to both: a harness
+run against a staging host must not authenticate with the production key.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ from dataclasses import dataclass
 from ..api.client import ApiClient
 from ..api.endpoints.harness import HarnessEndpoints
 from ..auth.credentials import CredentialStore
+from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
 from ..config.paths import VidbytePaths
 from ..errors.failures import AuthenticationRequired
 from ..git.repo_info import RepoInspector
@@ -27,13 +31,15 @@ class HarnessContext:
     logger: Logger
     render: RunRenderer
     base_url: str | None = None
+    profile: str = DEFAULT_PROFILE
+    paths: VidbytePaths | None = None
 
     def require_api_key(self) -> str:
         # Guard: the stored API key, or a clean CliError if the user is not logged in.
-        creds = self.credentials.read()
+        creds = self.credentials.read(self.profile, self.base_url or DEFAULT_API_URL)
         if creds is None:
             raise AuthenticationRequired()
-        return creds.api_key
+        return creds.secret_value()
 
     def harness_endpoints(self) -> HarnessEndpoints:
         # An authenticated harness endpoint group; requires a logged-in user.
@@ -42,15 +48,26 @@ class HarnessContext:
 
     def manifest_cache_dir(self) -> str:
         # Where the catalog caches downloaded manifests.
-        return str(VidbytePaths.manifests_dir())
+        paths = self.paths or VidbytePaths.default()
+        return str(paths.manifests_dir())
 
     @staticmethod
-    def default(output: OutputManager) -> HarnessContext:
+    def default(
+        output: OutputManager,
+        *,
+        credentials: CredentialStore | None = None,
+        paths: VidbytePaths | None = None,
+        base_url: str | None = None,
+        profile: str = DEFAULT_PROFILE,
+    ) -> HarnessContext:
         # Wires the real services around this invocation's output policy. The logger is no
         # longer a process global, so a harness cannot bypass the selected format.
         return HarnessContext(
-            credentials=CredentialStore(),
+            credentials=credentials or CredentialStore(paths=paths),
             repo=RepoInspector(),
             logger=Logger(output),
             render=RunRenderer(),
+            base_url=base_url,
+            profile=profile,
+            paths=paths,
         )

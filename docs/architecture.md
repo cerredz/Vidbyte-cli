@@ -16,8 +16,8 @@ src/vidbyte_cli/lib/io/            injected streams, terminal capabilities, prom
 src/vidbyte_cli/commands/<group>/  one class per command: register() + execute()
 src/vidbyte_cli/lib/api/client.py  ApiClient: base URL, API-key header, envelope unwrapping
 src/vidbyte_cli/lib/api/endpoints/ typed endpoint groups (harness, auth, ...) on ApiClient
-src/vidbyte_cli/lib/auth/          CredentialStore (~/.vidbyte/credentials.json)
-src/vidbyte_cli/lib/config/        ConfigStore + VidbytePaths (single source of ~/.vidbyte)
+src/vidbyte_cli/lib/auth/          scoped env/keyring/restricted-file credential boundary
+src/vidbyte_cli/lib/config/        typed profiles, provenance, native paths, safe migration
 src/vidbyte_cli/lib/git/           RepoInspector: origin URL, HEAD sha, branch, dirty state
 src/vidbyte_cli/lib/output/        versioned documents + the invocation's output manager
 src/vidbyte_cli/lib/errors/        stable codes, CliError metadata, one central handler
@@ -38,8 +38,8 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
    errors return 70 without exposing the exception value. `--debug` adds frames only.
 4. **Secrets never log.** The API key may not appear in log lines, error messages, or
    rendered output.
-5. **Paths have one source of truth.** Anything under `~/.vidbyte` resolves through
-   `VidbytePaths`.
+5. **Paths have one source of truth.** Platform-native config/cache/state/data and the
+   legacy `~/.vidbyte` compatibility locations resolve through `VidbytePaths`.
 6. **Adding a static command group** = new folder under `commands/`, one class per command,
    registered in `commands/__init__.py`. Nothing else changes.
 7. **Reusable code does not terminate the process.** `CliApplication.run()` and `cli.main()`
@@ -57,6 +57,10 @@ src/vidbyte_cli/types/             API + manifest models mirroring backend DTOs
 13. **Failures are agent-native.** Every error carries a non-sensitive `description`, `trace`,
     and `file_path`, because agents are this CLI's heaviest callers and have no transcript
     to fall back on.
+14. **Secrets have their own precedence.** Credentials resolve environment → scoped OS
+    keyring → explicitly approved restricted file. An environment key is never persisted.
+15. **Configuration is typed and attributable.** Command → environment → selected profile →
+    default profile → built-in, recorded per field so `config get` can report the source.
 
 ## Output and failure contracts
 
@@ -116,7 +120,7 @@ lib/harness/manifest_harness.py  ManifestHarness(BaseHarness): satisfies the SAM
 lib/harness/invocation.py     InvocationBuilder: the one layer that turns CLI params + a
                               command into a HarnessRunCreateRequest (parsing + agent-native
                               errors), shared by every command
-lib/harness/catalog.py        HarnessCatalog: fetch + cache manifests under ~/.vidbyte/manifests
+lib/harness/catalog.py        HarnessCatalog: fetch + cache manifests in the native user cache
 lib/harness/registry.py       HarnessRegistry: owns both sources (static map + catalog) and
                               resolves a namespace to a HarnessModule (static wins, else
                               manifest), then attaches it to the command tree
@@ -128,8 +132,9 @@ click builds its command tree synchronously, but a manifest arrives over the net
 CLI does a **two-pass argv inspection** in `lib/runtime/application.py`: pass 1 registers
 the static surface; pass 2, only when argv is `harness <name> ...`, loads that one harness
 (cache-first) and attaches its subtree before parsing. So `vidbyte-cli login` never touches
-the network, and only the invoked harness loads. Manifests are cached under
-`~/.vidbyte/manifests` so `--help` works offline.
+the network, and only the invoked harness loads. Manifests are cached in the platform-native
+user cache directory so `--help` works offline; `~/.vidbyte/manifests` stays readable and is
+copied across by migration.
 
 ## Verification boundary
 

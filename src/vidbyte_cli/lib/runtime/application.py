@@ -8,6 +8,10 @@ The two-pass argv inspection is unchanged from the accepted design: click builds
 synchronously but a manifest arrives over the network, so pass 1 registers the static
 surface and pass 2 attaches only the harness namespace argv actually names. Root options are
 read before pass 2 so help, version, and invalid syntax never construct a harness context.
+
+Root flags are overrides, not the final answer: they are handed to the config resolver,
+which layers them over the environment and the selected profile. An invocation that exits
+before running a command skips that resolution entirely, so `--help` never reads a file.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import click
 
 from ...commands import register_all_commands
 from ...harnesses import static_harness_map
+from ..config import ConfigOverrides
 from ..errors.failures import ConflictingOutputFormat
 from ..harness.catalog import HarnessCatalog
 from ..harness.registry import HarnessRegistry
@@ -73,8 +78,9 @@ class CliApplication:
         @click.option(
             "--color",
             type=click.Choice([item.value for item in ColorMode], case_sensitive=False),
-            default=ColorMode.AUTO.value,
-            show_default=True,
+            # No Click default: an unset flag must stay distinguishable from an explicit
+            # `--color auto`, or the option would outrank the stored profile every time.
+            default=None,
         )
         @click.option("--debug", is_flag=True, help="Show redacted internal stack frames.")
         @click.pass_context
@@ -90,7 +96,10 @@ class CliApplication:
         inspection = RootOptionInspector(argv).inspect()
         if inspection is None:
             return None
-        self._configure_context(inspection.values)
+        # Help and version exit before any command, and resolving configuration would read
+        # the filesystem on their behalf.
+        if not inspection.exits_before_command:
+            self._configure_context(inspection.values)
         return inspection
 
     def _attach_harness(self, inspection: RootInspection, harness_group: click.Group) -> None:
@@ -125,20 +134,32 @@ class CliApplication:
         return 0
 
     def _configure_context(self, values: RootOptionValues) -> None:
-        self._context.configure(
-            InvocationOptions(
-                output_format=self._resolve_output_format(values.output_format, values.as_json),
+        # Root options are the highest-precedence layer, not the whole answer: the resolver
+        # fills every unset field from the environment, the profile, then built-ins.
+        resolved = self._context.config_resolver().resolve(
+            ConfigOverrides(
                 profile=values.profile,
-                no_input=values.no_input,
-                color=ColorMode(values.color),
-                debug=values.debug,
+                output_format=self._resolve_output_format(values.output_format, values.as_json),
+                color=ColorMode(values.color) if values.color is not None else None,
             )
         )
+        self._context.configure(
+            InvocationOptions(
+                output_format=resolved.output_format,
+                profile=resolved.profile,
+                api_url=resolved.api_url,
+                request_timeout_seconds=resolved.request_timeout_seconds,
+                no_input=values.no_input,
+                color=resolved.color,
+                debug=values.debug,
+            ),
+            resolved,
+        )
 
-    def _resolve_output_format(self, value: str | None, as_json: bool) -> OutputFormat:
+    def _resolve_output_format(self, value: str | None, as_json: bool) -> OutputFormat | None:
         # --json is an alias, not an independent mode; duplicate JSON intent is harmless.
         if as_json and value not in {None, OutputFormat.JSON.value}:
             raise ConflictingOutputFormat()
         if as_json:
             return OutputFormat.JSON
-        return OutputFormat(value or OutputFormat.HUMAN.value)
+        return OutputFormat(value) if value is not None else None
