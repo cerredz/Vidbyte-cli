@@ -1,7 +1,6 @@
 """FILE: src/vidbyte_cli/lib/auth/verifier.py
 
-PURPOSE: Defines the verify-before-persist boundary used by login without making this
-configuration PR own HTTP behavior. PR 4 replaces the pending implementation with ApiClient.
+PURPOSE: Defines and implements the verify-before-persist boundary used by login.
 
 ROLE IN CODEBASE: LoginCommand calls CredentialVerifier before CredentialStore.write.
 ApplicationContext supplies the implementation lazily.
@@ -26,6 +25,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from ..api.client import ApiClient
+from ..api.endpoints.auth import AuthEndpoints
 from ..config import ResolvedConfig
 from ..errors import CliError, CliErrorCode
 from .credentials import Credentials
@@ -46,3 +47,15 @@ class PendingCredentialVerifier:
             hint="Upgrade to the release that includes the reusable HTTP client.",
             retryable=False,
         )
+
+
+class ApiCredentialVerifier:
+    """Verify a candidate credential through /auth/whoami before storage."""
+
+    def verify(self, credentials: Credentials, config: ResolvedConfig) -> None:
+        with ApiClient(
+            config.api_url,
+            credentials.secret_value(),
+            timeout_seconds=config.request_timeout_seconds,
+        ) as client:
+            AuthEndpoints(client).whoami()

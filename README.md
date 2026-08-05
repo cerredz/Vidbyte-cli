@@ -4,9 +4,9 @@ The universal Vidbyte CLI: authenticate, run Vidbyte harnesses against your repo
 and manage configuration. Harnesses execute entirely on the Vidbyte backend — this CLI
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
-> **Status:** Python platform scaffold. Local configuration, profiles, platform paths,
-> credential resolution, and logout are implemented. Login's verify-before-store HTTP seam
-> and other network commands are completed by the next stacked PR.
+> **Status:** Python platform scaffold with reusable HTTP, retry, idempotency recovery,
+> polling, generic harness, configuration, and credential layers. Research commands are
+> added by the remaining stacked PRs.
 
 ## Install (development)
 
@@ -42,7 +42,7 @@ diagnostics, and errors use stderr. JSON and JSONL documents include `schema_ver
 
 | Command | Purpose |
 | --- | --- |
-| `vidbyte-cli login` / `logout` / `whoami` | Manage the stored Vidbyte API key |
+| `vidbyte-cli login` / `logout` / `whoami` | Verify and manage the scoped Vidbyte API key |
 | `vidbyte-cli connect github` | Link GitHub for harness repository access |
 | `vidbyte-cli harness run <name> --task <task>` | Low-level generic run for the current repo |
 | `vidbyte-cli harness <name> <command> ...` | A harness's own commands (built from its manifest) |
@@ -69,6 +69,16 @@ then built-in default. `vidbyte-cli config get <key>` reports the effective valu
 `vidbyte-cli config set <key> <value>` accepts `api_url`, `output_format`, `color`, and
 `request_timeout_seconds`.
 
+## Network and recovery
+
+One pooled HTTPX client is reused per invocation with explicit timeouts, bounded retries,
+response-size/schema validation, and safe status-based errors. GETs may retry transient
+failures; POSTs retry only when protected by one stable idempotency key.
+
+Billable mutations write prompt-free recovery metadata before sending. If local polling is
+interrupted or times out, the remote operation continues and the CLI prints a status
+recovery command.
+
 ## Architecture
 
 Each harness is effectively its own sub-CLI: `vidbyte-cli harness <name> <command> ...`,
@@ -93,8 +103,7 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 
 ## Follow-ups
 
-- Implement `ApiClient` requests, credential verification, catalog fetch/cache, and the
-  `harness run/status/list` behavior in the reusable HTTP platform PR.
+- Add the research domain, commands, persistence/export UX, and final research route adapter.
 - The console command is `vidbyte-cli` (not `vidbyte`) to avoid the bin/name collision with
   the `vidbyte-skills` package; confirm before publishing.
 - Confirm the production API host.

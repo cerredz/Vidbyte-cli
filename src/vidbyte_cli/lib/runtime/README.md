@@ -37,9 +37,10 @@ startup-time side effect.
 - `application.py` - Coordinates command-tree creation, lazy harness attachment, Click
   dispatch, and centralized return-code mapping. Open this for global lifecycle or error
   boundary changes. Command-specific behavior must remain outside the composition root.
-- `context.py` - Stores dependencies for one invocation and lazily creates the existing
-  harness context only when required. It also binds root options, output, and the error
-  handler. Open this when adding a reusable platform service; never make it process-global.
+- `context.py` - Lazily creates config, credential, pooled API, and harness services only
+  when required. It also binds root options, output, and the error handler.
+- `clock.py` - Injectable monotonic clock and cancellation-aware sleeping for polling.
+- `signals.py` - Cooperative SIGINT/SIGTERM scope; never implies remote cancellation.
 - `options.py` - Performs the service-free root-option scan needed before dynamic harness
   attachment and reconstructs Click callback values. Open whenever a root flag changes so
   the preflight parser cannot drift from the public command.
@@ -54,3 +55,4 @@ startup-time side effect.
 - 2026-07-26 - Bound root output and interaction flags per invocation - help stays offline while command output shares one policy.
 - 2026-07-26 - Delegated every boundary failure to ErrorHandler - safe messages and exit statuses no longer diverge by command.
 - 2026-07-26 - Split root preflight parsing from application dispatch - option values cannot masquerade as harness namespaces.
+- 2026-07-26 - Added deterministic client cleanup and cooperative cancellation - remote work remains recoverable after local interruption.

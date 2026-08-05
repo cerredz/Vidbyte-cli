@@ -1,23 +1,41 @@
-"""`vidbyte-cli harness list` — the caller's runs, newest first.
+"""FILE: src/vidbyte_cli/commands/harness/list.py
 
-Naming resolved (harness/list.ts:11 review comment): `list` means *your runs*; the separate
-question "what harnesses are available?" is answered by `harness catalog` (catalog.py), so
-one word never means two things.
+PURPOSE: Lists the caller's generic harness runs through a typed endpoint.
+
+TESTS: No feature tests are added under the approved no-tests workflow.
 """
 
 from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.output import OutputDocument
+from ...lib.runtime.context import ApplicationContext
 
 
 class HarnessListCommand:
     def register(self, parent: click.Group) -> None:
         @parent.command(name="list", help="List your harness runs")
-        def _run() -> None:
-            self.execute()
+        @click.pass_obj
+        def _run(context: ApplicationContext) -> None:
+            self.execute(context)
 
-    def execute(self) -> None:
-        # Will fetch the caller's runs and render them as a summary table.
-        raise not_implemented("'vidbyte-cli harness list'")
+    def execute(self, context: ApplicationContext) -> None:
+        runs = context.harness_endpoints().list_runs()
+        context.output().result(
+            OutputDocument(
+                kind="harness.run.list",
+                data={
+                    "runs": [
+                        {
+                            "run_id": run.run_id,
+                            "harness": run.harness,
+                            "command": run.command,
+                            "status": run.status,
+                        }
+                        for run in runs
+                    ]
+                },
+            ),
+            context.harness_context().render.render_list(runs),
+        )

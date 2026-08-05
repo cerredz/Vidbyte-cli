@@ -2,9 +2,10 @@
 
 from .credentials import Credentials, CredentialStorage, CredentialStore
 from .resolver import CredentialResolver, CredentialSource, ResolvedCredential
-from .verifier import CredentialVerifier, PendingCredentialVerifier
+from .verifier import ApiCredentialVerifier, CredentialVerifier, PendingCredentialVerifier
 
 __all__ = [
+    "ApiCredentialVerifier",
     "CredentialResolver",
     "CredentialSource",
     "CredentialStorage",

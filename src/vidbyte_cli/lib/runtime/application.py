@@ -116,6 +116,8 @@ class CliApplication:
             return self._context.error_handler().handle(error)
         except Exception as error:  # noqa: BLE001 - the process boundary contains all failures.
             return self._context.error_handler().handle(error)
+        finally:
+            self._context.close()
 
     def _build_program(self) -> click.Group:
         # Root callbacks receive ApplicationContext without constructing optional services.

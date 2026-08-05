@@ -1,57 +1,54 @@
 """FILE: src/vidbyte_cli/lib/output/render.py
 
-PURPOSE: Defines the existing generic harness human-rendering seam for run, list, and
-catalog results. It returns strings only; output format selection and stream writes belong
-to OutputManager.
+PURPOSE: Pure human rendering for generic harness run, list, and catalog DTOs.
 
-ROLE IN CODEBASE: HarnessContext supplies RunRenderer to BaseHarness when a command has no
-custom presenter. Generic harness transport work implements these methods in PR 4.
+ROLE IN CODEBASE: Commands pair these strings with versioned OutputDocuments. No stream,
+transport, or terminal behavior exists here.
 
-ARCHITECTURE NOTE: Pure human rendering stays separate from versioned machine documents so
-prose can improve without breaking automation schemas.
-
-FUNCTION INVENTORY (reviewed 2026-07-26):
-- RunRenderer.render_status(run) -> str: human summary for one run.
-- RunRenderer.render_list(runs) -> str: human summary for run collection.
-- RunRenderer.render_catalog(harnesses) -> str: human summary for harness catalog.
-
-COMMON MODIFICATION PATTERNS: Keep methods pure, accept typed models, and pair implemented
-human output with a machine presenter at the command/application boundary.
-
-WHAT NOT TO DO IN THIS FILE:
-1. Do not call print, sys streams, or OutputManager.
-2. Do not serialize JSON or choose an output format.
-3. Do not perform network, credential, config, or filesystem work.
-4. Do not add research-specific artifact/source rendering.
-
-KNOWN EDGE CASES: Empty collections and partial run data need useful text once implemented.
-Current methods remain explicit typed stubs until the generic API platform PR.
-
-RELATED DOCS:
-https://github.com/cerredz/Vidbyte-cli/blob/main/docs/architecture.md
-documents the separation between presenters and output policy.
-
-TESTS: No dedicated feature tests are added under the approved no-tests workflow.
-scripts/smoke.py verifies the generic harness command tree remains importable.
+TESTS: No feature tests are added under the approved no-tests workflow.
 """
 
 from __future__ import annotations
 
-from ...lib.errors.cli_error import not_implemented
 from ...types.harness import HarnessRun, HarnessSummary
 
 
 class RunRenderer:
-    """Pure human presenter for generic harness models."""
+    """Compact stable human summaries for generic harness resources."""
 
     def render_status(self, run: HarnessRun) -> str:
-        # Formats one run's status, latest events, and result into a terminal block.
-        raise not_implemented("run status rendering")
+        lines = [
+            f"Run: {run.run_id}",
+            f"Harness: {run.harness} / {run.command}",
+            f"Status: {run.status}",
+            f"Updated: {run.updated_at}",
+        ]
+        if run.events:
+            lines.append("Events:")
+            lines.extend(
+                f"- {event.created_at} [{event.type}] {event.message}" for event in run.events
+            )
+        if run.result is not None:
+            if run.result.summary:
+                lines.append(f"Summary: {run.result.summary}")
+            if run.result.pr_url:
+                lines.append(f"Pull request: {run.result.pr_url}")
+            if run.result.branch:
+                lines.append(f"Branch: {run.result.branch}")
+        return "\n".join(lines)
 
     def render_list(self, runs: list[HarnessRun]) -> str:
-        # Formats a list of runs into an aligned summary table.
-        raise not_implemented("run list rendering")
+        if not runs:
+            return "No harness runs found."
+        lines = ["RUN ID  STATUS  HARNESS / COMMAND"]
+        lines.extend(f"{run.run_id}  {run.status}  {run.harness} / {run.command}" for run in runs)
+        return "\n".join(lines)
 
     def render_catalog(self, harnesses: list[HarnessSummary]) -> str:
-        # Formats the available-harness catalog into an aligned table.
-        raise not_implemented("harness catalog rendering")
+        if not harnesses:
+            return "No harnesses are currently available."
+        lines = ["NAME  VERSION  DESCRIPTION"]
+        lines.extend(
+            f"{harness.name}  {harness.version}  {harness.description}" for harness in harnesses
+        )
+        return "\n".join(lines)

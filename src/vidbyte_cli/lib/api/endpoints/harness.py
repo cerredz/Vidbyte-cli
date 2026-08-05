@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from ....types.harness import HarnessRun, HarnessRunCreateRequest, HarnessSummary
 from ....types.manifest import HarnessManifest
 from ..client import ApiClient
@@ -12,13 +14,22 @@ class HarnessEndpoints:
         # Binds the endpoint group to a configured ApiClient.
         self._client = client
 
-    def create_run(self, request: HarnessRunCreateRequest) -> HarnessRun:
+    def create_run(
+        self,
+        request: HarnessRunCreateRequest,
+        idempotency_key: str,
+    ) -> HarnessRun:
         # POST /harness/run — submits a new run and returns it in `queued` state.
-        return self._client.post("/harness/run", request, HarnessRun)
+        return self._client.post(
+            "/harness/run",
+            request,
+            HarnessRun,
+            idempotency_key=idempotency_key,
+        )
 
     def get_run(self, run_id: str) -> HarnessRun:
         # GET /harness/get/{run_id} — returns the run's status, events, and result.
-        return self._client.get(f"/harness/get/{run_id}", HarnessRun)
+        return self._client.get(f"/harness/get/{quote(run_id, safe='')}", HarnessRun)
 
     def list_runs(self) -> list[HarnessRun]:
         # GET /harness/list — returns the caller's runs, newest first.
@@ -28,7 +39,7 @@ class HarnessEndpoints:
         # GET /harness/{name}/manifest — the command surface the dynamic runtime renders
         # into click commands (resolves the endpoints/harness.ts:4 review comment). Chosen
         # over one big /harness/manifest so a namespace loads lazily, one round-trip each.
-        return self._client.get(f"/harness/{name}/manifest", HarnessManifest)
+        return self._client.get(f"/harness/{quote(name, safe='')}/manifest", HarnessManifest)
 
     def list_catalog(self) -> list[HarnessSummary]:
         # GET /harness/catalog — the available harnesses, distinct from the caller's runs.

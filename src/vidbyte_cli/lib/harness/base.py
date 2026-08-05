@@ -51,6 +51,7 @@ scripts/smoke.py builds a static harness subtree; scripts/run_ci.py runs strict 
 
 from __future__ import annotations
 
+import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any, ClassVar
@@ -59,7 +60,10 @@ import click
 
 from ...types.harness import HarnessRepoRef, HarnessRun, HarnessRunCreateRequest
 from ...types.manifest import OptionSpec, OptionType
-from ..errors.cli_error import CliError, not_implemented
+from ..errors.cli_error import CliError
+from ..errors.codes import CliErrorCode
+from ..operations import PendingOperation
+from ..output import OutputDocument
 from .context import HarnessContext
 from .errors import map_harness_error
 from .invocation import InvocationBuilder
@@ -125,11 +129,37 @@ class BaseHarness(ABC):
 
     def _submit_run(self, command: _CommandDef, params: _Params, ctx: _Context) -> HarnessRun:
         # Create one request and optionally resolve its backend run before presentation.
-        repo = ctx.repo.as_repo_ref() if self.requires_repo else None
+        repo = None
+        if self.requires_repo:
+            repo_info = ctx.repo.inspect()
+            if repo_info.is_dirty:
+                raise CliError(
+                    CliErrorCode.OPERATION_FAILED,
+                    "The current repository has uncommitted changes.",
+                    hint="Commit or stash changes before running this harness.",
+                )
+            repo = repo_info.as_ref()
         request = self._to_invocation(command, params, repo)
-        submitted = ctx.harness_endpoints().create_run(request)
+        idempotency_key = ctx.idempotency.create()
+        operation_id = idempotency_key
+        fingerprint = hashlib.sha256(request.model_dump_json().encode("utf-8")).hexdigest()
+        ctx.journal.begin(
+            PendingOperation(
+                operation_id=operation_id,
+                command=f"harness {self.name} {command.name}",
+                idempotency_key=idempotency_key,
+                request_fingerprint=fingerprint,
+                recovery_command=f"Retry with idempotency key {idempotency_key}",
+            )
+        )
+        submitted = ctx.harness_endpoints().create_run(request, idempotency_key)
+        ctx.journal.accepted(
+            operation_id,
+            submitted.run_id,
+            f"vidbyte-cli harness status {submitted.run_id}",
+        )
         if command.mode == "await":
-            return self._wait_for_run(submitted)
+            return ctx.watch_run(submitted.run_id)
         return submitted
 
     def _present_run(self, command: _CommandDef, run: HarnessRun, ctx: _Context) -> None:
@@ -138,17 +168,24 @@ class BaseHarness(ABC):
             output = command.present(run, ctx)
         else:
             output = ctx.render.render_status(run)
-        ctx.logger.info(output)
+        ctx.output.result(
+            OutputDocument(
+                kind="harness.run",
+                data={
+                    "run_id": run.run_id,
+                    "harness": run.harness,
+                    "command": run.command,
+                    "status": run.status,
+                },
+            ),
+            output,
+        )
 
     def _to_invocation(self, command: _CommandDef, params: _Params, repo: _Repo | None) -> _Request:
         # Use a command's translation hook only when the shared envelope mapping is insufficient.
         if command.to_invocation is not None:
             return command.to_invocation(params, repo)
         return self._invocation.build(self.name, command, params, repo)
-
-    def _wait_for_run(self, run: HarnessRun) -> HarnessRun:
-        # Polling is intentionally scaffolded until the generic HTTP/polling platform PR.
-        raise not_implemented("harness run waiting")
 
     def _build_click_command(self, command: _CommandDef, ctx: _Context) -> click.Command:
         # Render one typed definition into Click objects without touching runtime services.
