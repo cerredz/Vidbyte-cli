@@ -9,6 +9,10 @@ Scanning only the prefix is the point: a rewrite that searched argv for `harness
 `--profile harness` as a namespace and trigger remote work on a help invocation. When syntax
 turns invalid after a valid machine-output prefix, that output policy is kept for Click's
 structured error but attachment is refused.
+
+An unpassed option stays `None` rather than taking a default here. These values are the
+top layer of configuration precedence, and a default invented at the parser would outrank
+the profile the user actually stored.
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ class RootOptionValues:
     as_json: bool
     profile: str | None
     no_input: bool
-    color: str
+    color: str | None
     debug: bool
 
     @classmethod
@@ -39,7 +43,7 @@ class RootOptionValues:
             as_json=cast(bool, values["as_json"]),
             profile=cast(str | None, values["profile"]),
             no_input=cast(bool, values["no_input"]),
-            color=cast(str, values["color"]),
+            color=cast(str | None, values["color"]),
             debug=cast(bool, values["debug"]),
         )
 
@@ -67,7 +71,7 @@ class RootOptionInspector:
         self._as_json = False
         self._profile: str | None = None
         self._no_input = False
-        self._color = ColorMode.AUTO.value
+        self._color: str | None = None
         self._debug = False
 
     def inspect(self) -> RootInspection | None:
@@ -137,7 +141,7 @@ class RootOptionInspector:
     def _valid(self) -> bool:
         # An invalid choice value stays service-free and is later explained by Click.
         valid_formats = {None, *(item.value for item in OutputFormat)}
-        valid_colors = {item.value for item in ColorMode}
+        valid_colors = {None, *(item.value for item in ColorMode)}
         return self._output_format in valid_formats and self._color in valid_colors
 
     def _invalid(self) -> RootInspection | None:

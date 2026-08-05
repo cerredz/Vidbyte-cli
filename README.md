@@ -4,10 +4,11 @@ The universal Vidbyte CLI: authenticate, run Vidbyte harnesses against your repo
 and manage configuration. Harnesses execute entirely on the Vidbyte backend — this CLI
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
-> **Status:** Python platform scaffold. Commands that have not reached their implementation
-> PR return a typed "not implemented yet" error, while the executable lifecycle, injected
-> process I/O, human/machine output, safe error handling, package versioning, and the
-> canonical CI gate are production-shaped.
+> **Status:** Python platform scaffold. Local configuration, profiles, platform paths,
+> credential resolution, `config get`/`set`, `doctor`, and `logout` are implemented; login's
+> verify-before-store HTTP seam and the other network commands land with the reusable HTTP
+> platform. Commands that have not reached their implementation PR return a typed "not
+> implemented yet" error.
 
 ## Install (development)
 
@@ -29,7 +30,7 @@ Root options precede the command: `vidbyte-cli --format json --profile work harn
 | --- | --- |
 | `--format human\|json\|jsonl\|none` | Human, one-document, streaming, or suppressed results |
 | `--json` | Alias for `--format json`; conflicts with any other `--format` value |
-| `--profile NAME` | Select a configuration profile (storage and precedence land in PR 3) |
+| `--profile NAME` | Select a configuration and credential scope |
 | `--no-input` | Never prompt for interactive input |
 | `--color auto\|always\|never` | Color preference, subject to terminal safety |
 | `--debug` | Show redacted stack frames — never exception values, causes, or locals |
@@ -61,8 +62,20 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | --- | --- |
 | `VIDBYTE_API_URL` | API host (default `https://api.vidbyte.ai`) |
 | `VIDBYTE_API_KEY` | API key; overrides the stored credential for the current shell |
+| `VIDBYTE_PROFILE` | Profile name; the lower-precedence equivalent of `--profile` |
+| `VIDBYTE_OUTPUT_FORMAT` / `VIDBYTE_COLOR` | Presentation defaults |
+| `VIDBYTE_REQUEST_TIMEOUT_SECONDS` | Per-request timeout |
 
-State lives under `~/.vidbyte/` (`credentials.json`, `config.json`, `manifests/`).
+Non-secret settings resolve command option → environment → selected profile → default
+profile → built-in, and `vidbyte-cli config get <key>` reports both the effective value and
+which layer supplied it. `config set` accepts `api_url`, `output_format`, `color`, and
+`request_timeout_seconds`.
+
+API keys resolve separately: environment → OS keyring → permission-restricted file. An
+environment key is never persisted, and the restricted file is used only with explicit
+consent. Configuration, cache, state, and data live in the platform's standard application
+directories; `~/.vidbyte/` is still read, and is copied across by a verified migration that
+leaves the originals in place.
 
 ## Architecture
 
@@ -89,7 +102,7 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 
 ## Follow-ups
 
-- Implement the stores, `ApiClient` requests, the catalog fetch/cache, and the
+- Implement `ApiClient` requests, credential verification, the catalog fetch/cache, and the
   `harness run/status/list` behavior once the backend routes ship.
 - The console command is `vidbyte-cli` (not `vidbyte`) to avoid the bin/name collision with
   the `vidbyte-skills` package; confirm before publishing.

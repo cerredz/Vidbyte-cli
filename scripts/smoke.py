@@ -46,14 +46,17 @@ CASES = [
     Case(["config", "--help"]),
     # An option value must never be read as a dynamic harness namespace.
     Case(["harness", "--not-an-option", "namespace"], exit_code=2, error_code="INVALID_ARGUMENT"),
-    Case(["doctor"], exit_code=1, error_code="NOT_IMPLEMENTED"),
-    Case(["--json", "doctor"], exit_code=1, error_code="NOT_IMPLEMENTED", machine_error=True),
-    Case(
-        ["--format", "jsonl", "doctor"],
-        exit_code=1,
-        error_code="NOT_IMPLEMENTED",
-        machine_error=True,
-    ),
+    # doctor is the one implemented command that reads local state end to end, so it proves
+    # config resolution and credential lookup work against an empty isolated home.
+    Case(["doctor"]),
+    Case(["--json", "doctor"]),
+    Case(["--format", "jsonl", "doctor"]),
+    Case(["config", "get", "api_url"]),
+    Case(["--json", "config", "get", "output_format"]),
+    Case(["config", "get", "not-a-key"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    # Login must never take a secret on the command line, and must not prompt without a tty.
+    Case(["login", "--api-key", "secret"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    Case(["--no-input", "login"], exit_code=2, error_code="INVALID_ARGUMENT"),
     Case(
         ["--format", "json", "not-a-command"],
         exit_code=2,
@@ -75,6 +78,23 @@ def run_python(args: list[str]) -> subprocess.CompletedProcess[str]:
     source = str(Path(__file__).resolve().parents[1] / "src")
     existing = environment.get("PYTHONPATH")
     environment["PYTHONPATH"] = f"{source}{os.pathsep}{existing}" if existing else source
+    # Point every platformdirs root at a scratch tree and disable the keyring, so smoke
+    # cannot read a developer's real profile, prompt for a keychain unlock in CI, or leave
+    # anything behind. Any VIDBYTE_* variable in the ambient shell would override the
+    # profile these cases are asserting on, so drop them too.
+    smoke_root = Path(__file__).resolve().parents[1] / ".smoke-state"
+    for name in [key for key in environment if key.startswith("VIDBYTE_")]:
+        del environment[name]
+    # Home drives the legacy ~/.vidbyte root and macOS's platformdirs paths.
+    environment["HOME"] = str(smoke_root / "home")
+    environment["USERPROFILE"] = str(smoke_root / "home")
+    environment["XDG_CONFIG_HOME"] = str(smoke_root / "config")
+    environment["XDG_CACHE_HOME"] = str(smoke_root / "cache")
+    environment["XDG_DATA_HOME"] = str(smoke_root / "data")
+    environment["XDG_STATE_HOME"] = str(smoke_root / "state")
+    environment["LOCALAPPDATA"] = str(smoke_root / "local")
+    environment["APPDATA"] = str(smoke_root / "roaming")
+    environment["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
     return subprocess.run(
         [sys.executable, *args], capture_output=True, text=True, check=False, env=environment
     )

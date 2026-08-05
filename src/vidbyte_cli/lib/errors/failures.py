@@ -361,3 +361,452 @@ class PromptTooLong(CliError):
                 "source and passed the value to _validate."
             ),
         )
+
+
+class ConfigUnreadable(CliError):
+    """The stored configuration file could not be parsed against the version-one schema."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, path: str, cause: Exception) -> None:
+        super().__init__(
+            "CLI configuration is invalid or uses an unsupported schema.",
+            description=(
+                "The configuration file exists but did not validate: it is unreadable, is not "
+                "JSON, exceeds the size bound, or declares a schema version this release does "
+                "not implement. The CLI never repairs or overwrites a file it cannot "
+                "understand, so nothing was changed and no command ran."
+            ),
+            trace=(
+                "ConfigStore.load selected the native or legacy configuration path and _read "
+                "decoded its bytes and validated them as a ConfigDocument."
+            ),
+            hint=f"Repair or move the configuration file at {path}.",
+            cause=cause,
+        )
+
+
+class ConfigInvalidBeforeWrite(CliError):
+    """The configuration on disk stopped validating between this command's read and write."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, path: str, cause: Exception) -> None:
+        super().__init__(
+            "CLI configuration changed to an invalid or unsupported schema.",
+            description=(
+                "The configuration validated when this command read it and no longer does, so "
+                "another process or a manual edit replaced it mid-command. The write was "
+                "abandoned before touching the file: the new content is intact and the setting "
+                "you asked for was not applied."
+            ),
+            trace=(
+                "ConfigStore.save called _native_digest to re-read the current file for "
+                "conflict detection, and that re-read failed validation."
+            ),
+            hint=f"Repair or move the configuration file at {path}.",
+            cause=cause,
+        )
+
+
+class ConfigWriteConflict(CliError):
+    """The configuration file changed after this command read it."""
+
+    code = CliErrorCode.CONFIG_WRITE_CONFLICT
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self) -> None:
+        super().__init__(
+            "CLI configuration changed during this command.",
+            description=(
+                "Writing a setting is a read-modify-write, and the file no longer matches what "
+                "this command read. Completing the write would silently discard whatever the "
+                "other writer stored. Nothing was written, so the other change is intact and "
+                "re-running against the current file is safe."
+            ),
+            trace=(
+                "ConfigStore.save compared the digest captured by the caller's read against a "
+                "fresh digest of the native configuration file and found them different."
+            ),
+            hint="Run the command again against the latest configuration.",
+        )
+
+
+class InvalidConfigValue(CliError):
+    """`config set` was given a value the field's schema rejects."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, field: str, cause: Exception) -> None:
+        super().__init__(
+            f"Invalid value for configuration field '{field}'.",
+            description=(
+                f"The value supplied for '{field}' failed the same validation the persisted "
+                "document uses, so accepting it would write a profile the CLI could not load "
+                "back. Nothing was written. The underlying validation detail is withheld "
+                "because it quotes the value, which may have been mistyped from a secret."
+            ),
+            trace=(
+                "ConfigSetCommand.execute called ConfigStore.set, whose _updated_profile "
+                "revalidated the whole profile with the new field value applied."
+            ),
+            hint="Run 'vidbyte-cli config get' to inspect the current profile value.",
+            cause=cause,
+        )
+
+
+class InvalidConfigOverride(CliError):
+    """An environment or command-line configuration value could not be parsed."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "An environment or command configuration value is invalid.",
+            description=(
+                "Resolution combines command options, VIDBYTE_* variables, and the selected "
+                "profile, and one supplied value did not parse into its declared type. The "
+                "offending value is not echoed, because variables in the same namespace hold "
+                "credentials. No command ran and no local state changed."
+            ),
+            trace=(
+                "ConfigResolver.resolve applied command → environment → profile precedence per "
+                "field and constructed the ResolvedConfig from the winning values."
+            ),
+            hint="Check VIDBYTE_* settings and the selected CLI profile.",
+            cause=cause,
+        )
+
+
+class StateWriteThroughSymlink(CliError):
+    """A local state path the CLI was about to replace is a symbolic link."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Refusing to write CLI state through a symbolic link.",
+            description=(
+                "The target path is a symbolic link, and the CLI writes state by replacing a "
+                "file atomically. Whether that replaces the link or the file it points at "
+                "varies by platform, which is not a strong enough guarantee for a path that "
+                "may hold a credential. Nothing was written and the link is untouched."
+            ),
+            trace=(
+                "A store encoded its document and called AtomicFileWriter.write, which checks "
+                "the destination for a symbolic link before creating its temporary sibling."
+            ),
+            hint="Replace the symbolic link with a regular file and retry.",
+        )
+
+
+class StateWriteFailed(CliError):
+    """The operating system refused a local state write."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "CLI state could not be saved.",
+            description=(
+                "Creating, flushing, or replacing the state file failed at the filesystem "
+                "level — typically permissions, a read-only or full volume, or a parent "
+                "directory the CLI may not create. The temporary sibling was removed, so the "
+                "previous file is intact and the operation had no partial effect."
+            ),
+            trace=(
+                "AtomicFileWriter.write created a randomized sibling file, wrote and fsynced "
+                "it, and attempted os.replace onto the destination."
+            ),
+            hint="Check directory ownership and available disk space, then retry.",
+            cause=cause,
+        )
+
+
+class MigrationVerificationFailed(CliError):
+    """Legacy state was copied but the copy did not read back identically."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Legacy CLI state could not be verified after migration.",
+            description=(
+                "Migration copies each item and reads it back to prove the copy is identical, "
+                "and one read-back disagreed. Migration never deletes, so the legacy tree under "
+                "~/.vidbyte is exactly as it was. The native location may hold a partial copy, "
+                "which later runs overwrite rather than trust."
+            ),
+            trace=(
+                "StateMigration.migrate_if_needed copied configuration, manifests, or the "
+                "legacy credential and compared each destination against its source."
+            ),
+            hint="The legacy files were preserved; retry after checking local storage.",
+        )
+
+
+class CredentialStoreUnavailable(CliError):
+    """The operating-system keyring could not be used for this operation."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception | None = None) -> None:
+        super().__init__(
+            "The operating-system credential store is unavailable.",
+            description=(
+                "No keyring backend reported itself usable, or the backend rejected the "
+                "operation — a locked keychain, a headless session with no agent, or a write "
+                "that did not read back as written. The backend's own message is withheld "
+                "because it can quote account identifiers. No credential was stored or read."
+            ),
+            trace=(
+                "KeyringCredentialStore resolved the active backend and performed a scoped "
+                "get, set, or delete against the 'vidbyte-cli' service."
+            ),
+            hint="Check the system keyring, or explicitly approve the restricted-file fallback.",
+            cause=cause,
+        )
+
+
+class NoApprovedCredentialStore(CliError):
+    """No keyring exists and restricted-file storage was not approved."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "No usable OS credential store is available.",
+            description=(
+                "The key verified successfully but has nowhere approved to live. This machine "
+                "exposes no working keyring, and the restricted-file fallback keeps the key "
+                "readable to your account, so the CLI will not select it on your behalf. "
+                "Nothing was written; the verified key was discarded with this process."
+            ),
+            trace=(
+                "LoginCommand.execute verified the credential and called CredentialStore.write, "
+                "which found no available keyring and no file-fallback consent."
+            ),
+            hint="Retry login and explicitly approve the restricted-file fallback.",
+        )
+
+
+class StoredCredentialUnreadable(CliError):
+    """The restricted fallback credential file could not be parsed."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "Stored CLI credentials are invalid or unavailable.",
+            description=(
+                "The fallback credential file exists but is unreadable, is not JSON, exceeds "
+                "the size bound, or declares an unsupported schema version. The CLI will not "
+                "rewrite a credential file it cannot understand, because that could destroy a "
+                "key it merely failed to parse. No credential was resolved."
+            ),
+            trace=(
+                "FileCredentialStore._load read the restricted credential file and validated "
+                "it as a version-one CredentialDocument."
+            ),
+            hint="Move the fallback credential file and run 'vidbyte-cli login' again.",
+            cause=cause,
+        )
+
+
+class LegacyCredentialUnreadable(CliError):
+    """The ~/.vidbyte credential file exists but could not be validated."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "Legacy CLI credentials are invalid or unavailable.",
+            description=(
+                "A credential file remains at the historical ~/.vidbyte location and did not "
+                "validate, so it can be neither read nor migrated. It is reported rather than "
+                "skipped, because ignoring it would leave a file that looks like a working "
+                "login. It was not modified or removed."
+            ),
+            trace=(
+                "A credential read or migration reached the legacy credential path and decoded "
+                "its bytes as a Credentials document."
+            ),
+            hint="Run 'vidbyte-cli login' to replace the stored credential.",
+            cause=cause,
+        )
+
+
+class LegacyCredentialSymlink(CliError):
+    """Logout was asked to remove a legacy credential file that is a symbolic link."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Refusing to remove legacy credentials through a symbolic link.",
+            description=(
+                "Logout deletes the legacy credential file so a stale key cannot become active "
+                "again, but that path is a symbolic link: unlinking it would remove the link "
+                "and leave whatever it points at. The CLI will not guess which one was meant. "
+                "The scoped keyring and fallback entries were still cleared."
+            ),
+            trace=(
+                "LogoutCommand.execute called CredentialStore.clear, whose clear_legacy step "
+                "checked the legacy credential path before unlinking it."
+            ),
+            hint="Remove the symbolic link manually after verifying its target.",
+        )
+
+
+class LegacyCredentialRemovalFailed(CliError):
+    """The legacy credential file could not be deleted during logout."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "Legacy credentials could not be removed.",
+            description=(
+                "The legacy credential file exists and the filesystem refused to unlink it, "
+                "usually because of directory permissions or another process holding it open. "
+                "This is a failure rather than a skip, because the file can still authenticate "
+                "later invocations. Scoped credentials were already cleared."
+            ),
+            trace=(
+                "LogoutCommand.execute called CredentialStore.clear, whose clear_legacy step "
+                "attempted to unlink the legacy credential path."
+            ),
+            hint="Check the legacy file permissions and retry logout.",
+            cause=cause,
+        )
+
+
+class InvalidEnvironmentApiKey(CliError):
+    """VIDBYTE_API_KEY is set but holds nothing usable."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        super().__init__(
+            "VIDBYTE_API_KEY is empty or invalid.",
+            description=(
+                "The environment variable is set to an empty, whitespace-only, or oversized "
+                "value. Because it is set it outranks the keyring and the fallback file, so "
+                "falling through to stored credentials would authenticate as somebody the "
+                "caller did not ask for. The value is never echoed back."
+            ),
+            trace=(
+                "CredentialResolver.resolve read VIDBYTE_API_KEY from the injected environment "
+                "and bounds-checked it before any store was consulted."
+            ),
+            hint="Set a valid key or remove the variable to use stored credentials.",
+        )
+
+
+class CredentialVerificationUnavailable(CliError):
+    """This build has no verifier, so no credential may be persisted."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Credential verification is unavailable in this CLI build.",
+            description=(
+                "Login stores a key only after the backend confirms it, and the HTTP client "
+                "that performs that check ships in a later release. The CLI fails rather than "
+                "storing an unverified key, so an invalid credential can never reach durable "
+                "storage. Nothing was written and no request was made."
+            ),
+            trace=(
+                "LoginCommand.execute read the token and called CredentialVerifier.verify, "
+                "which ApplicationContext had bound to PendingCredentialVerifier."
+            ),
+            hint="Upgrade to the release that includes the reusable HTTP client.",
+        )
+
+
+class NoninteractiveLoginRequiresToken(CliError):
+    """Login had no terminal to prompt on and no explicit token source."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Login requires explicit token input in noninteractive mode.",
+            description=(
+                "The hidden prompt needs an interactive terminal, and this invocation has none "
+                "or passed --no-input. Stdin is read only when --with-token says so, so a "
+                "redirected stream is never consumed by accident and the command cannot hang "
+                "on a read that will not complete. No credential was stored."
+            ),
+            trace=(
+                "LoginCommand.execute called CredentialInput.read without the stdin marker, "
+                "which checked --no-input and the detected terminal capabilities."
+            ),
+            hint="Pipe the token to 'vidbyte-cli login --with-token'.",
+        )
+
+
+class InvalidApiKeyInput(CliError):
+    """The token supplied to login was empty or beyond the input bound."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The supplied Vidbyte API key is empty or too large.",
+            description=(
+                "The value read from the prompt or from stdin was blank after trimming, or "
+                "longer than the 4096-character bound the CLI reads from any secret source. "
+                "That bound keeps an accidental file redirect from being pulled into memory as "
+                "a key. The value is never echoed, and nothing was verified or stored."
+            ),
+            trace=(
+                "CredentialInput.read consumed the selected input channel and bounds-checked "
+                "the trimmed value before constructing Credentials."
+            ),
+            hint="Paste the key from the Vidbyte dashboard, or pipe it with --with-token.",
+        )
+
+
+class FileFallbackNotApproved(CliError):
+    """Login could not ask for fallback consent and none was given on the command line."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "No OS keyring is available and file storage was not approved.",
+            description=(
+                "Storing the key would require the restricted-file fallback, which the CLI uses "
+                "only with explicit consent. This invocation is noninteractive, so the "
+                "confirmation prompt cannot be shown and consent has to arrive as a flag. "
+                "Nothing was stored."
+            ),
+            trace=(
+                "LoginCommand.execute called _fallback_consent, which found no available "
+                "keyring, no --allow-file-fallback, and no interactive terminal."
+            ),
+            hint="Retry with --allow-file-fallback after reviewing the storage warning.",
+        )
