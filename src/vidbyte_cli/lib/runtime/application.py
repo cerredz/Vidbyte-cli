@@ -103,7 +103,7 @@ class CliApplication:
         arguments = list(sys.argv if argv is None else argv)
         try:
             program = self._build_program()
-            harness_group = register_all_commands(program)
+            harness_group = register_all_commands(program, self._context.environment)
             inspection = self._preconfigure(arguments)
             if (
                 inspection is not None
@@ -169,7 +169,7 @@ class CliApplication:
         # Click has process-default streams, so bind them to the invocation-owned channels.
         with redirect_stdout(self._streams.stdout), redirect_stderr(self._streams.stderr):
             program.main(args=list(argv[1:]), prog_name="vidbyte-cli", standalone_mode=False)
-        return 0
+        return self._context.exit_code()
 
     def _configure_context(self, values: RootOptionValues) -> None:
         # --json is a compatibility alias, not an independent output mode.

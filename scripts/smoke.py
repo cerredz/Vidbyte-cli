@@ -81,6 +81,27 @@ _CASES: tuple[SmokeCase, ...] = (
     SmokeCase(("harness", "software-engineering", "fix", "--help")),
     SmokeCase(("connect", "--help")),
     SmokeCase(("config", "--help")),
+    SmokeCase(("research", "--help")),
+    SmokeCase(("research", "start", "--help")),
+    SmokeCase(("research", "add", "--help")),
+    SmokeCase(("research", "resume", "--help")),
+    SmokeCase(("research", "status", "--help")),
+    SmokeCase(("research", "watch", "--help")),
+    SmokeCase(("research", "runs", "list", "--help")),
+    SmokeCase(("research", "threads", "list", "--help")),
+    SmokeCase(("research", "sources", "list", "--help")),
+    SmokeCase(("research", "artifacts", "list", "--help")),
+    SmokeCase(("research", "artifacts", "get", "--help")),
+    SmokeCase(("research", "capabilities", "--help")),
+    SmokeCase(("research", "export", "artifact", "--help")),
+    SmokeCase(("research", "export", "thread", "--help")),
+    SmokeCase(("research", "export", "portfolio", "--help")),
+    SmokeCase(("research", "export", "status", "--help")),
+    SmokeCase(
+        ("research", "start", "offline smoke prompt", "--no-wait"),
+        expected_exit=1,
+        error_code="NOT_IMPLEMENTED",
+    ),
     SmokeCase(("doctor",)),
     SmokeCase(("--json", "doctor")),
     SmokeCase(("--format", "jsonl", "doctor")),
@@ -144,6 +165,7 @@ class SmokeRunner:
         process_environment["XDG_STATE_HOME"] = str(smoke_root / "state")
         process_environment["LOCALAPPDATA"] = str(smoke_root / "local")
         process_environment["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
+        process_environment["VIDBYTE_EXPERIMENTAL_RESEARCH"] = "1"
         return subprocess.run(
             [sys.executable, *arguments],
             capture_output=True,

@@ -748,7 +748,7 @@ class ResearchStatePolicy:
 
 Builds the complete top-level Click command tree and human/machine presenters against the
 research application interfaces. Execution stays disabled by default until PR 7 supplies
-the HTTP adapter.
+the HTTP adapter. Implemented in draft PR 6 of the approved stack.
 
 #### Interface / API
 

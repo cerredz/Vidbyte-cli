@@ -36,8 +36,11 @@ scripts/smoke.py renders representative groups and a static harness subtree.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import click
 
+from ..features.research.commands import ResearchCommandRegistrar
 from .auth.connect_github import ConnectGithubCommand
 from .auth.login import LoginCommand
 from .auth.logout import LogoutCommand
@@ -51,7 +54,10 @@ from .harness.status import HarnessStatusCommand
 from .setup.doctor import DoctorCommand
 
 
-def register_all_commands(program: click.Group) -> click.Group:
+def register_all_commands(
+    program: click.Group,
+    environment: Mapping[str, str] | None = None,
+) -> click.Group:
     # Register stable groups without constructing optional runtime services or doing I/O.
     LoginCommand().register(program)
     LogoutCommand().register(program)
@@ -60,6 +66,7 @@ def register_all_commands(program: click.Group) -> click.Group:
     _register_connect_group(program)
     harness = _register_harness_group(program)
     _register_config_group(program)
+    ResearchCommandRegistrar().register(program, environment or {})
     return harness
 
 
