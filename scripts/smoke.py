@@ -53,6 +53,8 @@ _CompletedCommand = subprocess.CompletedProcess[str]
 _IMPORT_CODE = (
     "import sys; import vidbyte_cli; "
     "assert 'click' not in sys.modules; assert 'httpx' not in sys.modules; "
+    "import vidbyte_cli.features.research.application; "
+    "assert 'click' not in sys.modules; assert 'httpx' not in sys.modules; "
     "import vidbyte_cli.lib.output; import vidbyte_cli.lib.io; import vidbyte_cli.lib.errors"
 )
 

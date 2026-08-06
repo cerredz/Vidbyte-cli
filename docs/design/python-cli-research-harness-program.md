@@ -662,8 +662,10 @@ class Poller(Generic[TModel]):
 
 ### 6.5 PR 5 - Research Domain and Application Layer
 
-**File(s):** `src/vidbyte_cli/features/research/domain/`,
-`src/vidbyte_cli/features/research/application/`
+**File(s):** `src/vidbyte_cli/features/`,
+`src/vidbyte_cli/features/research/domain/`,
+`src/vidbyte_cli/features/research/application/`, smoke import-boundary verification,
+README and architecture documentation
 **Type:** New files
 
 #### What it does

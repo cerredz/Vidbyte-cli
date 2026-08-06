@@ -4,9 +4,9 @@ The universal Vidbyte CLI: authenticate, run Vidbyte harnesses against your repo
 and manage configuration. Harnesses execute entirely on the Vidbyte backend — this CLI
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
-> **Status:** Python platform scaffold with reusable HTTP, retry, idempotency recovery,
-> polling, generic harness, configuration, and credential layers. Research commands are
-> added by the remaining stacked PRs.
+> **Status:** Python platform with reusable HTTP/operation layers and a transport-free
+> persistent research domain/application slice. Research commands and route wiring are
+> added by the final two stacked PRs.
 
 ## Install (development)
 
@@ -78,6 +78,14 @@ failures; POSTs retry only when protected by one stable idempotency key.
 Billable mutations write prompt-free recovery metadata before sending. If local polling is
 interrupted or times out, the remote operation continues and the CLI prints a status
 recovery command.
+
+## Persistent research model
+
+Research threads are durable portfolio containers rather than one-shot sessions. Runs add
+work; sources and artifacts remain separately addressable and do not automatically re-enter
+later model context. The domain supports start/add/resume, status and cursor queries,
+capability discovery, and artifact/thread/portfolio export without binding those behaviors
+to Click or an HTTP route shape.
 
 ## Architecture
 

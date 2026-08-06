@@ -35,7 +35,6 @@ scripts/smoke.py exercises this boundary through public CLI failures.
 
 from .cli_error import CliError, not_implemented, usage_error
 from .codes import CliErrorCode, ExitCode
-from .handler import ErrorHandler
 
 __all__ = [
     "CliError",
@@ -45,3 +44,12 @@ __all__ = [
     "not_implemented",
     "usage_error",
 ]
+
+
+def __getattr__(name: str) -> object:
+    # Keep domain/application imports Click-free while preserving the public facade.
+    if name == "ErrorHandler":
+        from .handler import ErrorHandler
+
+        return ErrorHandler
+    raise AttributeError(name)
