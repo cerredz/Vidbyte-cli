@@ -812,7 +812,8 @@ runtime context, registration, smoke, and documentation files
 #### What it does
 
 Implements the final HTTP adapter, direct DTO decoding, pagination, export job submission,
-and application-context wiring. It enables the research group by default.
+and application-context wiring. It enables the research group by default. Implemented in
+draft PR 7 of the approved stack; PR #284 was inspected read-only and never modified.
 
 #### Interface / API
 

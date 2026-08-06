@@ -82,10 +82,14 @@ class ResearchRunRequest(BaseModel):
     target_sources: int | None = Field(default=None, ge=1, le=1_000)
     search_calls: int | None = Field(default=None, ge=1, le=100)
     resource_kinds: list[ResourceKind] = Field(default_factory=list, max_length=10)
-    include_domains: list[str] = Field(default_factory=list, max_length=100)
-    exclude_domains: list[str] = Field(default_factory=list, max_length=100)
+    include_domains: list[str] = Field(default_factory=list, max_length=50)
+    exclude_domains: list[str] = Field(default_factory=list, max_length=50)
     published_after: date | None = None
-    language: str | None = Field(default=None, pattern=r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})?$")
+    language: str | None = Field(
+        default=None,
+        max_length=12,
+        pattern=r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})?$",
+    )
 
     @field_validator("prompt")
     @classmethod
