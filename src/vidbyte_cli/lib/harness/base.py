@@ -11,13 +11,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import click
 
 from ...types.harness import HarnessRepoRef, HarnessRun, HarnessRunCreateRequest
 from ...types.manifest import OptionSpec, OptionType
-from ..errors.cli_error import CliError, not_implemented
+from ..errors.cli_error import CliError
+from ..errors.failures import NotImplementedFeature
 from .context import HarnessContext
 from .errors import map_harness_error
 from .invocation import InvocationBuilder
@@ -36,7 +37,9 @@ class BaseHarness(ABC):
     # The shared translation layer: one instance is enough since it is stateless.
     _invocation: ClassVar[InvocationBuilder] = InvocationBuilder()
 
-    _CLICK_TYPES: ClassVar[dict[OptionType, click.ParamType[object]]] = {
+    # click 8.4 made ParamType generic; our supported 8.1 baseline is not. Keep the value
+    # type dynamic across that range — every entry is still a concrete click type.
+    _CLICK_TYPES: ClassVar[dict[OptionType, Any]] = {
         "string": click.STRING,
         "number": click.FLOAT,
         "path": click.Path(),
@@ -90,7 +93,7 @@ class BaseHarness(ABC):
 
     def _wait_for_run(self, run: HarnessRun) -> HarnessRun:
         # Polls the run to a terminal state with backoff; shared by every `await`-mode command.
-        raise not_implemented("harness run waiting")
+        raise NotImplementedFeature("harness run waiting")
 
     def _build_click_command(
         self, command_def: HarnessCommandDef, ctx: HarnessContext

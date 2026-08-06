@@ -9,7 +9,7 @@ manifest that needs a newer CLI fails loudly rather than dropping unknown flags.
 from __future__ import annotations
 
 from ...types.manifest import HarnessManifest
-from ..errors.cli_error import not_implemented
+from ..errors.failures import NotImplementedFeature
 from .context import HarnessContext
 
 
@@ -20,8 +20,8 @@ class HarnessCatalog:
     def load(self, name: str) -> HarnessManifest:
         # Returns a harness manifest, cache-first with a network fallback, then checks that
         # the installed CLI satisfies manifest.min_cli_version.
-        raise not_implemented("harness manifest loading")
+        raise NotImplementedFeature("harness manifest loading")
 
     def refresh(self, name: str) -> HarnessManifest:
         # Forces a network fetch and rewrites the cache entry.
-        raise not_implemented("harness manifest refresh")
+        raise NotImplementedFeature("harness manifest refresh")

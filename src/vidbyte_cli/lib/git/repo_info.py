@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 from ...types.harness import HarnessRepoRef
 
 
@@ -20,7 +20,7 @@ class RepoInfo(BaseModel):
 class RepoInspector:
     def inspect(self) -> RepoInfo:
         # Returns origin URL, HEAD sha, current branch, and dirty state for cwd's repo.
-        raise not_implemented("repository inspection")
+        raise NotImplementedFeature("repository inspection")
 
     def as_repo_ref(self) -> HarnessRepoRef:
         # Convenience: the subset of repo facts a run submission needs.

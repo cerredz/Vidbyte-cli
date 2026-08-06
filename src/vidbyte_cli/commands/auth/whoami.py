@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from ...lib.errors.cli_error import not_implemented
+from ...lib.errors.failures import NotImplementedFeature
 
 
 class WhoamiCommand:
@@ -15,4 +15,4 @@ class WhoamiCommand:
 
     def execute(self) -> None:
         # Will read credentials and call /auth/whoami with them, then print the identity.
-        raise not_implemented("'vidbyte-cli whoami'")
+        raise NotImplementedFeature("'vidbyte-cli whoami'")
