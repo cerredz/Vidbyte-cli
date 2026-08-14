@@ -147,8 +147,9 @@ class AuthenticationRequired(CliError):
                 "the key is reused by every later invocation."
             ),
             trace=(
-                "BaseHarness.dispatch called HarnessContext.require_api_key, which read the "
-                "credential store and found no stored key."
+                "BaseHarness.dispatch called HarnessContext.require_credentials, whose "
+                "CredentialResolver found no key in the environment, the keyring, or the "
+                "restricted file for this profile and host."
             ),
             hint="Run 'vidbyte-cli login' first.",
         )
@@ -720,6 +721,30 @@ class InvalidEnvironmentApiKey(CliError):
         )
 
 
+class EnvironmentApiKeyNotLive(CliError):
+    """VIDBYTE_API_KEY holds a well-formed value that is not a live Vidbyte key."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        super().__init__(
+            "VIDBYTE_API_KEY is not a live Vidbyte API key.",
+            description=(
+                "The variable holds a syntactically usable value that does not begin with the "
+                "live-key prefix. The backend extracts only live keys, so such a value produces "
+                "no credential at all and every request would be answered as unauthenticated "
+                "rather than as a bad key. It is rejected here so the cause is visible instead "
+                "of surfacing later as an unexplained login prompt. The value is never echoed."
+            ),
+            trace=(
+                "CredentialResolver.resolve read VIDBYTE_API_KEY from the injected environment "
+                "and checked its format before any credential store was consulted."
+            ),
+            hint="Export a live key from the Vidbyte dashboard, or unset the variable.",
+        )
+
+
 class CredentialVerificationUnavailable(CliError):
     """This build has no verifier, so no credential may be persisted."""
 
@@ -786,6 +811,30 @@ class InvalidApiKeyInput(CliError):
                 "the trimmed value before constructing Credentials."
             ),
             hint="Paste the key from the Vidbyte dashboard, or pipe it with --with-token.",
+        )
+
+
+class ApiKeyNotLiveFormat(CliError):
+    """The token supplied to login is not a live Vidbyte API key."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The supplied value is not a live Vidbyte API key.",
+            description=(
+                "The value read from the prompt or from stdin does not begin with the live-key "
+                "prefix. The backend extracts only live keys, so storing this one would leave "
+                "every later command answered as unauthenticated with nothing to point at. It "
+                "is refused before verification, so nothing was sent and nothing was stored. "
+                "The value is never echoed, because a mistyped secret is still a secret."
+            ),
+            trace=(
+                "CredentialInput.read consumed the selected input channel, bounds-checked the "
+                "trimmed value, and asked Credentials.is_live_format about its prefix."
+            ),
+            hint="Copy a live API key from the Vidbyte dashboard and run login again.",
         )
 
 

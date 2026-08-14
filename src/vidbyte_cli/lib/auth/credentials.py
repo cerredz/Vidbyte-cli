@@ -31,6 +31,9 @@ from .keyring_store import CredentialScope, KeyringCredentialStore
 # Bounds a hostile or accidentally-redirected file before it is parsed into memory.
 _MAX_CREDENTIAL_BYTES = 1_000_000
 _MAX_KEY_CHARACTERS = 4096
+# The only prefix the backend gatekeeper extracts. A key without it yields no candidate at
+# all, so the request is not rejected as malformed — it is treated as unauthenticated.
+LIVE_API_KEY_PREFIX = "vb_live_"
 
 
 class Credentials(BaseModel):
@@ -50,6 +53,12 @@ class Credentials(BaseModel):
     @classmethod
     def from_value(cls, value: str) -> Credentials:
         return cls(api_key=SecretStr(value))
+
+    @classmethod
+    def is_live_format(cls, value: str) -> bool:
+        # Asked at the input boundaries only. Making it a field invariant would make a stored
+        # non-live key unreadable, and so unremovable by the logout that exists to clear it.
+        return value.startswith(LIVE_API_KEY_PREFIX)
 
     def secret_value(self) -> str:
         return self.api_key.get_secret_value()

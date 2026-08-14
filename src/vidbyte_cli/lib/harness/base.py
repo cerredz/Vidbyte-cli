@@ -62,7 +62,7 @@ class BaseHarness(ABC):
     ) -> None:
         # The uniform lifecycle every harness command follows. This is the shared "command
         # structure" made literal: guard -> translate -> submit -> (await) -> present.
-        ctx.require_api_key()  # fail fast before any repo/network work
+        ctx.require_credentials()  # fail fast before any repo/network work
         repo = ctx.repo.as_repo_ref() if self.requires_repo else None
         request = self._to_invocation(command_def, params, repo)
         endpoints = ctx.harness_endpoints()

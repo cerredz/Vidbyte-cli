@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from ..errors.failures import InvalidEnvironmentApiKey
+from ..errors.failures import EnvironmentApiKeyNotLive, InvalidEnvironmentApiKey
 from .credentials import Credentials, CredentialStore
 
 _MAX_KEY_CHARACTERS = 4096
@@ -51,6 +51,8 @@ class CredentialResolver:
             token = environment_value.strip()
             if not token or len(token) > _MAX_KEY_CHARACTERS:
                 raise InvalidEnvironmentApiKey()
+            if not Credentials.is_live_format(token):
+                raise EnvironmentApiKeyNotLive()
             return ResolvedCredential(Credentials.from_value(token), CredentialSource.ENVIRONMENT)
         keyring_value = self._store.keyring.read(profile, api_url)
         if keyring_value is not None:

@@ -166,8 +166,7 @@ class ApplicationContext:
         # The harness adapter shares this invocation's output contract and credential scope.
         return HarnessContext.default(
             self._output,
-            credentials=self.credential_store(),
+            credentials=self.credential_resolver(),
+            config=self.resolved_config(),
             paths=self.paths(),
-            base_url=self.options.api_url,
-            profile=self.options.profile,
         )

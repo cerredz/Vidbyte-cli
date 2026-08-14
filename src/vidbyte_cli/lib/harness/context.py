@@ -4,8 +4,10 @@ Dependency injection is the extensibility seam: when a harness needs a new capab
 is added here once, not to every harness subclass. Building the command tree never touches
 these services — only `dispatch` does — so `--help` stays free of credential or network I/O.
 
-The profile and base URL travel together because a credential is scoped to both: a harness
-run against a staging host must not authenticate with the production key.
+The whole `ResolvedConfig` travels rather than a loose host string, because a credential is
+scoped to profile *and* host: a harness run against a staging host must not authenticate
+with the production key. Credentials arrive through the resolver, never the raw store, so an
+exported key outranks whatever a developer once saved on this machine.
 """
 
 from __future__ import annotations
@@ -14,8 +16,9 @@ from dataclasses import dataclass
 
 from ..api.client import ApiClient
 from ..api.endpoints.harness import HarnessEndpoints
-from ..auth.credentials import CredentialStore
-from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
+from ..auth.credentials import Credentials
+from ..auth.resolver import CredentialResolver
+from ..config import ResolvedConfig
 from ..config.paths import VidbytePaths
 from ..errors.failures import AuthenticationRequired
 from ..git.repo_info import RepoInspector
@@ -26,25 +29,23 @@ from ..output.render import RunRenderer
 
 @dataclass
 class HarnessContext:
-    credentials: CredentialStore
+    credentials: CredentialResolver
     repo: RepoInspector
     logger: Logger
     render: RunRenderer
-    base_url: str | None = None
-    profile: str = DEFAULT_PROFILE
+    config: ResolvedConfig
     paths: VidbytePaths | None = None
 
-    def require_api_key(self) -> str:
-        # Guard: the stored API key, or a clean CliError if the user is not logged in.
-        creds = self.credentials.read(self.profile, self.base_url or DEFAULT_API_URL)
-        if creds is None:
+    def require_credentials(self) -> Credentials:
+        # Guard: the resolved API key for this scope, or a clean CliError if nobody is logged in.
+        resolved = self.credentials.resolve(self.config.profile, self.config.api_url)
+        if resolved is None:
             raise AuthenticationRequired()
-        return creds.secret_value()
+        return resolved.credentials
 
     def harness_endpoints(self) -> HarnessEndpoints:
         # An authenticated harness endpoint group; requires a logged-in user.
-        client = ApiClient(base_url=self.base_url, api_key=self.require_api_key())
-        return HarnessEndpoints(client)
+        return HarnessEndpoints(ApiClient(self.config, self.require_credentials()))
 
     def manifest_cache_dir(self) -> str:
         # Where the catalog caches downloaded manifests.
@@ -55,19 +56,19 @@ class HarnessContext:
     def default(
         output: OutputManager,
         *,
-        credentials: CredentialStore | None = None,
+        credentials: CredentialResolver,
+        config: ResolvedConfig,
         paths: VidbytePaths | None = None,
-        base_url: str | None = None,
-        profile: str = DEFAULT_PROFILE,
     ) -> HarnessContext:
         # Wires the real services around this invocation's output policy. The logger is no
-        # longer a process global, so a harness cannot bypass the selected format.
+        # longer a process global, so a harness cannot bypass the selected format. The resolver
+        # is required rather than defaulted: building one needs an injected environment, and
+        # this module must not reach for `os.environ` to invent it.
         return HarnessContext(
-            credentials=credentials or CredentialStore(paths=paths),
+            credentials=credentials,
             repo=RepoInspector(),
             logger=Logger(output),
             render=RunRenderer(),
-            base_url=base_url,
-            profile=profile,
+            config=config,
             paths=paths,
         )

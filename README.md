@@ -60,7 +60,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 
 | Variable | Meaning |
 | --- | --- |
-| `VIDBYTE_API_URL` | API host (default `https://api.vidbyte.ai`) |
+| `VIDBYTE_API_URL` | API host (default `https://vidbyte-backend.onrender.com`) |
 | `VIDBYTE_API_KEY` | API key; overrides the stored credential for the current shell |
 | `VIDBYTE_PROFILE` | Profile name; the lower-precedence equivalent of `--profile` |
 | `VIDBYTE_OUTPUT_FORMAT` / `VIDBYTE_COLOR` | Presentation defaults |

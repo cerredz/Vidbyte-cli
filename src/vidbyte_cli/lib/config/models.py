@@ -19,7 +19,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validat
 
 from ..output import ColorMode, OutputFormat
 
-DEFAULT_API_URL = "https://api.vidbyte.ai"
+DEFAULT_API_URL = "https://vidbyte-backend.onrender.com"
 DEFAULT_PROFILE = "default"
 ProfileName = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")]
 

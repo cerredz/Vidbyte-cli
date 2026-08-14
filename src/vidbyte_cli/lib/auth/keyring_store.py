@@ -48,7 +48,7 @@ class CredentialScope:
 
     @property
     def account(self) -> str:
-        # The default port is omitted so `https://api.vidbyte.ai` and `https://api.vidbyte.ai:443`
+        # The default port is omitted so `https://example.test` and `https://example.test:443`
         # resolve to one entry rather than two credentials that silently disagree.
         port = self.origin.port
         scheme = self.origin.scheme
