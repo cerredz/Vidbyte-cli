@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import getpass
 
-from ..errors.failures import InvalidApiKeyInput, NoninteractiveLoginRequiresToken
+from ..errors.failures import (
+    ApiKeyNotLiveFormat,
+    InvalidApiKeyInput,
+    NoninteractiveLoginRequiresToken,
+)
 from ..io import IOStreams
 from ..io.terminal import TerminalCapabilities
 from .credentials import Credentials
@@ -48,4 +52,8 @@ class CredentialInput:
         token = value.strip()
         if not token or len(token) > _MAX_TOKEN_CHARACTERS:
             raise InvalidApiKeyInput()
+        # Bounds run first, so an accidental file redirect is reported as oversized rather
+        # than prefix-tested in full.
+        if not Credentials.is_live_format(token):
+            raise ApiKeyNotLiveFormat()
         return Credentials.from_value(token)
