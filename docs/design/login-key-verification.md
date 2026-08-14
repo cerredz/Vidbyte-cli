@@ -649,9 +649,7 @@ transport boundary, the status-only classification decision, and the httpx impor
 actually pays and the one NFR-1 protects:
 
 ```python
-CLI_IMPORT_BOUNDARY_CODE = (
-    "import sys; import vidbyte_cli.cli; assert 'httpx' not in sys.modules"
-)
+CLI_IMPORT_BOUNDARY_CODE = "import sys; import vidbyte_cli.cli; assert 'httpx' not in sys.modules"
 ```
 
 Two cases are added, both offline and credential-free against the isolated smoke home:
