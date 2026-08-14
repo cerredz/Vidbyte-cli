@@ -21,6 +21,13 @@ from .harness.catalog import HarnessCatalogCommand
 from .harness.list import HarnessListCommand
 from .harness.run import HarnessRunCommand
 from .harness.status import HarnessStatusCommand
+from .research.add import ResearchAddCommand
+from .research.resume import ResearchResumeCommand
+from .research.start import ResearchStartCommand
+from .research.status import ResearchStatusCommand
+from .research.thread import ResearchThreadCommand
+from .research.threads import ResearchThreadsCommand
+from .research.watch import ResearchWatchCommand
 from .setup.doctor import DoctorCommand
 
 
@@ -42,6 +49,17 @@ def register_all_commands(program: click.Group) -> click.Group:
     HarnessListCommand().register(harness)
     HarnessCatalogCommand().register(harness)
     program.add_command(harness)
+
+    # The whole public API-key research surface: start, add, resume, read, watch, list.
+    research = click.Group(name="research", help="Run and inspect Vidbyte research threads")
+    ResearchStartCommand().register(research)
+    ResearchAddCommand().register(research)
+    ResearchResumeCommand().register(research)
+    ResearchStatusCommand().register(research)
+    ResearchWatchCommand().register(research)
+    ResearchThreadsCommand().register(research)
+    ResearchThreadCommand().register(research)
+    program.add_command(research)
 
     config = click.Group(name="config", help="Manage CLI configuration")
     ConfigGetCommand().register(config)

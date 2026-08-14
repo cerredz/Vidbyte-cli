@@ -59,6 +59,9 @@ class CliApplication:
             return self._invoke(program, arguments)
         except (Exception, KeyboardInterrupt) as error:  # noqa: BLE001 - the process boundary.
             return self._context.error_handler().handle(error)
+        finally:
+            # After the handler has rendered, so a failure still reports before teardown.
+            self._context.close()
 
     def _build_program(self) -> click.Group:
         # The root group; its callback publishes the invocation context to every command.
