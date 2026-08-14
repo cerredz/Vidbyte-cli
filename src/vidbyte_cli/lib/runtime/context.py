@@ -19,10 +19,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from ..auth import (
+    ApiCredentialVerifier,
     CredentialResolver,
     CredentialStore,
     CredentialVerifier,
-    PendingCredentialVerifier,
 )
 from ..config import ConfigResolver, ConfigStore, ResolvedConfig, VidbytePaths
 from ..config.migration import StateMigration
@@ -71,7 +71,7 @@ class ApplicationContext:
         self._credential_store: CredentialStore | None = None
         self._credential_resolver: CredentialResolver | None = None
         self._migration: StateMigration | None = None
-        self._verifier_factory = verifier_factory or PendingCredentialVerifier
+        self._verifier_factory = verifier_factory or ApiCredentialVerifier
         self._verifier: CredentialVerifier | None = None
         self._output = self._build_output()
         self._errors = ErrorHandler(self._output)
