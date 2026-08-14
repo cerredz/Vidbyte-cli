@@ -537,6 +537,37 @@ Stops the CLI's own documentation from naming a host that is not the API.
 
 ---
 
+### 6.10 `doctor` reports whether a stored key is live-format
+
+**File(s):** `src/vidbyte_cli/commands/setup/doctor.py`
+**Type:** Modified
+
+*Added during Phase 5 refinement — see §14.*
+
+#### What it does
+
+Closes the last route to the symptom this change exists to remove. The §6.4/§6.5 guards cover
+the login prompt and `VIDBYTE_API_KEY`, but a credential file written by hand crosses neither,
+so `doctor` would report `present` for a key the backend silently ignores.
+
+#### Logic / Algorithm
+
+1. After resolving the credential, compute `Credentials.is_live_format(...)` on it, or `None`
+   when no credential resolved.
+2. Add `credential_live_format` to the machine document.
+3. When it is `False`, append `- not a live key, the backend will ignore it` to the human
+   credential line.
+
+#### Edge Cases & Error Handling
+
+- The value is never echoed; only the boolean is reported. Verified by asserting the secret
+  does not appear in `--json doctor` output.
+- `None` rather than `False` when no credential exists, so "absent" and "present but wrong"
+  stay distinguishable to a machine caller.
+- `doctor` stays read-only: it reports the condition and repairs nothing.
+
+---
+
 ## 7. Data Model Changes
 
 N/A — no database, collection, or persisted schema changes. `ConfigDocument` and
@@ -566,12 +597,21 @@ that contract is unchanged: this change makes the CLI conform to the existing ga
 | MODIFY | `src/vidbyte_cli/lib/auth/resolver.py` | Reject a non-live `VIDBYTE_API_KEY` |
 | MODIFY | `src/vidbyte_cli/lib/errors/failures.py` | Add `ApiKeyNotLiveFormat`, `EnvironmentApiKeyNotLive`; retrace `AuthenticationRequired` |
 | MODIFY | `src/vidbyte_cli/lib/harness/context.py` | Hold `ResolvedConfig`, resolve via `CredentialResolver`, construct `ApiClient` |
+| MODIFY | `src/vidbyte_cli/lib/harness/base.py` | Follow the `require_api_key` → `require_credentials` rename |
 | MODIFY | `src/vidbyte_cli/lib/runtime/context.py` | Forward resolver and resolved config |
+| MODIFY | `src/vidbyte_cli/commands/setup/doctor.py` | Report `credential_live_format` (§6.10, refinement) |
+| MODIFY | `src/vidbyte_cli/lib/auth/keyring_store.py` | Scope comment named the dead host as its example |
 | MODIFY | `src/vidbyte_cli/lib/auth/README.md` | Document the live-format boundary |
+| MODIFY | `docs/design/python-cli-research-harness-program.md` | Two `api.vidbyte.ai` references that would reimplement the dead host |
+| MODIFY | `docs/design/harness-runtime-and-cli-scaffold.md` | Lifecycle description named `require_api_key` |
 | MODIFY | `README.md` | Documented default host |
-| MODIFY | `.env.example` | Documented default host |
+| MODIFY | `.env.example` | Documented default host and the live-key requirement |
 
-12 files: 1 created, 11 modified, 0 deleted.
+17 files: 1 created, 16 modified, 0 deleted.
+
+`base.py`, `keyring_store.py`, `doctor.py`, and the two sibling design docs were not in the
+pre-implementation manifest; each was added for a named reason recorded above and in §14,
+rather than as opportunistic editing.
 
 ---
 
@@ -687,3 +727,55 @@ No dependency is added, removed, or version-changed.
 - **What:** Let a user select `x-api-key` or `Authorization`.
 - **Why rejected:** A config knob with one correct value and no caller who would change it.
   The server has one canonical header; making it configurable adds a way to be wrong.
+
+---
+
+## 14. Refinement Record (Phase 5)
+
+An adversarial pass over the original request against the implementation. Items where the
+prosecution produced a point the code could not rebut:
+
+- [x] **[Notable] A hand-written credential file bypasses both format guards**
+  Expected: "a key that is not a real live key" should read as *wrong format*, never as
+  *not logged in*. Actual: the guards sat on the login prompt and `VIDBYTE_API_KEY`, but a
+  credential file written by hand crosses neither, and `doctor` reported it as simply
+  `present`. Impact: the exact symptom the change exists to remove survived on one path.
+  **Resolved** in §6.10 — `doctor` reports `credential_live_format` without echoing the key.
+
+- [x] **[Notable] Two design docs still specified the dead host**
+  Expected: leaving the old host anywhere makes the CLI look broken. Actual: the code was
+  repointed but `python-cli-research-harness-program.md` still declared
+  `api_url: str = "https://api.vidbyte.ai"` as the spec for `ProfileConfig`, and listed it in
+  the dependency table. Impact: the next PR implemented from that spec would reintroduce the
+  dead host. **Resolved** — both references repointed.
+
+- [x] **[Minor] A sibling doc named the renamed method**
+  `harness-runtime-and-cli-scaffold.md` described the dispatch lifecycle as starting at
+  `require_api_key`. **Resolved** — renamed to `require_credentials`.
+
+Items the defense rebutted with code, recorded so they are not relitigated:
+
+- *"A fresh install does not actually talk to the real service."* True, and it is the one part
+  of the stated done-condition this PR cannot reach. `ApiClient.get`/`post` still raise
+  `NotImplementedFeature` because transport is PR 4 of the seven-PR program (§13 Alternative
+  1), and it is blocked a second time by the backend: no `/auth/*` or `/harness/*` path is on
+  the API-key route table, so every call would 403 before the key was validated (§12). This
+  was declared as a Non-Goal in §2 before implementation and reported to the requester, not
+  discovered afterwards. What this PR guarantees is that the request is correctly addressed
+  and correctly authenticated the moment transport exists.
+- *"`whoami` still fails."* Required by FR15 — this change must not make an unimplemented
+  command appear to work.
+- *"Stored keys are not re-validated against the prefix on read."* Deliberate (§13 Alternative
+  3): it would make `logout` unable to clear the very key that needs clearing. `doctor` now
+  reports the condition instead.
+
+Carried forward as follow-ups rather than fixed here:
+
+- `_MAX_KEY_CHARACTERS` is declared three times — `lib/auth/credentials.py`,
+  `lib/auth/resolver.py`, and as `_MAX_TOKEN_CHARACTERS` in `lib/auth/input.py`. All three
+  were touched by this change, but deduplicating them is unrelated to it.
+- `scripts/smoke.py` overrides `APPDATA`, which on Windows also relocates the *user* site-packages
+  directory. On a machine whose dependencies are user-installed, the smoke gate fails with
+  `ModuleNotFoundError` on `main` as well as on this branch. It is an environment interaction,
+  not a code defect, and the fix is to run the gate from a virtualenv — but pinning
+  `PYTHONNOUSERSITE` or restoring `APPDATA` for the subprocess would make the gate robust.
