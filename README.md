@@ -53,8 +53,31 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli harness status <run_id>` | Show a run's status, events, and result |
 | `vidbyte-cli harness list` | List your runs |
 | `vidbyte-cli harness catalog` | List the harnesses available to run |
+| `vidbyte-cli research start <prompt>` | Open a research thread and admit its first run |
+| `vidbyte-cli research add <thread_id> <prompt>` | Add another run to an existing thread |
+| `vidbyte-cli research resume <run_id>` | Continue a partial, failed, or out-of-credit run |
+| `vidbyte-cli research status <run_id>` | Show one run's current status |
+| `vidbyte-cli research watch <run_id>` | Follow one run until it settles |
+| `vidbyte-cli research threads` | List your research threads |
+| `vidbyte-cli research thread <thread_id>` | Show one thread and its rollup counters |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
+
+### Research threads
+
+A thread is addressed only by the public ID that `research start` and `research threads`
+print. That is the value to pass back to `research add` and `research thread`; the internal
+identifier some other tools show is rejected before a request is sent.
+
+`research status` and `research watch` report state, phase, continuation count, and a
+timestamp — the whole of what the API publishes for a run. Neither prints a thread ID,
+because the status route does not carry a usable one.
+
+Starting, adding, and resuming are priced and idempotent. Each sends a generated
+`Idempotency-Key` and reports it, so `--idempotency-key <that value>` retries a mutation
+whose outcome you did not see without paying for it twice. `research watch` polls every ten
+seconds and backs off from there: API keys are metered on a weighted per-minute budget, and
+polling harder can exhaust the budget you need to start the next run.
 
 ## Configuration
 

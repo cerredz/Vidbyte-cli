@@ -261,7 +261,9 @@ class ResponseShape(StrEnum):
 
 
 class ResponseDecoder:
-    def one(self, response: httpx.Response, model: type[TModel], shape: ResponseShape) -> TModel: ...
+    def one(
+        self, response: httpx.Response, model: type[TModel], shape: ResponseShape
+    ) -> TModel: ...
     def many(self, response: httpx.Response, model: type[TModel]) -> list[TModel]: ...
 ```
 
@@ -313,8 +315,16 @@ class RetryDecision:
     delay_clamped: bool = False
 
 
+# One attempt ends as exactly one of these. They travel as a union rather than as a pair of
+# nullable arguments, so the "neither was set" state the client would have to defend against
+# cannot be constructed at all.
+RequestOutcome = httpx.Response | httpx.HTTPError
+
+
 class RetryPolicy:
-    def decide(self, request: RequestMetadata, attempt: int, response: httpx.Response | None, error: Exception | None) -> RetryDecision: ...
+    def decide(
+        self, request: RequestMetadata, attempt: int, outcome: RequestOutcome
+    ) -> RetryDecision: ...
 ```
 
 #### Logic / Algorithm
@@ -405,10 +415,29 @@ where the policy allows, and returning a validated model. Retains the constructo
 class ApiClient:
     def __init__(self, config: ResolvedConfig, credentials: Credentials) -> None: ...
     def auth_headers(self) -> dict[str, str]: ...
-    def get(self, path: str, model: type[TModel], *, shape: ResponseShape = ResponseShape.ENVELOPE) -> TModel: ...
+    def get(
+        self, path: str, model: type[TModel], *, shape: ResponseShape = ResponseShape.ENVELOPE
+    ) -> TModel: ...
     def get_list(self, path: str, model: type[TModel]) -> list[TModel]: ...
-    def post(self, path: str, body: BaseModel, model: type[TModel], *, shape: ResponseShape = ResponseShape.ENVELOPE, idempotency_key: str | None = None) -> TModel: ...
-    def request(self, method: str, path: str, *, response_model: type[TModel], response_shape: ResponseShape, body: BaseModel | None = None, idempotency_key: str | None = None) -> TModel: ...
+    def post(
+        self,
+        path: str,
+        body: BaseModel,
+        model: type[TModel],
+        *,
+        shape: ResponseShape = ResponseShape.ENVELOPE,
+        idempotency_key: str | None = None,
+    ) -> TModel: ...
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        response_model: type[TModel],
+        response_shape: ResponseShape,
+        body: BaseModel | None = None,
+        idempotency_key: str | None = None,
+    ) -> TModel: ...
     def close(self) -> None: ...
 ```
 
@@ -421,9 +450,9 @@ class ApiClient:
    `Idempotency-Key` when one is supplied.
 3. `_body` serializes with `model_dump_json(exclude_none=True)` **once**, so every attempt
    sends byte-identical content under the same idempotency key.
-4. `_send` loops: issue the request, catch `httpx.HTTPError`, ask `RetryPolicy.decide`,
-   sleep and continue while it says retry, then raise through `ApiProblemMapper` or return
-   the response.
+4. `_send` loops: `_attempt` returns one `RequestOutcome`, `RetryPolicy.decide` rules on it,
+   and the loop sleeps and continues while it says retry. `_settle` then raises through
+   `ApiProblemMapper` or returns the response.
 5. `request` hands the successful response to `ResponseDecoder.one`.
 6. The underlying `httpx.Client` is created lazily on first send, so constructing an
    `ApiClient` — which `HarnessContext.harness_endpoints()` does eagerly — opens nothing.
@@ -556,10 +585,13 @@ class ResearchPortfolioPage(BaseModel):
    otherwise validates 8–128 URL-safe characters, raising `ResearchIdempotencyKeyInvalid`.
 3. `ResearchRunCreateRequest.normalize_domains` lowercases, strips a trailing dot, and
    rejects any value containing `/` or `:`, matching the server's hostname-only rule.
-4. `validate_domain_filters` rejects an include/exclude overlap, which the server also
+4. `reject_contradictory_filters` rejects an include/exclude overlap, which the server also
    rejects — catching it locally avoids spending a request to learn it.
 5. `ResearchStatus.is_terminal` returns true for `completed`, `partial`, `failed`,
-   `cancelled`, and `credit_exhausted`.
+   `cancelled`, and `credit_exhausted`; `is_resumable` returns true for the three states
+   the backend accepts a continuation from.
+6. Both list normalizers run in `mode="before"`, so deduplication happens ahead of the
+   length bound rather than after it.
 
 #### Edge Cases & Error Handling
 
@@ -571,6 +603,10 @@ class ResearchPortfolioPage(BaseModel):
   print an unusable identifier.
 - `extra="ignore"` on every response model means a future backend field is additive, not
   breaking.
+- The two list normalizers must validate in `mode="before"`. Pydantic applies a field's
+  `max_length` constraint before an `after` validator runs, so deduplicating afterwards
+  means `--kind paper --kind paper --kind web` is rejected as "at most 2 items" even though
+  it names exactly two kinds — a message about the input that is not true of it.
 - `request_schema_version` is pinned to `Literal[2]`; the server accepts 1 or 2 and defaults
   to 2, and only 2 supports the reference-artifact field a later release may add.
 
@@ -591,8 +627,12 @@ Typed wrappers for the six `/api/v1/research/*` routes, matching the existing
 ```python
 class ResearchEndpoints:
     def __init__(self, client: ApiClient) -> None: ...
-    def create_run(self, request: ResearchRunCreateRequest, idempotency_key: str) -> ResearchRunAccepted: ...
-    def append_run(self, thread_id: str, request: ResearchRunCreateRequest, idempotency_key: str) -> ResearchRunAccepted: ...
+    def create_run(
+        self, request: ResearchRunCreateRequest, idempotency_key: str
+    ) -> ResearchRunAccepted: ...
+    def append_run(
+        self, thread_id: str, request: ResearchRunCreateRequest, idempotency_key: str
+    ) -> ResearchRunAccepted: ...
     def continue_run(self, run_id: str, idempotency_key: str) -> ResearchRunAccepted: ...
     def get_run(self, run_id: str) -> ResearchRunStatus: ...
     def get_portfolio(self, cursor: str | None, limit: int | None) -> ResearchPortfolioPage: ...
@@ -633,8 +673,10 @@ live in `options.py`; all human and machine rendering lives in `render.py`.
 ```python
 class ResearchRunOptions:
     """The request-shaping options `start` and `add` both accept."""
-    def apply(self, command: Callable[..., None]) -> Callable[..., None]: ...
-    def build(self, prompt: str, values: Mapping[str, object]) -> ResearchRunCreateRequest: ...
+
+    def apply(self, callback: CommandCallback) -> CommandCallback: ...
+    def build(self, values: Mapping[str, object]) -> ResearchRunCreateRequest: ...
+    def key(self, values: Mapping[str, object]) -> IdempotencyKey: ...
 
 
 @dataclass(frozen=True)
@@ -646,6 +688,7 @@ class RenderedResult:
 class ResearchRenderer:
     def accepted(self, accepted: ResearchRunAccepted, idempotency_key: str) -> RenderedResult: ...
     def run_status(self, run: ResearchRunStatus) -> RenderedResult: ...
+    def transition(self, run: ResearchRunStatus) -> RenderedResult: ...
     def thread(self, thread: ResearchThreadDetail) -> RenderedResult: ...
     def thread_page(self, page: ResearchPortfolioPage) -> RenderedResult: ...
 
@@ -653,6 +696,12 @@ class ResearchRenderer:
 class ResearchWatchCommand:
     def execute(self, context: ApplicationContext, run_id: str, timeout: float | None) -> None: ...
 ```
+
+Click hands a callback its parameters as loose values, so `start` and `add` declare
+`def _run(context: ApplicationContext, /, **values: object)` — the same shape
+`CliApplication` already uses for the root group — and `ResearchRunOptions` is where those
+values become typed. That is what lets one options object serve both commands without
+either of them restating ten parameter names.
 
 #### Logic / Algorithm
 
