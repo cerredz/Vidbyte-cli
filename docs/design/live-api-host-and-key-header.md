@@ -79,9 +79,10 @@ self.base_url = base_url or os.environ.get("VIDBYTE_API_URL") or DEFAULT_API_URL
 self._api_key = api_key or os.environ.get("VIDBYTE_API_KEY")
 ```
 
-A stale exported `VIDBYTE_API_URL` outranks `--api-url`, and — more seriously — the value
-that gets dialed never passes through `ApiOrigin.parse`, so the loopback/HTTPS guard in
-`lib/config/models.py:72-73` is bypassed on the only code path that makes requests. Program
+A stale exported `VIDBYTE_API_URL` outranks the profile a user deliberately wrote with
+`config set api_url`, and — more seriously — the value that gets dialed never passes through
+`ApiOrigin.parse`, so the loopback/HTTPS guard in `lib/config/models.py:72-73` is bypassed on
+the only code path that makes requests. Program
 requirement 24 already forbids this: "`ApiClient` MUST receive resolved settings and
 credentials through its constructor; it MUST NOT read environment variables itself."
 
@@ -97,7 +98,7 @@ a developer once stored on the same machine").
 ```python
 header_value = str(x_api_key or "").strip()
 if header_value:
-    if header_value.startswith(API_KEY_FORMAT_PREFIX):   # "vb_live_"
+    if header_value.startswith(API_KEY_FORMAT_PREFIX):  # "vb_live_"
         return header_value
     return None
 ```
@@ -403,6 +404,7 @@ class ApiKeyNotLiveFormat(CliError):
     code = CliErrorCode.INVALID_ARGUMENT
     exit_status = ExitCode.USAGE
 
+
 class EnvironmentApiKeyNotLive(CliError):
     code = CliErrorCode.AUTH_REQUIRED
     exit_status = ExitCode.AUTHENTICATION
@@ -452,7 +454,13 @@ class HarnessContext:
     def manifest_cache_dir(self) -> str: ...
 
     @staticmethod
-    def default(output: OutputManager, *, credentials: CredentialResolver, config: ResolvedConfig, paths: VidbytePaths | None = None) -> HarnessContext: ...
+    def default(
+        output: OutputManager,
+        *,
+        credentials: CredentialResolver,
+        config: ResolvedConfig,
+        paths: VidbytePaths | None = None,
+    ) -> HarnessContext: ...
 ```
 
 #### Logic / Algorithm
