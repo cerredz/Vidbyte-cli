@@ -188,7 +188,9 @@ class FakeKeyringBackend:
 class Workspace:
     """One isolated temp state tree plus the config that points at the fake backend."""
 
-    def __init__(self, api_url: str, timeout_seconds: float = 10.0) -> None:
+    def __init__(
+        self, api_url: str, timeout_seconds: float = 10.0, keyring_priority: float = 5.0
+    ) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="vidbyte-cli-verify-"))
         self.paths = VidbytePaths(
             config_root=self.root / "config",
@@ -205,7 +207,9 @@ class Workspace:
             request_timeout_seconds=timeout_seconds,
             provenance={field: ConfigSource.BUILT_IN for field in ConfigField},
         )
-        self.keyring = FakeKeyringBackend()
+        # A priority below 1 is how keyring reports "no real backend here", which is what puts
+        # the restricted file on disk in play instead of the OS store.
+        self.keyring = FakeKeyringBackend(keyring_priority)
         self.stdout = io.StringIO()
         self.stderr = io.StringIO()
 
@@ -217,7 +221,11 @@ class Workspace:
         )
 
     def context(
-        self, stdin: str = "", environment: dict[str, str] | None = None
+        self,
+        stdin: str = "",
+        environment: dict[str, str] | None = None,
+        output_format: OutputFormat = OutputFormat.HUMAN,
+        no_input: bool = False,
     ) -> ApplicationContext:
         # Builds a real ApplicationContext; the credential store is assigned directly because
         # the context has no injection point for it and a real keyring must never be touched.
@@ -230,9 +238,10 @@ class Workspace:
         )
         context.configure(
             InvocationOptions(
-                output_format=OutputFormat.HUMAN,
+                output_format=output_format,
                 api_url=self.config.api_url,
                 request_timeout_seconds=self.config.request_timeout_seconds,
+                no_input=no_input,
                 color=ColorMode.NEVER,
             ),
             self.config,
@@ -306,7 +315,9 @@ class VerificationSuite:
             self.check_status_classification,
             self.check_verifier,
             self.check_whoami,
+            self.check_whoami_machine_output,
             self.check_login_persistence,
+            self.check_disk_fallback_persistence,
         ):
             group()
             self.backend.reset()
@@ -631,6 +642,41 @@ class VerificationSuite:
         )
         overridden.cleanup()
 
+    def check_whoami_machine_output(self) -> None:
+        # An agent branches on the document, so its version and kind are a published contract.
+        results = self.results
+        workspace = self._workspace()
+        workspace.store().write(
+            Credentials.from_value(LIVE_KEY), workspace.config.profile, workspace.config.api_url
+        )
+        self.backend.expect(ScriptedResponse.json_body(VALID_BODY))
+        WhoamiCommand().execute(workspace.context(output_format=OutputFormat.JSON))
+        emitted = workspace.stdout.getvalue()
+        try:
+            document = json.loads(emitted)
+        except json.JSONDecodeError:
+            document = {}
+        results.check("--json whoami emits exactly one JSON document", bool(document))
+        results.check("the document declares schema_version 1", document.get("schema_version") == 1)
+        results.check(
+            "the document declares kind auth.whoami", document.get("kind") == "auth.whoami"
+        )
+        data = document.get("data", {})
+        results.check("the document carries the username", data.get("username") == "user_abc123")
+        results.check("the document carries the account tier", data.get("account_tier") == "free")
+        results.check(
+            "the document carries the credential source", data.get("credential_source") == "keyring"
+        )
+        results.check("the document holds no API key", LIVE_KEY not in emitted)
+        results.check(
+            "the document holds no session token", str(VALID_BODY["session_token"]) not in emitted
+        )
+        results.check(
+            "the document holds no email field",
+            "email" not in data and "email" not in emitted,
+        )
+        workspace.cleanup()
+
     def check_login_persistence(self) -> None:
         # The core requirement: a key reaches storage only after the server accepts it.
         results = self.results
@@ -712,6 +758,62 @@ class VerificationSuite:
             self.backend.requests[-1].path == whoami_path == AUTH_VALIDATE_PATH,
         )
         shared.cleanup()
+
+    def check_disk_fallback_persistence(self) -> None:
+        # "Never written to disk" is the literal requirement, and only this path writes a file.
+        # Every case here runs with no usable keyring, so the restricted file is the only
+        # target available and its absence is a real assertion rather than a side effect.
+        results = self.results
+
+        rejected = Workspace(self.backend.origin, keyring_priority=0.0)
+        self.backend.expect(ScriptedResponse.json_body({"error": True}, status=401))
+        try:
+            LoginCommand().execute(rejected.context(stdin=LIVE_KEY), True, True)
+        except CliError:
+            pass
+        results.check(
+            "a rejected key writes no credential file when the file store is the only option",
+            not rejected.credential_file_exists(),
+        )
+        results.check(
+            "a rejected key leaves nothing readable on disk", rejected.stored_key() is None
+        )
+        rejected.cleanup()
+
+        accepted = Workspace(self.backend.origin, keyring_priority=0.0)
+        self.backend.expect(ScriptedResponse.json_body(VALID_BODY))
+        LoginCommand().execute(accepted.context(stdin=LIVE_KEY), True, True)
+        results.check(
+            "an accepted key is written to the restricted file when consent is given",
+            accepted.credential_file_exists(),
+        )
+        results.check("the file-stored key reads back intact", accepted.stored_key() == LIVE_KEY)
+        results.check(
+            "the restricted-file warning is raised on stderr",
+            "permission-restricted file" in accepted.stderr.getvalue(),
+        )
+        accepted.cleanup()
+
+        unapproved = Workspace(self.backend.origin, keyring_priority=0.0)
+        self.backend.expect(ScriptedResponse.json_body(VALID_BODY))
+        before = len(self.backend.requests)
+        results.raises(
+            "a good key with no keyring and no consent fails rather than writing",
+            lambda: LoginCommand().execute(
+                unapproved.context(stdin=LIVE_KEY, no_input=True), True, False
+            ),
+            CliErrorCode.INVALID_ARGUMENT,
+            ExitCode.USAGE,
+        )
+        results.check(
+            "verification still ran before storage was refused",
+            len(self.backend.requests) == before + 1,
+        )
+        results.check(
+            "a verified key with nowhere approved to live is not written",
+            not unapproved.credential_file_exists() and unapproved.stored_key() is None,
+        )
+        unapproved.cleanup()
 
 
 def main() -> int:
