@@ -73,7 +73,7 @@ exposes the varying parts as small typed hooks with defaults.
 - **`HarnessModule` (protocol)** — the whole contract: `name`, `description`,
   `commands(ctx)`, `register(parent, ctx)`.
 - **`BaseHarness`** — implements `register` (builds the click subtree) and `dispatch` (the
-  shared lifecycle: `require_api_key` → `repo.as_repo_ref` → translate → `create_run` →
+  shared lifecycle: `require_credentials` → `repo.as_repo_ref` → translate → `create_run` →
   optional `wait` → present → `map_harness_error`). Authors never touch click or httpx.
 - **`HarnessCommandDef`** — a command as data plus two optional hooks (`to_invocation`,
   `present`). Composition over deep inheritance: a trivial command overrides nothing.

@@ -526,7 +526,7 @@ and config/login/logout command behavior that does not yet require research.
 
 ```python
 class ProfileConfig(BaseModel):
-    api_url: str = "https://api.vidbyte.ai"
+    api_url: str = "https://vidbyte-backend.onrender.com"
     output_format: OutputFormat = OutputFormat.HUMAN
     color: ColorMode = ColorMode.AUTO
     request_timeout_seconds: float = 30.0
@@ -1487,7 +1487,7 @@ the same existing file. No source file is deleted in this program.
 | mypy | Dev dependency, strict | Static type gate | Click dynamic callbacks need explicit annotations |
 | build | Dev dependency | sdist/wheel creation | Packaging errors become required gate failures |
 | twine | Dev dependency | Distribution metadata validation | No publication is authorized |
-| Vidbyte API | `https://api.vidbyte.ai` plus localhost override | Auth, harness, research, export operations | Research read/export routes are assumed, not in PR #284 |
+| Vidbyte API | `https://vidbyte-backend.onrender.com` plus localhost override | Auth, harness, research, export operations | Research read/export routes are assumed, not in PR #284 |
 | OS keyring | macOS/Windows/Linux system service | Secure API-key storage | Service may be unavailable or locked |
 
 No `tenacity`, `rich`, Typer, asyncio framework, DI container, or generated full API client
