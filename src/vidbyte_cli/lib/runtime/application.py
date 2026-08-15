@@ -1,17 +1,14 @@
-"""One CLI invocation: read root policy, build the tree, attach one harness, dispatch.
+"""One CLI invocation: read root policy, build the command tree, dispatch.
 
 This is the composition root. `run()` returns a status instead of calling `sys.exit`, so the
-application can be embedded in another Python process, and every failure — Click's included
-— leaves through the single ErrorHandler boundary rather than being printed here.
+application can be embedded in another Python process, and every failure — Click's included —
+leaves through the single ErrorHandler boundary rather than being printed here.
 
-The two-pass argv inspection is unchanged from the accepted design: click builds its tree
-synchronously but a manifest arrives over the network, so pass 1 registers the static
-surface and pass 2 attaches only the harness namespace argv actually names. Root options are
-read before pass 2 so help, version, and invalid syntax never construct a harness context.
-
-Root flags are overrides, not the final answer: they are handed to the config resolver,
-which layers them over the environment and the selected profile. An invocation that exits
-before running a command skips that resolution entirely, so `--help` never reads a file.
+Root options are inspected before Click parses, because `--format` and `--debug` decide how a
+parse failure is rendered and Click's own errors leave through that same boundary. They are
+overrides, not the final answer: the resolver layers them over the environment and the
+selected profile. An invocation that exits before running a command skips that resolution
+entirely, so `--help` never reads a file.
 """
 
 from __future__ import annotations
@@ -23,20 +20,13 @@ from contextlib import redirect_stderr, redirect_stdout
 import click
 
 from ...commands import register_all_commands
-from ...harnesses import static_harness_map
 from ..config import ConfigOverrides
 from ..errors.failures import ConflictingOutputFormat
-from ..harness.catalog import HarnessCatalog
-from ..harness.registry import HarnessRegistry
 from ..io import IOStreams
 from ..output.formats import ColorMode, OutputFormat
 from .context import ApplicationContext, InvocationOptions
-from .options import RootInspection, RootOptionInspector, RootOptionValues
+from .options import RootOptionInspector, RootOptionValues
 from .version import current_version
-
-# Static verbs under `harness`; a token matching one of these is not a harness namespace, so
-# we must never try to load a manifest for it.
-_GENERIC_HARNESS_VERBS = frozenset({"run", "status", "list", "catalog"})
 
 
 class CliApplication:
@@ -48,14 +38,12 @@ class CliApplication:
         self._streams = self._context.streams
 
     def run(self, argv: Sequence[str] | None = None) -> int:
-        # Build, attach, and dispatch inside one trap so every exit path is a return code.
+        # Build, configure, and dispatch inside one trap so every exit path is a return code.
         arguments = list(sys.argv if argv is None else argv)
         try:
             program = self._build_program()
-            harness_group = register_all_commands(program)
-            inspection = self._preconfigure(arguments)
-            if inspection is not None and inspection.attach_allowed:
-                self._attach_harness(inspection, harness_group)
+            register_all_commands(program)
+            self._preconfigure(arguments)
             return self._invoke(program, arguments)
         except (Exception, KeyboardInterrupt) as error:  # noqa: BLE001 - the process boundary.
             return self._context.error_handler().handle(error)
@@ -67,7 +55,10 @@ class CliApplication:
         # The root group; its callback publishes the invocation context to every command.
         application_context = self._context
 
-        @click.group(name="vidbyte-cli", help="Universal Vidbyte CLI: auth, harness runs, config")
+        @click.group(
+            name="vidbyte-cli",
+            help="Vidbyte CLI: authenticate and run Vidbyte research threads",
+        )
         @click.version_option(current_version(), "--version")
         @click.option(
             "--format",
@@ -94,40 +85,15 @@ class CliApplication:
 
         return program
 
-    def _preconfigure(self, argv: Sequence[str]) -> RootInspection | None:
+    def _preconfigure(self, argv: Sequence[str]) -> None:
         # Invalid root syntax stays service-free and is later rendered by Click.
         inspection = RootOptionInspector(argv).inspect()
         if inspection is None:
-            return None
+            return
         # Help and version exit before any command, and resolving configuration would read
         # the filesystem on their behalf.
         if not inspection.exits_before_command:
             self._configure_context(inspection.values)
-        return inspection
-
-    def _attach_harness(self, inspection: RootInspection, harness_group: click.Group) -> None:
-        # Load at most the one requested harness, keeping every other command network-free.
-        namespace = self._harness_namespace(inspection)
-        if namespace is None:
-            return
-        ctx = self._context.harness_context()
-        HarnessRegistry(static_harness_map(), HarnessCatalog(ctx)).attach(
-            harness_group, namespace, ctx
-        )
-
-    def _harness_namespace(self, inspection: RootInspection) -> str | None:
-        # Only the command suffix is searched, so a root option value such as
-        # `--profile harness` can never be mistaken for a namespace. Generic verbs and the
-        # harness group's own options are not namespaces either.
-        if inspection.exits_before_command:
-            return None
-        arguments = inspection.command_arguments
-        if len(arguments) < 2 or arguments[0] != "harness":
-            return None
-        namespace = arguments[1]
-        if namespace.startswith("-") or namespace in _GENERIC_HARNESS_VERBS:
-            return None
-        return namespace
 
     def _invoke(self, program: click.Group, argv: Sequence[str]) -> int:
         # Click writes to the process streams, so bind them to the invocation-owned channels.

@@ -1,14 +1,13 @@
-"""A service-free read of the root-option prefix, before any dynamic command can exist.
+"""A service-free read of the root-option prefix, before Click parses anything.
 
-Click needs a harness namespace to exist before it dispatches, but `--format` and `--debug`
-have to take effect *before* an optional harness context is built, since that context may
-read credentials or fetch a manifest. So the root prefix is scanned once here, cheaply,
-and Click remains the authoritative parser that renders every syntax error.
+`--format` and `--debug` decide how a *parse failure* is rendered, and Click's own syntax
+errors leave through the same ErrorHandler boundary as everything else. So the root prefix is
+scanned once here, cheaply, and the resulting policy is settled before Click runs. Click
+remains the authoritative parser; this scan never renders and never decides an invocation.
 
-Scanning only the prefix is the point: a rewrite that searched argv for `harness` would read
-`--profile harness` as a namespace and trigger remote work on a help invocation. When syntax
-turns invalid after a valid machine-output prefix, that output policy is kept for Click's
-structured error but attachment is refused.
+Scanning only the prefix is the point: the scan stops at the first positional token, so no
+command name or argument value can be mistaken for a root option. When syntax turns invalid
+after a valid machine-output prefix, that output policy is kept for Click's structured error.
 
 An unpassed option stays `None` rather than taking a default here. These values are the
 top layer of configuration precedence, and a default invented at the parser would outrank
@@ -50,12 +49,10 @@ class RootOptionValues:
 
 @dataclass(frozen=True)
 class RootInspection:
-    """Validated root policy plus the untouched top-level command suffix."""
+    """Validated root policy, and whether the invocation exits before any command runs."""
 
     values: RootOptionValues
-    command_arguments: tuple[str, ...]
     exits_before_command: bool = False
-    attach_allowed: bool = True
 
 
 class RootOptionInspector:
@@ -93,8 +90,7 @@ class RootOptionInspector:
             self._index += 1
         if not self._valid():
             return None
-        suffix = tuple(self._tokens[self._index :])
-        return RootInspection(self._freeze(), suffix, exits_before_command)
+        return RootInspection(self._freeze(), exits_before_command)
 
     def _consume(self, name: str, separator: str, inline_value: str) -> bool:
         # False means "this is not a root option Click would accept" — never a guess.
@@ -145,10 +141,11 @@ class RootOptionInspector:
         return self._output_format in valid_formats and self._color in valid_colors
 
     def _invalid(self) -> RootInspection | None:
-        # Keep an already-valid machine mode for Click's error, but never attach services.
+        # Returning the scanned policy rather than None is what keeps `--format json` in force
+        # for the machine error document Click's rejection is about to produce.
         if not self._valid():
             return None
-        return RootInspection(self._freeze(), (), attach_allowed=False)
+        return RootInspection(self._freeze())
 
     def _freeze(self) -> RootOptionValues:
         # Freeze before policy leaves the parser boundary.

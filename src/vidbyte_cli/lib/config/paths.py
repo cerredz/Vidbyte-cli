@@ -48,11 +48,6 @@ class VidbytePaths:
         # settings file, and must never sit in the cache the CLI may clear.
         return self.data_root / "credentials.json"
 
-    def manifests_dir(self) -> Path:
-        # Cached manifests are re-fetchable, so they belong in cache and may be evicted;
-        # this is what lets `harness <name> --help` work offline.
-        return self.cache_root / "manifests"
-
     def operations_dir(self) -> Path:
         return self.state_root / "operations"
 
@@ -61,6 +56,3 @@ class VidbytePaths:
 
     def legacy_credentials_file(self) -> Path:
         return self.legacy_root / "credentials.json"
-
-    def legacy_manifests_dir(self) -> Path:
-        return self.legacy_root / "manifests"

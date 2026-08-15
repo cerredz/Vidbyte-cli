@@ -1,8 +1,8 @@
 """Typed HTTP client for the Vidbyte public API.
 
 Owns the base URL, API-key header injection, bounded response decoding, and status-driven
-failure classification. Commands and harnesses never call httpx directly — all HTTP goes
-through a typed endpoint group built on this client.
+failure classification. Commands never call httpx directly — all HTTP goes through a typed
+endpoint group built on this client.
 
 Settings and the credential arrive already resolved, so this client never reads the
 environment: doing so would let a stale variable outrank an explicit option and would skip
@@ -77,11 +77,6 @@ class ApiClient:
         # POSTs with no body and validates the response object itself, not an envelope's `data`.
         response = self._send("POST", path, None, None, route_not_found=True)
         return self._decoder.one(response, model, ResponseShape.DIRECT)
-
-    def get_list(self, path: str, model: type[TModel]) -> list[TModel]:
-        # GET returning an enveloped list payload, each item validated into `model`.
-        response = self._send("GET", path, None, None)
-        return self._decoder.many(response, model)
 
     def post(
         self,

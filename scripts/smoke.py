@@ -42,10 +42,6 @@ class Case:
 CASES = [
     Case(["--help"]),
     Case(["--version"]),
-    Case(["harness", "--help"]),
-    Case(["harness", "software-engineering", "--help"]),
-    Case(["harness", "software-engineering", "fix", "--help"]),
-    Case(["connect", "--help"]),
     Case(["config", "--help"]),
     Case(["research", "--help"]),
     Case(["research", "start", "--help"]),
@@ -60,8 +56,13 @@ CASES = [
     # rejection, and with credentials absent these would exit 4 instead of 2.
     Case(["research", "add", "not-a-share-token", "prompt"], 2, "INVALID_ARGUMENT"),
     Case(["research", "thread", "not-a-share-token"], 2, "INVALID_ARGUMENT"),
-    # An option value must never be read as a dynamic harness namespace.
-    Case(["harness", "--not-an-option", "namespace"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    # The removed surface must be indistinguishable from a command that never existed: an
+    # unknown-command usage error, never NOT_IMPLEMENTED. These cover the group, a generic
+    # verb, the deepest previously-valid harness path, and the connect flow.
+    Case(["harness"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    Case(["harness", "catalog"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    Case(["harness", "software-engineering", "fix", "task"], 2, "INVALID_ARGUMENT"),
+    Case(["connect", "github"], exit_code=2, error_code="INVALID_ARGUMENT"),
     # doctor is the one implemented command that reads local state end to end, so it proves
     # config resolution and credential lookup work against an empty isolated home.
     Case(["doctor"]),

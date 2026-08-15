@@ -19,7 +19,6 @@ from pydantic import ValidationError
 from ..auth.credentials import Credentials
 from ..auth.keyring_store import KeyringCredentialStore
 from ..errors.failures import LegacyCredentialUnreadable, MigrationVerificationFailed
-from .atomic import AtomicFileWriter
 from .config import ConfigStore
 from .models import DEFAULT_API_URL, DEFAULT_PROFILE
 from .paths import VidbytePaths
@@ -30,9 +29,7 @@ class MigrationResult:
     """Safe migration facts that never contain copied content."""
 
     config_copied: bool = False
-    manifests_copied: int = 0
     credential_migrated: bool = False
-    skipped_symlinks: int = 0
 
 
 class StateMigration:
@@ -43,22 +40,15 @@ class StateMigration:
         paths: VidbytePaths,
         config: ConfigStore,
         keyring: KeyringCredentialStore,
-        writer: AtomicFileWriter | None = None,
     ) -> None:
         self._paths = paths
         self._config = config
         self._keyring = keyring
-        self._writer = writer or AtomicFileWriter()
 
     def migrate_if_needed(self) -> MigrationResult:
-        config_copied = self._migrate_config()
-        manifests_copied, skipped_symlinks = self._migrate_manifests()
-        credential_migrated = self._migrate_credential()
         return MigrationResult(
-            config_copied=config_copied,
-            manifests_copied=manifests_copied,
-            credential_migrated=credential_migrated,
-            skipped_symlinks=skipped_symlinks,
+            config_copied=self._migrate_config(),
+            credential_migrated=self._migrate_credential(),
         )
 
     def _migrate_config(self) -> bool:
@@ -73,30 +63,6 @@ class StateMigration:
         if verified.document != snapshot.document or verified.legacy:
             raise MigrationVerificationFailed()
         return True
-
-    def _migrate_manifests(self) -> tuple[int, int]:
-        source_root = self._paths.legacy_manifests_dir()
-        if not source_root.exists():
-            return 0, 0
-        copied = 0
-        skipped = 0
-        for source in source_root.rglob("*"):
-            # A symlink in the legacy tree could point anywhere; copying through it would
-            # pull an arbitrary file into the cache under a manifest's name.
-            if source.is_symlink():
-                skipped += 1
-                continue
-            if not source.is_file():
-                continue
-            destination = self._paths.manifests_dir() / source.relative_to(source_root)
-            if destination.exists():
-                continue
-            content = source.read_bytes()
-            self._writer.write(destination, content)
-            if destination.read_bytes() != content:
-                raise MigrationVerificationFailed()
-            copied += 1
-        return copied, skipped
 
     def _migrate_credential(self) -> bool:
         source = self._paths.legacy_credentials_file()

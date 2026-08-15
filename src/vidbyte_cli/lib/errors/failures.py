@@ -14,29 +14,6 @@ from .cli_error import CliError
 from .codes import CliErrorCode, ExitCode
 
 
-class NotImplementedFeature(CliError):
-    """A scaffolded command or service with no implementation in this release."""
-
-    code = CliErrorCode.NOT_IMPLEMENTED
-    exit_status = ExitCode.OPERATIONAL_FAILURE
-
-    def __init__(self, subject: str) -> None:
-        super().__init__(
-            f"{subject} is not implemented yet.",
-            description=(
-                f"The CLI recognizes {subject} and parsed the invocation successfully, but the "
-                "behavior behind it has not shipped in this release. Nothing was sent to the "
-                "Vidbyte backend and no local state changed. Changing arguments or retrying "
-                "will not help until the implementing release lands."
-            ),
-            trace=(
-                "CliApplication.run built the static command tree, Click matched and validated "
-                "this command, and the command callback reached its unimplemented body."
-            ),
-            hint="Check the CLI release notes for availability.",
-        )
-
-
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 
@@ -147,61 +124,12 @@ class AuthenticationRequired(CliError):
                 "the key is reused by every later invocation."
             ),
             trace=(
-                "A command requiring the Vidbyte API — BaseHarness.dispatch through "
-                "HarnessContext.require_credentials, or WhoamiCommand.execute directly — "
-                "reached CredentialResolver.resolve, which found no key in the environment, "
-                "the keyring, or the restricted file for this profile and host."
+                "A command requiring the Vidbyte API — a research command through "
+                "ApplicationContext.api_client, or WhoamiCommand.execute directly — reached "
+                "CredentialResolver.resolve, which found no key in the environment, the "
+                "keyring, or the restricted file for this profile and host."
             ),
             hint="Run 'vidbyte-cli login' first.",
-        )
-
-
-class HarnessInvocationFailed(CliError):
-    """An unclassified failure escaped the generic harness lifecycle."""
-
-    code = CliErrorCode.OPERATION_FAILED
-    exit_status = ExitCode.OPERATIONAL_FAILURE
-    retryable = True
-
-    def __init__(self, cause: Exception) -> None:
-        super().__init__(
-            "The harness invocation failed.",
-            description=(
-                "The harness run was submitted or polled and the backend lifecycle raised "
-                "something the CLI cannot yet classify. The underlying exception is withheld "
-                "because transport errors routinely quote URLs, headers, and response bodies. "
-                "This class of failure is usually transient, so retrying is reasonable."
-            ),
-            trace=(
-                "BaseHarness.dispatch authenticated, translated the command through "
-                "InvocationBuilder, and called a harness endpoint, whose failure reached "
-                "map_harness_error."
-            ),
-            hint="Retry the command. If the problem continues, use --debug for redacted details.",
-            cause=cause,
-        )
-
-
-class MissingHarnessArgument(CliError):
-    """A declared required harness argument was absent from the invocation."""
-
-    code = CliErrorCode.INVALID_ARGUMENT
-    exit_status = ExitCode.USAGE
-
-    def __init__(self, command: str, argument: str) -> None:
-        super().__init__(
-            f"Missing required argument '{argument}' for command '{command}'.",
-            description=(
-                f"The harness manifest declares '{argument}' as required for '{command}', and "
-                "the parsed invocation supplied no value for it. Nothing was submitted to the "
-                "backend. Status 2 separates this caller-side mistake from an operational "
-                "failure, so an agent can correct the call and retry immediately."
-            ),
-            trace=(
-                "BaseHarness.dispatch delegated to InvocationBuilder.build, which mapped Click's "
-                "flat parameters onto the declared arguments and found this one unset."
-            ),
-            hint=f"Pass it positionally, e.g. `{command} <{argument}>`.",
         )
 
 
@@ -549,7 +477,7 @@ class MigrationVerificationFailed(CliError):
                 "which later runs overwrite rather than trust."
             ),
             trace=(
-                "StateMigration.migrate_if_needed copied configuration, manifests, or the "
+                "StateMigration.migrate_if_needed copied the legacy configuration or the "
                 "legacy credential and compared each destination against its source."
             ),
             hint="The legacy files were preserved; retry after checking local storage.",
