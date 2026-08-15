@@ -547,8 +547,14 @@ For reference, the two client-side paths that stop being requested:
 | MODIFY | `src/vidbyte_cli/features/research/presentation/presenter.py` | Drop two renderers |
 | MODIFY | `src/vidbyte_cli/lib/runtime/context.py` | Drop `research_export_service()` and its field |
 | MODIFY | `scripts/smoke.py` | Drop five smoke cases for removed commands |
+| MODIFY | `docs/architecture.md` | Stop documenting the capability/export routes and the version-error behavior |
 
-**Totals:** 1 created, 16 modified, 1 deleted.
+**Totals:** 1 created, 17 modified, 1 deleted.
+
+`docs/architecture.md` was added during the Phase 5 refinement pass: it is the repo-level
+architecture reference and still listed `GET /research/capabilities` and `/research/exports`
+as assumed contracts, plus the "missing contracts map to an API-version error" sentence that
+describes precisely the behavior this change removes.
 
 ---
 
