@@ -1,7 +1,7 @@
 """FILE: src/vidbyte_cli/features/research/domain/ports.py
 
-PURPOSE: Defines transport-independent research gateway ports for mutations, persistent
-portfolio queries, capabilities, and exports.
+PURPOSE: Defines transport-independent research gateway ports for mutations and persistent
+portfolio queries.
 
 TESTS: No feature tests are added under the approved no-tests workflow.
 """
@@ -13,9 +13,6 @@ from typing import Protocol
 from .models import (
     Page,
     ResearchArtifact,
-    ResearchCapabilities,
-    ResearchExport,
-    ResearchExportRequest,
     ResearchRun,
     ResearchRunAccepted,
     ResearchRunRequest,
@@ -55,9 +52,3 @@ class ResearchGateway(Protocol):
     ) -> Page[ResearchArtifact]: ...
 
     def get_artifact(self, artifact_id: str) -> ResearchArtifact: ...
-
-    def capabilities(self) -> ResearchCapabilities: ...
-
-    def export(self, request: ResearchExportRequest, idempotency_key: str) -> ResearchExport: ...
-
-    def get_export(self, export_id: str) -> ResearchExport: ...

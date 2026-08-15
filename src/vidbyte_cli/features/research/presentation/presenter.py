@@ -29,8 +29,6 @@ from ..application import ResearchMutationResult
 from ..domain import (
     Page,
     ResearchArtifact,
-    ResearchCapabilities,
-    ResearchExport,
     ResearchRun,
     ResearchSource,
     ResearchThread,
@@ -187,28 +185,6 @@ class ResearchPresenter:
             lines.extend(f"- {item}" for item in value.recommendations)
         return PresentedResult(
             OutputDocument(kind="research.artifact", data=self._model_data(value)),
-            "\n".join(lines),
-        )
-
-    def capabilities(self, value: ResearchCapabilities) -> PresentedResult:
-        kinds = ", ".join(item.value for item in value.resource_kinds) or "none"
-        providers = ", ".join(value.export_providers) or "none"
-        return PresentedResult(
-            OutputDocument(kind="research.capabilities", data=self._model_data(value)),
-            "\n".join((f"Resource kinds: {kinds}", f"Export providers: {providers}")),
-        )
-
-    def export(self, value: ResearchExport) -> PresentedResult:
-        lines = [
-            f"Export: {value.export_id}",
-            f"Provider: {value.provider}",
-            f"Scope: {value.scope.value}",
-            f"Status: {value.status}",
-        ]
-        if value.destination_url is not None:
-            lines.append(f"Destination: {value.destination_url}")
-        return PresentedResult(
-            OutputDocument(kind="research.export", data=self._model_data(value)),
             "\n".join(lines),
         )
 

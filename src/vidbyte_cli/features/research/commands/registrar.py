@@ -20,17 +20,10 @@ from collections.abc import Mapping
 
 import click
 
-from .exports import (
-    ResearchExportArtifactsCommand,
-    ResearchExportPortfolioCommand,
-    ResearchExportStatusCommand,
-    ResearchExportThreadCommand,
-)
 from .mutations import ResearchAddCommand, ResearchResumeCommand, ResearchStartCommand
 from .queries import (
     ResearchArtifactGetCommand,
     ResearchArtifactsListCommand,
-    ResearchCapabilitiesCommand,
     ResearchRunsListCommand,
     ResearchSourcesListCommand,
     ResearchStatusCommand,
@@ -60,9 +53,7 @@ class ResearchCommandRegistrar:
         ResearchResumeCommand().register(research)
         ResearchStatusCommand().register(research)
         ResearchWatchCommand().register(research)
-        ResearchCapabilitiesCommand().register(research)
         self._register_queries(research)
-        self._register_exports(research)
         parent.add_command(research)
 
     def _enabled(self, environment: Mapping[str, str]) -> bool:
@@ -86,11 +77,3 @@ class ResearchCommandRegistrar:
         ResearchArtifactsListCommand().register(artifacts)
         ResearchArtifactGetCommand().register(artifacts)
         research.add_command(artifacts)
-
-    def _register_exports(self, research: click.Group) -> None:
-        exports = click.Group(name="export", help="Export research to an integration")
-        ResearchExportArtifactsCommand().register(exports)
-        ResearchExportThreadCommand().register(exports)
-        ResearchExportPortfolioCommand().register(exports)
-        ResearchExportStatusCommand().register(exports)
-        research.add_command(exports)

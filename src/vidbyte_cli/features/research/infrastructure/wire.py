@@ -7,8 +7,8 @@ ROLE IN CODEBASE: ApiResearchGateway decodes only these models. Domain services 
 the backend's `paper`/`web` vocabulary or transport-only fields.
 
 ARCHITECTURE NOTE: Mutation request fields match Vidbyte PR #284 exactly except
-`provider_keys`, which is deliberately unavailable through the CLI. Forward read/export
-DTOs ignore additive server fields while request DTOs forbid unknown client fields.
+`provider_keys`, which is deliberately unavailable through the CLI. Forward read DTOs
+ignore additive server fields while request DTOs forbid unknown client fields.
 
 TESTS: No feature tests are added under the approved no-tests workflow. Mock-transport
 verification checks exact serialized mutations and every mapper.
@@ -22,11 +22,7 @@ from typing import Generic, Literal, TypeVar, cast
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from ..domain import (
-    ExportScope,
     ResearchArtifact,
-    ResearchCapabilities,
-    ResearchExport,
-    ResearchExportRequest,
     ResearchRun,
     ResearchRunAccepted,
     ResearchRunRequest,
@@ -207,52 +203,8 @@ class ApiResearchArtifact(BaseModel):
         )
 
 
-class ApiResearchCapabilities(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True)
-
-    resource_kinds: list[WireResearchKind] = Field(default_factory=list)
-    export_providers: list[str] = Field(default_factory=list)
-    maximum_target_sources: int | None = Field(default=None, ge=1)
-    maximum_search_calls: int | None = Field(default=None, ge=1)
-
-    def to_domain(self) -> ResearchCapabilities:
-        return ResearchCapabilities(
-            resource_kinds=[_TO_DOMAIN_KIND[item] for item in self.resource_kinds],
-            export_providers=self.export_providers,
-            maximum_target_sources=self.maximum_target_sources,
-            maximum_search_calls=self.maximum_search_calls,
-        )
-
-
 class ApiResearchPage(BaseModel, Generic[_WireItem]):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     items: list[_WireItem] = Field(default_factory=list)
     next_cursor: str | None = None
-
-
-class ApiResearchExportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    provider: str
-    scope: ExportScope
-    artifact_ids: list[str] = Field(default_factory=list)
-    thread_id: str | None = None
-
-    @classmethod
-    def from_domain(cls, request: ResearchExportRequest) -> ApiResearchExportRequest:
-        return cls.model_validate(request.model_dump())
-
-
-class ApiResearchExport(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True)
-
-    export_id: str
-    provider: str
-    scope: ExportScope
-    status: str
-    destination_url: str | None = None
-    created_at: datetime | None = None
-
-    def to_domain(self) -> ResearchExport:
-        return ResearchExport.model_validate(self.model_dump())

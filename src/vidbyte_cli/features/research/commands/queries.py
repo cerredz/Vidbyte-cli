@@ -1,7 +1,7 @@
 """FILE: src/vidbyte_cli/features/research/commands/queries.py
 
-PURPOSE: Declares status, watch, cursor-list, artifact-read, and capability commands for
-durable research resources.
+PURPOSE: Declares status, watch, cursor-list, and artifact-read commands for durable
+research resources.
 
 ROLE IN CODEBASE: Query callbacks contain no transport logic. They call query/watcher
 application services and use ResearchPresenter for both human and machine contracts.
@@ -139,12 +139,3 @@ class ResearchArtifactGetCommand:
                 context,
                 ResearchPresenter().artifact(artifact, output, force=force),
             )
-
-
-class ResearchCapabilitiesCommand:
-    def register(self, parent: click.Group) -> None:
-        @parent.command(name="capabilities", help="Show server research and export capabilities")
-        @click.pass_obj
-        def _run(context: ApplicationContext) -> None:
-            value = context.research_query_service().capabilities()
-            emit(context, ResearchPresenter().capabilities(value))

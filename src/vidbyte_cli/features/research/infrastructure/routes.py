@@ -5,8 +5,8 @@ PURPOSE: Centralizes every confirmed and assumed public research API path.
 ROLE IN CODEBASE: ApiResearchGateway is the only consumer. Opaque path segments are quoted
 here so identifiers can never alter route structure.
 
-ARCHITECTURE NOTE: Mutation paths are confirmed from Vidbyte PR #284. Read, capability, and
-export paths are explicitly assumed forward contracts until their backend PR lands.
+ARCHITECTURE NOTE: Mutation paths are confirmed from Vidbyte PR #284. Read paths are
+explicitly assumed forward contracts until their backend PR lands.
 
 TESTS: No feature tests are added under the approved no-tests workflow. Mock-transport
 verification covers path construction before the final draft PR is opened.
@@ -23,8 +23,6 @@ class ResearchRoutes:
     CREATE_RUN = "/research/run"
     RUNS = "/research/runs"
     THREADS = "/research/threads"
-    CAPABILITIES = "/research/capabilities"
-    EXPORTS = "/research/exports"
 
     def append_run(self, thread_id: str) -> str:
         return f"/research/threads/{self._segment(thread_id)}/run"
@@ -45,9 +43,6 @@ class ResearchRoutes:
 
     def artifact(self, artifact_id: str) -> str:
         return f"/research/artifacts/{self._segment(artifact_id)}"
-
-    def export(self, export_id: str) -> str:
-        return f"/research/exports/{self._segment(export_id)}"
 
     def page(self, path: str, cursor: str | None) -> str:
         return self._cursor(path, cursor)
