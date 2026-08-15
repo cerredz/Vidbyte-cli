@@ -1,8 +1,8 @@
 # `src/vidbyte_cli`
 
 The installable Python package. It owns the executable bootstrap and the package's public
-surface, and delegates everything else — commands, platform mechanisms, harness policy, wire
-types — to narrower packages. Importing it must stay cheap and side-effect free.
+surface, and delegates everything else — commands, platform mechanisms, wire types — to
+narrower packages. Importing it must stay cheap and side-effect free.
 
 **Blast radius:** loaded by the `vidbyte-cli` console script and `python -m vidbyte_cli`, so
 its direct files affect every invocation and the packaging smoke checks.
@@ -11,8 +11,7 @@ its direct files affect every invocation and the packaging smoke checks.
 
 - No HTTP (`lib/api`), credentials (`lib/auth`), config (`lib/config`), or formatting
   (`lib/output`) here.
-- No command definitions (`commands/`), harness policy (`harnesses/`), or reusable
-  mechanisms (`lib/`) here.
+- No command definitions (`commands/`) or reusable mechanisms (`lib/`) here.
 
 ## Files
 

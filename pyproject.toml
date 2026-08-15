@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vidbyte-cli"
 version = "0.1.0"
-description = "Universal Vidbyte CLI: authentication, harness runs, and configuration"
+description = "Vidbyte CLI: authentication, research threads, and configuration"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

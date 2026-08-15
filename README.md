@@ -1,15 +1,13 @@
 # Vidbyte CLI
 
-The universal Vidbyte CLI: authenticate, run Vidbyte harnesses against your repositories,
-and manage configuration. Harnesses execute entirely on the Vidbyte backend — this CLI
-submits runs, tracks status, and retrieves results (branch / draft PR).
+The Vidbyte CLI: authenticate, run Vidbyte research threads, and manage configuration.
+Research executes entirely on the Vidbyte backend — this CLI admits runs, reads their durable
+status, and lists the threads you own.
 
-> **Status:** Python platform scaffold. Local configuration, profiles, platform paths,
-> credential resolution, `config get`/`set`, `doctor`, `logout`, `login`, and `whoami` are
-> implemented; `login` verifies a key against the backend before storing it, and `whoami`
-> reports the identity behind the stored key using that same check. The remaining network
-> commands land with the reusable HTTP platform, and commands that have not reached their
-> implementation PR return a typed "not implemented yet" error.
+> **Status:** every command listed below works against the live API today. The CLI ships a
+> command only once the backend route behind it is live, so nothing here can answer "not
+> implemented yet". Deep dives, artifact bodies, sources, and exports live on the website
+> only; they have no API-key route, so they have no command.
 
 ## Install (development)
 
@@ -25,7 +23,7 @@ status; only the generated console wrapper and `python -m vidbyte_cli` terminate
 
 ## Global options
 
-Root options precede the command: `vidbyte-cli --format json --profile work harness list`.
+Root options precede the command: `vidbyte-cli --format json --profile work research threads`.
 
 | Option | Behavior |
 | --- | --- |
@@ -48,12 +46,6 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | Command | Purpose |
 | --- | --- |
 | `vidbyte-cli login` / `logout` / `whoami` | Manage the stored Vidbyte API key |
-| `vidbyte-cli connect github` | Link GitHub for harness repository access |
-| `vidbyte-cli harness run <name> --task <task>` | Low-level generic run for the current repo |
-| `vidbyte-cli harness <name> <command> ...` | A harness's own commands (built from its manifest) |
-| `vidbyte-cli harness status <run_id>` | Show a run's status, events, and result |
-| `vidbyte-cli harness list` | List your runs |
-| `vidbyte-cli harness catalog` | List the harnesses available to run |
 | `vidbyte-cli research start <prompt>` | Open a research thread and admit its first run |
 | `vidbyte-cli research add <thread_id> <prompt>` | Add another run to an existing thread |
 | `vidbyte-cli research resume <run_id>` | Continue a partial, failed, or out-of-credit run |
@@ -103,15 +95,15 @@ leaves the originals in place.
 
 ## Architecture
 
-Each harness is effectively its own sub-CLI: `vidbyte-cli harness <name> <command> ...`,
-with the commands described by a backend manifest and built at runtime, so new harnesses
-need no CLI release. See [docs/architecture.md](docs/architecture.md) for the layering
-rules and [how to integrate a harness](docs/architecture.md#integrating-a-harness-in-srcvidbyte_cliharnessesname).
+Every command is static and known at release time, and exists only because a shipped backend
+route can answer it. The CLI calls seven routes in total — the six that make up the API-key
+research surface, plus the key-validation route behind `login` and `whoami`. See
+[docs/architecture.md](docs/architecture.md) for the layering rules and the full
+[backend contract](docs/architecture.md#backend-contract).
 
 The application composition root lives in `src/vidbyte_cli/lib/runtime`. It constructs one
 invocation context, binds stdin/stdout/stderr through `lib/io`, resolves output and error
-policy, builds the static Click tree, and attaches only the requested dynamic harness
-namespace.
+policy, and builds the Click tree.
 
 ## Verify
 
@@ -126,9 +118,10 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 
 ## Follow-ups
 
-- Implement credential verification, the catalog fetch/cache, and the `harness
-  run/status/list` behavior once the backend routes ship. `ApiClient` itself is done — the
-  research commands run on it.
+- Deep dives have no API-key route. `POST /api/research/threads/{id}/artifacts/{id}/deep` is
+  session-only, and no API-key read publishes an artifact identifier to address, so a CLI
+  command needs three backend routes rather than one: list a thread's artifacts, admit the
+  deep dive, and read its result. Until those ship, deep dives stay on the website.
 - `research start/add/resume` could take `--wait` to block after admission, and the research
   reads could take `--exit-status` to map a terminal outcome onto the shell status. The
   latter needs `CliApplication._invoke` to stop discarding a command's return value.

@@ -19,9 +19,9 @@ keys inside `data` are public compatibility contracts.
 - `formats.py` — `OutputFormat` and `ColorMode`, the root presentation vocabulary.
 - `models.py` — `OutputDocument`, the versioned envelope, and `from_error` for failures.
 - `manager.py` — `OutputManager`: format selection and the stdout/stderr contract.
-- `logger.py` — the generic harness runtime's info/warn/error, adapted onto OutputManager.
-  A compatibility shim; new code uses OutputManager directly.
-- `render.py` — human presenter for generic harness runs.
+
+Human presentation for a product's own result shapes lives beside that product — see
+`commands/research/render.py`, which emits both encodings together so they cannot drift.
 
 ## Log
 
@@ -29,3 +29,5 @@ keys inside `data` are public compatibility contracts.
   instead of process-global streams.
 - 2026-07-26 — Versioned machine documents at schema 1, so consumers can branch on `kind`.
 - 2026-07-26 — Reserved stdout for results; everything else is shell-safe on stderr.
+- 2026-08-15 — Removed `logger.py` and `render.py` with the harness runtime they served.
+  `OutputManager` is now the only writer, which is what the logger shim was deferring.
