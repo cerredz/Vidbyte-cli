@@ -65,7 +65,6 @@ _VerifierFactory = Callable[[], CredentialVerifier]
 
 if TYPE_CHECKING:
     from ...features.research.application import (
-        ResearchExportService,
         ResearchQueryService,
         ResearchService,
         ResearchWatcher,
@@ -123,7 +122,6 @@ class ApplicationContext:
         self._research_watcher: ResearchWatcher | None = None
         self._research_service: ResearchService | None = None
         self._research_queries: ResearchQueryService | None = None
-        self._research_exports: ResearchExportService | None = None
         self._idempotency: IdempotencyKeyFactory | None = None
         self._operation_recorder: OperationJournalRecorder | None = None
         self._exit_code = 0
@@ -269,17 +267,6 @@ class ApplicationContext:
 
             self._research_queries = ResearchQueryService(self.research_gateway())
         return self._research_queries
-
-    def research_export_service(self) -> ResearchExportService:
-        if self._research_exports is None:
-            from ...features.research.application import ResearchExportService
-
-            self._research_exports = ResearchExportService(
-                self.research_gateway(),
-                self._idempotency_provider(),
-                self._research_operation_recorder(),
-            )
-        return self._research_exports
 
     def set_exit_code(self, value: int) -> None:
         """Set a successful command's documented non-error outcome status."""

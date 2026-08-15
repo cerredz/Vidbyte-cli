@@ -92,11 +92,6 @@ _CASES: tuple[SmokeCase, ...] = (
     SmokeCase(("research", "sources", "list", "--help")),
     SmokeCase(("research", "artifacts", "list", "--help")),
     SmokeCase(("research", "artifacts", "get", "--help")),
-    SmokeCase(("research", "capabilities", "--help")),
-    SmokeCase(("research", "export", "artifact", "--help")),
-    SmokeCase(("research", "export", "thread", "--help")),
-    SmokeCase(("research", "export", "portfolio", "--help")),
-    SmokeCase(("research", "export", "status", "--help")),
     SmokeCase(
         ("research", "start", "offline smoke prompt", "--no-wait"),
         expected_exit=4,

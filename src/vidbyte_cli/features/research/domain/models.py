@@ -1,7 +1,7 @@
 """FILE: src/vidbyte_cli/features/research/domain/models.py
 
-PURPOSE: Defines strict research request, persistent resource, pagination, capability, and
-export vocabulary without Click or HTTPX.
+PURPOSE: Defines strict research request, persistent resource, and pagination vocabulary
+without Click or HTTPX.
 
 ROLE IN CODEBASE: Application services and the final gateway adapter exchange only these
 models. Identifiers remain opaque strings and provider credentials are intentionally absent.
@@ -181,53 +181,8 @@ class ResearchArtifact(BaseModel):
     metadata: dict[str, JsonValue] = Field(default_factory=dict)
 
 
-class ResearchCapabilities(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True)
-
-    resource_kinds: list[ResourceKind] = Field(default_factory=list)
-    export_providers: list[str] = Field(default_factory=list)
-    maximum_target_sources: int | None = Field(default=None, ge=1)
-    maximum_search_calls: int | None = Field(default=None, ge=1)
-
-
 class Page(BaseModel, Generic[TItem]):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     items: list[TItem] = Field(default_factory=list)
     next_cursor: str | None = None
-
-
-class ExportScope(StrEnum):
-    ARTIFACTS = "artifacts"
-    THREAD = "thread"
-    PORTFOLIO = "portfolio"
-
-
-class ResearchExportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    provider: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
-    scope: ExportScope
-    artifact_ids: list[OpaqueId] = Field(default_factory=list, max_length=500)
-    thread_id: OpaqueId | None = Field(default=None, max_length=200)
-
-    @model_validator(mode="after")
-    def validate_scope(self) -> ResearchExportRequest:
-        if self.scope is ExportScope.ARTIFACTS and not self.artifact_ids:
-            raise ValueError("artifact export requires at least one artifact ID")
-        if self.scope is ExportScope.THREAD and self.thread_id is None:
-            raise ValueError("thread export requires a thread ID")
-        if self.scope is ExportScope.PORTFOLIO and (self.artifact_ids or self.thread_id):
-            raise ValueError("portfolio export cannot include artifact or thread IDs")
-        return self
-
-
-class ResearchExport(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True)
-
-    export_id: OpaqueId = Field(min_length=1, max_length=200)
-    provider: str
-    scope: ExportScope
-    status: str
-    destination_url: str | None = None
-    created_at: datetime | None = None
