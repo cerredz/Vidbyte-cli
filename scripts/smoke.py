@@ -47,6 +47,19 @@ CASES = [
     Case(["harness", "software-engineering", "fix", "--help"]),
     Case(["connect", "--help"]),
     Case(["config", "--help"]),
+    Case(["research", "--help"]),
+    Case(["research", "start", "--help"]),
+    Case(["research", "add", "--help"]),
+    Case(["research", "resume", "--help"]),
+    Case(["research", "status", "--help"]),
+    Case(["research", "watch", "--help"]),
+    Case(["research", "threads", "--help"]),
+    Case(["research", "thread", "--help"]),
+    # A thread is addressed only by its public share token. These prove the guard fires
+    # locally: without it the value would reach the backend as a bare path-validation
+    # rejection, and with credentials absent these would exit 4 instead of 2.
+    Case(["research", "add", "not-a-share-token", "prompt"], 2, "INVALID_ARGUMENT"),
+    Case(["research", "thread", "not-a-share-token"], 2, "INVALID_ARGUMENT"),
     # An option value must never be read as a dynamic harness namespace.
     Case(["harness", "--not-an-option", "namespace"], exit_code=2, error_code="INVALID_ARGUMENT"),
     # doctor is the one implemented command that reads local state end to end, so it proves

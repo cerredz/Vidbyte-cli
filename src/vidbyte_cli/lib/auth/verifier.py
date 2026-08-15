@@ -17,7 +17,7 @@ from ...types.api import KeyIdentity
 from ..api.client import ApiClient
 from ..api.endpoints.auth import AuthEndpoints
 from ..config import ResolvedConfig
-from ..errors.failures import ApiProtocolError
+from ..errors.failures import ApiResponseUnsupported
 from .credentials import Credentials
 
 
@@ -34,5 +34,5 @@ class ApiCredentialVerifier:
         if not identity.success:
             # A success status that denies success is a contract this CLI cannot act on, and
             # treating it as acceptance would store a key the backend has just refused.
-            raise ApiProtocolError()
+            raise ApiResponseUnsupported()
         return identity

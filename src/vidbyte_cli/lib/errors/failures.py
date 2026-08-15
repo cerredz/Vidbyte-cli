@@ -839,6 +839,56 @@ class FileFallbackNotApproved(CliError):
         )
 
 
+class ApiRouteMisconfigured(CliError):
+    """A CLI-owned route string was not a usable relative API path."""
+
+    code = CliErrorCode.INTERNAL_ERROR
+    exit_status = ExitCode.SOFTWARE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "An invalid API route was configured in the CLI.",
+            description=(
+                "Every request path is built from constants this CLI ships, and one of them was "
+                "not a single relative path rooted at '/'. A path carrying its own scheme or "
+                "host would send the API key to an origin the caller never configured, so the "
+                "request is refused rather than sent. This is a CLI defect, not an invocation "
+                "mistake, and no arguments can work around it."
+            ),
+            trace=(
+                "An endpoint group called ApiClient.request, whose _url rejected the path "
+                "before any connection was opened."
+            ),
+            hint="Report this with the command you ran; no argument change will help.",
+        )
+
+
+class ApiResponseUnsupported(CliError):
+    """The backend replied with something this CLI cannot decode."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, request_id: str | None = None, cause: Exception | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API returned an unsupported response.",
+            description=(
+                "The request succeeded at the HTTP level, but the reply was not JSON of the "
+                "shape this CLI release expects: a wrong content type, an empty or oversized "
+                "body, or fields that failed validation. The body is not quoted back, because a "
+                "response may carry account content. A newer backend usually means this CLI is "
+                "out of date; retrying an unchanged command will produce the same result."
+            ),
+            trace=(
+                "ApiClient received a success status and handed the response to "
+                "ResponseDecoder, which bounded and validated it before returning typed data."
+            ),
+            hint="Upgrade the CLI. If it is current, report the request ID.",
+            request_id=request_id,
+            cause=cause,
+        )
+
+
 class ApiUnreachable(CliError):
     """The Vidbyte API could not be contacted at all."""
 
@@ -850,68 +900,18 @@ class ApiUnreachable(CliError):
         super().__init__(
             "The Vidbyte API could not be reached.",
             description=(
-                "The request never produced an HTTP response: name resolution, the connection, "
-                "the TLS handshake, or the read timed out or was refused. This is not a "
-                "statement about your API key, which was neither accepted nor rejected. "
-                "Nothing was verified and no credential was stored. The transport error is "
-                "withheld because it routinely quotes URLs, proxies, and headers."
+                "Connecting to the configured API host failed, or the connection was lost "
+                "before a reply arrived — typically no network route, DNS failure, a proxy, or "
+                "a timeout. The transport error is withheld because it quotes the URL and may "
+                "quote proxy configuration. Safe requests were already retried, so the failure "
+                "persisted across every attempt."
             ),
             trace=(
-                "ApiClient.post_direct called _send, whose httpx request raised a transport "
-                "error before any status line was received."
+                "ApiClient._send exhausted RetryPolicy and raised through "
+                "ApiProblemMapper.from_transport without receiving any HTTP response."
             ),
-            hint="Check connectivity and the configured API URL, then retry.",
+            hint="Check connectivity and 'vidbyte-cli config get api_url', then retry.",
             cause=cause,
-        )
-
-
-class ApiCredentialRejected(CliError):
-    """The backend refused the API key that was presented."""
-
-    code = CliErrorCode.AUTH_REQUIRED
-    exit_status = ExitCode.AUTHENTICATION
-
-    def __init__(self, request_id: str | None = None) -> None:
-        super().__init__(
-            "The Vidbyte API rejected this API key.",
-            description=(
-                "The backend answered but would not accept the key. It is unknown to the "
-                "account, revoked, disabled, or expired — the API reports one status for all "
-                "four, so the CLI cannot tell them apart. Reaching the API proves connectivity "
-                "is fine, so retrying with the same key will fail identically. Nothing was "
-                "stored, and any credential already on this machine is untouched."
-            ),
-            trace=(
-                "ApiClient.post_direct received a response outside the success range and "
-                "_failure_for_status matched its 401/403 status."
-            ),
-            hint="Issue a new API key from the Vidbyte dashboard and run login again.",
-            request_id=request_id,
-        )
-
-
-class ApiRequestRejected(CliError):
-    """The backend refused the request itself, independent of the credential."""
-
-    code = CliErrorCode.INVALID_ARGUMENT
-    exit_status = ExitCode.USAGE
-
-    def __init__(self, request_id: str | None = None) -> None:
-        super().__init__(
-            "The Vidbyte API rejected the request.",
-            description=(
-                "The backend understood the request and declined it as malformed or "
-                "conflicting, which is a caller-side mistake rather than an outage. The "
-                "response body is not quoted, because backend error prose can echo submitted "
-                "values. Nothing was stored. Status 2 separates this from an operational "
-                "failure so an agent can correct the call rather than retry it."
-            ),
-            trace=(
-                "ApiClient.post_direct received a response outside the success range and "
-                "_failure_for_status matched its 400/409/422 status."
-            ),
-            hint="Check the API URL and the supplied values, then run the command again.",
-            request_id=request_id,
         )
 
 
@@ -933,48 +933,223 @@ class ApiRouteMissing(CliError):
             ),
             trace=(
                 "ApiClient.post_direct received a response outside the success range and "
-                "_failure_for_status matched its 404 status."
+                "ApiProblemMapper classified its 404 status as a missing route."
             ),
             hint="Check 'vidbyte-cli config get api_url', then upgrade the CLI if it is correct.",
             request_id=request_id,
         )
 
 
-class ApiTemporarilyUnavailable(CliError):
-    """The backend is rate limiting or is failing on its own side."""
+class ApiCredentialsRejected(CliError):
+    """The backend refused the API key this invocation presented."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API rejected the current credentials.",
+            description=(
+                "A key was found and sent, and the backend did not accept it as an "
+                "authenticated caller. The key is usually revoked, expired, or issued for a "
+                "different host than the one configured for this profile. Nothing was submitted "
+                "and no credits were spent. The key value is never echoed."
+            ),
+            trace=(
+                "ApiClient sent the resolved credential in the x-api-key header and the "
+                "backend answered with an unauthenticated status."
+            ),
+            hint="Run 'vidbyte-cli login' for the selected profile, then retry.",
+            request_id=request_id,
+        )
+
+
+class ApiPermissionDenied(CliError):
+    """The key authenticated but lacks the scope this route requires."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The API key is missing the scope this command requires.",
+            description=(
+                "The backend recognized the key and then refused the route, which means the "
+                "credential is valid but not authorized for it. Research reads need the "
+                "'research:read' scope and research mutations need 'research:write'. Logging in "
+                "again will not help, because the same key would be stored; the scope has to be "
+                "granted where the key was issued. Nothing was submitted and no credits were "
+                "spent."
+            ),
+            trace=(
+                "ApiClient sent an authenticated request and the backend gatekeeper rejected "
+                "it after identifying the caller but before running the route."
+            ),
+            hint="Grant the required scope to this key in the Vidbyte dashboard.",
+            request_id=request_id,
+        )
+
+
+class ApiCreditExhausted(CliError):
+    """The account cannot fund the requested operation."""
+
+    code = CliErrorCode.CREDIT_EXHAUSTED
+    exit_status = ExitCode.CREDIT_EXHAUSTED
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte account does not have enough credits for this operation.",
+            description=(
+                "Priced operations reserve their cost before any work starts, and the reserve "
+                "could not be taken. Nothing was admitted and nothing was charged, so retrying "
+                "after topping up is safe. A run already in progress is unaffected by this "
+                "rejection. Status 5 is distinct from an ordinary failure so a caller can "
+                "branch on it."
+            ),
+            trace=(
+                "ApiClient submitted a priced mutation and the backend refused admission at "
+                "the wallet rail before reserving usage."
+            ),
+            hint="Add credits to the account, then run the command again.",
+            request_id=request_id,
+        )
+
+
+class ApiResourceNotFound(CliError):
+    """The addressed resource does not exist for this caller."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The requested Vidbyte resource was not found.",
+            description=(
+                "No record with that identifier is visible to this account. Reads are scoped to "
+                "the caller, so a resource owned by somebody else is indistinguishable from one "
+                "that never existed, and a deleted thread reads the same way. Check the "
+                "identifier came from this CLI's own output rather than from a browser URL or "
+                "an internal tool."
+            ),
+            trace=(
+                "ApiClient sent an owner-scoped read or mutation and the backend found no "
+                "matching record for the authenticated caller."
+            ),
+            hint="Run 'vidbyte-cli research threads' to list the identifiers you can use.",
+            request_id=request_id,
+        )
+
+
+class ApiRequestRejected(CliError):
+    """The backend refused the request as invalid."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API rejected the request.",
+            description=(
+                "One or more supplied values failed the backend's own validation, so the "
+                "operation never started and nothing was charged. The backend's field-level "
+                "detail is withheld because it quotes the submitted values, which may include "
+                "the prompt. The usual causes are a domain filter the backend has not reviewed, "
+                "a date outside the accepted range, or a bound the CLI does not yet enforce "
+                "locally."
+            ),
+            trace=(
+                "ApiClient submitted the encoded request body and the backend answered with a "
+                "client-side validation status before the operation ran."
+            ),
+            hint="Re-run with fewer options to isolate the rejected value.",
+            request_id=request_id,
+        )
+
+
+class ApiRequestConflicted(CliError):
+    """The resource is not in a state that permits this operation."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The run is not in a state that can be continued.",
+            description=(
+                "Continuing a run is legal only after it has already settled badly — partial, "
+                "failed, or out of credit. A run that is still admitting or running has not "
+                "finished, and a run that completed has nothing left to continue. Nothing was "
+                "admitted and no credits were spent. Read the run first and continue it only "
+                "once its status is one of the three resumable ones."
+            ),
+            trace=(
+                "ApiClient submitted a continuation and the backend compared the stored run "
+                "status against its terminal-resumable set before admitting any work."
+            ),
+            hint="Run 'vidbyte-cli research status <run_id>' to see the current status.",
+            request_id=request_id,
+        )
+
+
+class ApiRateLimited(CliError):
+    """The account's request budget for this window is spent."""
 
     code = CliErrorCode.API_UNAVAILABLE
     exit_status = ExitCode.OPERATIONAL_FAILURE
     retryable = True
 
     def __init__(self, request_id: str | None = None, retry_after: int | None = None) -> None:
-        # The authentication route allows only a few attempts per address per quarter hour, so
-        # this is reachable in ordinary use and its hint carries the server's own wait when given.
         wait = (
-            f"Wait {retry_after} seconds and retry."
+            f"Wait {retry_after} seconds before retrying."
             if retry_after is not None
-            else "Wait a short while and retry."
+            else "Wait a minute before retrying, and avoid polling faster than every 10s."
         )
         super().__init__(
-            "The Vidbyte API is temporarily unavailable.",
+            "The Vidbyte API request budget for this key is exhausted.",
             description=(
-                "The backend answered with a rate limit or a server-side failure rather than a "
-                "verdict on the request. Authentication attempts in particular are limited per "
-                "network address over a rolling window, so several logins or identity checks in "
-                "quick succession can land here. This says nothing about your API key. Nothing "
-                "was stored, and the same request is safe to repeat later."
+                "Requests are rate limited per key on a weighted per-minute budget, and "
+                "starting a research run costs far more of that budget than reading one. The "
+                "CLI already retried within its own bound and the limit still applied, so "
+                "nothing was submitted. Waiting a minute is usually enough; polling in a tight "
+                "loop is what exhausts the budget in the first place."
             ),
             trace=(
-                "ApiClient.post_direct received a response outside the success range and "
-                "_failure_for_status matched its 429 or 5xx status."
+                "ApiClient exhausted RetryPolicy against a rate-limited status and raised "
+                "through ApiProblemMapper.from_response."
             ),
             hint=wait,
             request_id=request_id,
         )
 
 
+class ApiUnavailable(CliError):
+    """The backend failed to serve the request."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API is temporarily unavailable.",
+            description=(
+                "The backend accepted the connection and then failed while handling the "
+                "request. Safe requests were already retried within this invocation and the "
+                "failure persisted. Whether the operation took effect is unknown for a "
+                "mutation, so re-run it with the same --idempotency-key rather than a fresh "
+                "one if you need to be certain it happens exactly once."
+            ),
+            trace=(
+                "ApiClient exhausted RetryPolicy against a server-error status and raised "
+                "through ApiProblemMapper.from_response."
+            ),
+            hint="Retry after a short delay; reuse --idempotency-key for a mutation.",
+            request_id=request_id,
+        )
+
+
 class ApiOperationFailed(CliError):
-    """The backend returned a status the CLI has no specific handling for."""
+    """The backend answered with a status this CLI does not classify."""
 
     code = CliErrorCode.OPERATION_FAILED
     exit_status = ExitCode.OPERATIONAL_FAILURE
@@ -983,65 +1158,87 @@ class ApiOperationFailed(CliError):
         super().__init__(
             "The Vidbyte API could not complete the operation.",
             description=(
-                "The response status falls outside every case the CLI classifies, which "
-                "includes a redirect the client deliberately refused to follow. Redirects are "
-                "not followed because doing so would replay the API key to a host the caller "
-                "never configured. Nothing was stored. The response body is not quoted, because "
-                "an unclassified response may hold anything."
+                "The reply carried a failure status that this CLI release has no specific "
+                "handling for, so it is reported without guessing at a cause. The response body "
+                "is not quoted, because it may carry account content. Whether the operation "
+                "took effect is unknown; read the resource before retrying a mutation."
             ),
             trace=(
-                "ApiClient.post_direct received a response outside the success range and "
-                "_failure_for_status fell through to its default arm."
+                "ApiClient received a non-success status that matched no specific arm of "
+                "ApiProblemMapper.from_response."
             ),
             hint="Retry once, then report the request ID if the problem continues.",
             request_id=request_id,
         )
 
 
-class ApiProtocolError(CliError):
-    """A successful response did not carry a payload the CLI can trust."""
+class ResearchThreadIdInvalid(CliError):
+    """A supplied thread identifier is not a public thread share token."""
 
-    code = CliErrorCode.API_PROTOCOL_ERROR
-    exit_status = ExitCode.OPERATIONAL_FAILURE
-
-    def __init__(self, cause: Exception | None = None) -> None:
-        super().__init__(
-            "The Vidbyte API returned an unsupported response.",
-            description=(
-                "The status said success but the body did not: it was empty, oversized, not "
-                "JSON, not the expected shape, or declared its own failure. A captive portal or "
-                "a proxy error page reaches here too, which is exactly why the CLI refuses to "
-                "read success from the status alone. Nothing was verified and nothing was "
-                "stored, because an unreadable answer is not an approval."
-            ),
-            trace=(
-                "ApiClient.post_direct passed a success response to _decode, which checks media "
-                "type, size, JSON validity, and the declared model before returning."
-            ),
-            hint="Confirm the configured API URL points at the Vidbyte API, then retry.",
-            cause=cause,
-        )
-
-
-class ApiRequestPathInvalid(CliError):
-    """An endpoint group asked the client to send a request somewhere unsafe."""
-
-    code = CliErrorCode.INTERNAL_ERROR
-    exit_status = ExitCode.SOFTWARE
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
 
     def __init__(self) -> None:
         super().__init__(
-            "The CLI built an invalid API request path.",
+            "That is not a valid research thread ID.",
             description=(
-                "Only CLI code constructs request paths, so a path that is absolute, "
-                "protocol-relative, or missing its leading slash is a defect in this release "
-                "rather than anything the caller did. It is refused before a socket is opened, "
-                "because such a path could send the API key to a host the caller never "
-                "configured. No request was made and nothing was stored."
+                "A research thread is addressed only by the public share token the API "
+                "publishes, which is a UUID. The value supplied does not have that shape, so it "
+                "is refused here rather than spent on a request the backend would reject during "
+                "path validation. The most common cause is pasting an internal identifier from "
+                "another tool. Nothing was submitted and no credits were spent."
             ),
             trace=(
-                "An endpoint group called ApiClient.post_direct, whose _url rejected the "
-                "supplied path before joining it onto the configured origin."
+                "The research command parsed its arguments and called ThreadId.parse before "
+                "resolving credentials or constructing an API client."
             ),
-            hint="Report this with the command you ran; no local change will fix it.",
+            hint="Run 'vidbyte-cli research threads' and copy the ID it prints.",
+        )
+
+
+class ResearchIdempotencyKeyInvalid(CliError):
+    """An explicit --idempotency-key was outside the accepted format."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The idempotency key must be 8-128 URL-safe characters.",
+            description=(
+                "An explicit idempotency key is what lets a priced mutation be retried without "
+                "being charged twice, so it has to survive a URL and an HTTP header unchanged. "
+                "Letters, digits, period, underscore, colon, and hyphen are accepted. The "
+                "supplied value is refused before the request is built, so nothing was "
+                "submitted. Omit the option entirely to have one generated."
+            ),
+            trace=(
+                "The research command called IdempotencyKey.create with the explicit "
+                "--idempotency-key value before any credential was resolved."
+            ),
+            hint="Pass a UUID, or omit --idempotency-key to generate one.",
+        )
+
+
+class ResearchWatchTimedOut(CliError):
+    """The local wait expired while the run was still in progress."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(
+            "The local wait expired before the research run finished.",
+            description=(
+                "Only the local wait ended. The run is still executing on the backend and will "
+                "settle on its own, so nothing was cancelled and no credits were refunded or "
+                "re-spent. Research runs routinely outlast a short --timeout. Read the run "
+                "again later, or watch it again with a longer timeout."
+            ),
+            trace=(
+                "ResearchWatchCommand polled the run status until the elapsed time reached the "
+                "--timeout bound without observing a terminal status."
+            ),
+            hint=f"Run 'vidbyte-cli research status {run_id}' to check on it.",
         )

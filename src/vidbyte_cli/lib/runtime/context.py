@@ -18,15 +18,19 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from ..api.client import ApiClient
+from ..api.endpoints.research import ResearchEndpoints
 from ..auth import (
     ApiCredentialVerifier,
     CredentialResolver,
     CredentialStore,
     CredentialVerifier,
 )
+from ..auth.credentials import Credentials
 from ..config import ConfigResolver, ConfigStore, ResolvedConfig, VidbytePaths
 from ..config.migration import StateMigration
 from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
+from ..errors.failures import AuthenticationRequired
 from ..errors.handler import ErrorHandler
 from ..harness.context import HarnessContext
 from ..io import IOStreams
@@ -77,6 +81,8 @@ class ApplicationContext:
         self._errors = ErrorHandler(self._output)
         self._harness_factory = harness_factory or self._build_harness_context
         self._harness_context: HarnessContext | None = None
+        self._api_client: ApiClient | None = None
+        self._research_endpoints: ResearchEndpoints | None = None
 
     def configure(self, options: InvocationOptions, config: ResolvedConfig) -> None:
         # The harness context captured the current OutputManager, so changing policy after
@@ -138,6 +144,31 @@ class ApplicationContext:
         if self._verifier is None:
             self._verifier = self._verifier_factory()
         return self._verifier
+
+    def require_credentials(self) -> Credentials:
+        # The API key for this invocation's profile and host, or a clean failure if none.
+        config = self.resolved_config()
+        resolved = self.credential_resolver().resolve(config.profile, config.api_url)
+        if resolved is None:
+            raise AuthenticationRequired()
+        return resolved.credentials
+
+    def api_client(self) -> ApiClient:
+        # One client per invocation, so a polling command reuses a single connection pool.
+        if self._api_client is None:
+            self._api_client = ApiClient(self.resolved_config(), self.require_credentials())
+        return self._api_client
+
+    def research_endpoints(self) -> ResearchEndpoints:
+        # The authenticated research route group; requires a logged-in user.
+        if self._research_endpoints is None:
+            self._research_endpoints = ResearchEndpoints(self.api_client())
+        return self._research_endpoints
+
+    def close(self) -> None:
+        # Releases network resources this invocation opened; a help path opened none.
+        if self._api_client is not None:
+            self._api_client.close()
 
     def output(self) -> OutputManager:
         # Callers share one policy object so stdout cardinality stays enforceable.
