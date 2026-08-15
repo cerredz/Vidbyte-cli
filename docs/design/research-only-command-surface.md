@@ -566,7 +566,46 @@ is empty and stays; `lib/api/endpoints/__init__.py` is empty and stays.
 
 ---
 
-### 6.10 Agent skill
+### 6.10 Legacy state migration
+
+**File(s):** `src/vidbyte_cli/lib/config/migration.py`, `src/vidbyte_cli/lib/config/paths.py`
+**Type:** Modified
+
+#### What it does
+
+Copies compatible `~/.vidbyte` state into the platform-native locations and verifies each
+copy. After this change it migrates configuration and the credential, and nothing else.
+
+#### Interface / API
+
+```python
+@dataclass(frozen=True)
+class MigrationResult:
+    """Safe migration facts that never contain copied content."""
+
+    config_copied: bool = False
+    credential_migrated: bool = False
+```
+
+#### Logic / Algorithm
+
+1. Delete `_migrate_manifests` and the `manifests_copied` / `skipped_symlinks` fields.
+2. `migrate_if_needed` becomes two calls composed directly into the result.
+3. Delete the `writer: AtomicFileWriter | None` constructor parameter, `self._writer`, and the
+   `AtomicFileWriter` import — the manifest walk was its only user.
+4. Delete `VidbytePaths.manifests_dir()` and `VidbytePaths.legacy_manifests_dir()`.
+5. Amend `MigrationVerificationFailed.trace`, which names manifests as one of the three things
+   migration copies.
+
+#### Edge Cases & Error Handling
+
+- `LoginCommand.execute` calls `migrate_if_needed()` and discards the result, so removing two
+  fields from `MigrationResult` reaches no renderer, document, or log line.
+- Migration remains idempotent and non-deleting for the two things it still copies.
+
+---
+
+### 6.11 Agent skill
 
 **File(s):** `.claude/skills/add-harness/SKILL.md`
 **Type:** Deleted
@@ -579,7 +618,7 @@ exist. Delete it rather than leave a live instruction pointing at nothing.
 
 ---
 
-### 6.11 Documentation
+### 6.12 Documentation
 
 **File(s):** `README.md`, `docs/architecture.md`, `pyproject.toml`,
 `src/vidbyte_cli/README.md`, `src/vidbyte_cli/commands/README.md`,
@@ -612,12 +651,25 @@ exist. Delete it rather than leave a live instruction pointing at nothing.
 
 ## 7. Data Model Changes
 
-N/A — this repository has no database, no persisted schema change, and no migration. The
-on-disk config and credential documents (`ConfigDocument`, `CredentialDocument`, both
-`schema_version: 1`) are untouched, and the manifest cache directory the harness catalog used
-is simply no longer written or read. A stale `~/.vidbyte/manifests` or native-cache manifest
-directory left by an earlier install is inert: nothing reads it, and this change does not
-delete it.
+No database and no persisted schema change. The on-disk config and credential documents
+(`ConfigDocument`, `CredentialDocument`, both `schema_version: 1`) are untouched.
+
+One local-state behavior does change, and it was missed in the first draft of this doc.
+`StateMigration._migrate_manifests` walks `~/.vidbyte/manifests` and copies every file into
+the native cache, and `login` runs it on every invocation. Its only reader was
+`HarnessCatalog`. With the catalog deleted, that step does real filesystem work — and can
+raise `MigrationVerificationFailed`, failing a login — on behalf of nothing. So it is removed
+along with `VidbytePaths.manifests_dir()` and `VidbytePaths.legacy_manifests_dir()`.
+
+`MigrationResult` loses `manifests_copied` and `skipped_symlinks` (the latter was only ever
+incremented by the manifest walk, so it could never be non-zero afterwards). This is safe to
+change: the sole caller, `LoginCommand.execute`, discards the returned value, so no field on
+it is rendered or serialized anywhere.
+
+**Migration strategy:** none required. Nothing is deleted from disk — a stale
+`~/.vidbyte/manifests` or a previously-populated native cache directory is left exactly where
+it is and is simply never read again. Rollback restores the copy step with no data loss,
+because the legacy tree was never the destination.
 
 ---
 
@@ -685,10 +737,14 @@ of routes this CLI calls shrinks from eleven to seven:
 | MODIFY | `src/vidbyte_cli/lib/runtime/application.py` | Drop attachment pass; fix help text |
 | MODIFY | `src/vidbyte_cli/lib/runtime/options.py` | Drop attachment-only fields |
 | MODIFY | `src/vidbyte_cli/lib/runtime/context.py` | Drop harness factory and guard |
-| MODIFY | `src/vidbyte_cli/lib/errors/failures.py` | Delete 3 classes; fix one `trace` |
-| MODIFY | `src/vidbyte_cli/lib/api/client.py` | Delete orphaned `get_list` |
+| MODIFY | `src/vidbyte_cli/lib/errors/failures.py` | Delete 3 classes; fix two `trace` strings |
+| MODIFY | `src/vidbyte_cli/lib/api/client.py` | Delete orphaned `get_list`; docstring |
 | MODIFY | `src/vidbyte_cli/lib/api/response.py` | Delete orphaned `many`; fix docstring |
+| MODIFY | `src/vidbyte_cli/lib/config/migration.py` | Drop the manifest copy step (§7) |
+| MODIFY | `src/vidbyte_cli/lib/config/paths.py` | Drop both manifest directories (§7) |
+| MODIFY | `src/vidbyte_cli/lib/runtime/__init__.py` | Docstring names harness policy |
 | MODIFY | `src/vidbyte_cli/types/api.py` | Docstring names a deleted file |
+| MODIFY | `.gitignore` | Ignore the new verification script's scratch root |
 | MODIFY | `src/vidbyte_cli/README.md` | Drop harness-policy references |
 | MODIFY | `src/vidbyte_cli/commands/README.md` | No static/dynamic seam remains |
 | MODIFY | `src/vidbyte_cli/lib/README.md` | Drop harness-mechanics references |
@@ -702,7 +758,15 @@ of routes this CLI calls shrinks from eleven to seven:
 | MODIFY | `scripts/run_ci.py` | Register the new verification script as a gate |
 | MODIFY | `scripts/README.md` | Document the new script; Log entry |
 
-**Totals: 2 created, 31 deleted, 20 modified.**
+**Totals: 2 created, 31 deleted, 24 modified.**
+
+Four modified files were not anticipated in the first draft: the two `lib/config` files
+covered in §7, plus two docstrings (`lib/runtime/__init__.py`, `lib/api/client.py`) that named
+harness policy and were found by the whole-tree prose sweep the testing plan calls for. No
+file under `commands/research/`, `commands/auth/` (beyond the deleted `connect_github.py`),
+`commands/config/`, `commands/setup/`, `types/research.py`, or `lib/api/endpoints/research.py`
+is modified at all — `git diff main` across that set is empty, which is how requirement 6 is
+satisfied.
 
 ---
 
