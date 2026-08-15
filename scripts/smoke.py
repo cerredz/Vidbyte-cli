@@ -24,6 +24,9 @@ IMPORT_BOUNDARY_CODE = (
     "import sys; import vidbyte_cli; "
     "assert 'click' not in sys.modules; assert 'httpx' not in sys.modules"
 )
+# Building the command tree imports every command module, so httpx would reach --help and
+# --version too. It is imported inside ApiClient._send precisely to keep it off that path.
+CLI_IMPORT_BOUNDARY_CODE = "import sys; import vidbyte_cli.cli; assert 'httpx' not in sys.modules"
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,10 @@ CASES = [
     # Login must never take a secret on the command line, and must not prompt without a tty.
     Case(["login", "--api-key", "secret"], exit_code=2, error_code="INVALID_ARGUMENT"),
     Case(["--no-input", "login"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    # whoami must decide it has nothing to ask about before it opens a socket, so these two
+    # cases stay offline against the isolated smoke home.
+    Case(["whoami"], exit_code=4, error_code="AUTH_REQUIRED"),
+    Case(["--json", "whoami"], exit_code=4, error_code="AUTH_REQUIRED", machine_error=True),
     Case(
         ["--format", "json", "not-a-command"],
         exit_code=2,
@@ -133,12 +140,17 @@ def check_machine_error(case: Case, serialized: str) -> str | None:
 
 
 def main() -> int:
-    boundary = run_python(["-c", IMPORT_BOUNDARY_CODE])
-    if boundary.returncode != 0:
-        print("FAIL: package import boundaries", file=sys.stderr)
-        print(boundary.stderr, file=sys.stderr)
-        return 1
-    print("ok: package import boundaries")
+    boundaries = (
+        ("package import boundaries", IMPORT_BOUNDARY_CODE),
+        ("cli import boundaries", CLI_IMPORT_BOUNDARY_CODE),
+    )
+    for label, code in boundaries:
+        boundary = run_python(["-c", code])
+        if boundary.returncode != 0:
+            print(f"FAIL: {label}", file=sys.stderr)
+            print(boundary.stderr, file=sys.stderr)
+            return 1
+        print(f"ok: {label}")
     for case in CASES:
         result = run_python(["-m", "vidbyte_cli", *case.args])
         if failure := check(case, result):

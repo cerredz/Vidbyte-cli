@@ -44,6 +44,8 @@ class CiRunner:
             ("mypy strict", (python, "-m", "mypy", "src")),
             ("byte compilation", (python, "-m", "compileall", "-q", "src")),
             ("offline smoke", (python, "scripts/smoke.py")),
+            # Loopback-only, so it stays as offline as the smoke gate above it.
+            ("login key verification", (python, "scripts/test_login_key_verification.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):

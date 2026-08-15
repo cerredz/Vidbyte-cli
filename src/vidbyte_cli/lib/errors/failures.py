@@ -147,9 +147,10 @@ class AuthenticationRequired(CliError):
                 "the key is reused by every later invocation."
             ),
             trace=(
-                "BaseHarness.dispatch called HarnessContext.require_credentials, whose "
-                "CredentialResolver found no key in the environment, the keyring, or the "
-                "restricted file for this profile and host."
+                "A command requiring the Vidbyte API — BaseHarness.dispatch through "
+                "HarnessContext.require_credentials, or WhoamiCommand.execute directly — "
+                "reached CredentialResolver.resolve, which found no key in the environment, "
+                "the keyring, or the restricted file for this profile and host."
             ),
             hint="Run 'vidbyte-cli login' first.",
         )
@@ -745,29 +746,6 @@ class EnvironmentApiKeyNotLive(CliError):
         )
 
 
-class CredentialVerificationUnavailable(CliError):
-    """This build has no verifier, so no credential may be persisted."""
-
-    code = CliErrorCode.API_UNAVAILABLE
-    exit_status = ExitCode.OPERATIONAL_FAILURE
-
-    def __init__(self) -> None:
-        super().__init__(
-            "Credential verification is unavailable in this CLI build.",
-            description=(
-                "Login stores a key only after the backend confirms it, and the HTTP client "
-                "that performs that check ships in a later release. The CLI fails rather than "
-                "storing an unverified key, so an invalid credential can never reach durable "
-                "storage. Nothing was written and no request was made."
-            ),
-            trace=(
-                "LoginCommand.execute read the token and called CredentialVerifier.verify, "
-                "which ApplicationContext had bound to PendingCredentialVerifier."
-            ),
-            hint="Upgrade to the release that includes the reusable HTTP client.",
-        )
-
-
 class NoninteractiveLoginRequiresToken(CliError):
     """Login had no terminal to prompt on and no explicit token source."""
 
@@ -858,4 +836,212 @@ class FileFallbackNotApproved(CliError):
                 "keyring, no --allow-file-fallback, and no interactive terminal."
             ),
             hint="Retry with --allow-file-fallback after reviewing the storage warning.",
+        )
+
+
+class ApiUnreachable(CliError):
+    """The Vidbyte API could not be contacted at all."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "The Vidbyte API could not be reached.",
+            description=(
+                "The request never produced an HTTP response: name resolution, the connection, "
+                "the TLS handshake, or the read timed out or was refused. This is not a "
+                "statement about your API key, which was neither accepted nor rejected. "
+                "Nothing was verified and no credential was stored. The transport error is "
+                "withheld because it routinely quotes URLs, proxies, and headers."
+            ),
+            trace=(
+                "ApiClient.post_direct called _send, whose httpx request raised a transport "
+                "error before any status line was received."
+            ),
+            hint="Check connectivity and the configured API URL, then retry.",
+            cause=cause,
+        )
+
+
+class ApiCredentialRejected(CliError):
+    """The backend refused the API key that was presented."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API rejected this API key.",
+            description=(
+                "The backend answered but would not accept the key. It is unknown to the "
+                "account, revoked, disabled, or expired — the API reports one status for all "
+                "four, so the CLI cannot tell them apart. Reaching the API proves connectivity "
+                "is fine, so retrying with the same key will fail identically. Nothing was "
+                "stored, and any credential already on this machine is untouched."
+            ),
+            trace=(
+                "ApiClient.post_direct received a response outside the success range and "
+                "_failure_for_status matched its 401/403 status."
+            ),
+            hint="Issue a new API key from the Vidbyte dashboard and run login again.",
+            request_id=request_id,
+        )
+
+
+class ApiRequestRejected(CliError):
+    """The backend refused the request itself, independent of the credential."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API rejected the request.",
+            description=(
+                "The backend understood the request and declined it as malformed or "
+                "conflicting, which is a caller-side mistake rather than an outage. The "
+                "response body is not quoted, because backend error prose can echo submitted "
+                "values. Nothing was stored. Status 2 separates this from an operational "
+                "failure so an agent can correct the call rather than retry it."
+            ),
+            trace=(
+                "ApiClient.post_direct received a response outside the success range and "
+                "_failure_for_status matched its 400/409/422 status."
+            ),
+            hint="Check the API URL and the supplied values, then run the command again.",
+            request_id=request_id,
+        )
+
+
+class ApiRouteMissing(CliError):
+    """The configured host does not serve the route the CLI asked for."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API does not serve this route.",
+            description=(
+                "The host answered but has no handler at the requested path, so it is either "
+                "not the Vidbyte API or is running a release older than this CLI expects. This "
+                "says nothing about your API key, which was never evaluated. Nothing was "
+                "stored. Changing the key will not help; the configured API URL or the "
+                "deployed backend has to change."
+            ),
+            trace=(
+                "ApiClient.post_direct received a response outside the success range and "
+                "_failure_for_status matched its 404 status."
+            ),
+            hint="Check 'vidbyte-cli config get api_url', then upgrade the CLI if it is correct.",
+            request_id=request_id,
+        )
+
+
+class ApiTemporarilyUnavailable(CliError):
+    """The backend is rate limiting or is failing on its own side."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, request_id: str | None = None, retry_after: int | None = None) -> None:
+        # The authentication route allows only a few attempts per address per quarter hour, so
+        # this is reachable in ordinary use and its hint carries the server's own wait when given.
+        wait = (
+            f"Wait {retry_after} seconds and retry."
+            if retry_after is not None
+            else "Wait a short while and retry."
+        )
+        super().__init__(
+            "The Vidbyte API is temporarily unavailable.",
+            description=(
+                "The backend answered with a rate limit or a server-side failure rather than a "
+                "verdict on the request. Authentication attempts in particular are limited per "
+                "network address over a rolling window, so several logins or identity checks in "
+                "quick succession can land here. This says nothing about your API key. Nothing "
+                "was stored, and the same request is safe to repeat later."
+            ),
+            trace=(
+                "ApiClient.post_direct received a response outside the success range and "
+                "_failure_for_status matched its 429 or 5xx status."
+            ),
+            hint=wait,
+            request_id=request_id,
+        )
+
+
+class ApiOperationFailed(CliError):
+    """The backend returned a status the CLI has no specific handling for."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API could not complete the operation.",
+            description=(
+                "The response status falls outside every case the CLI classifies, which "
+                "includes a redirect the client deliberately refused to follow. Redirects are "
+                "not followed because doing so would replay the API key to a host the caller "
+                "never configured. Nothing was stored. The response body is not quoted, because "
+                "an unclassified response may hold anything."
+            ),
+            trace=(
+                "ApiClient.post_direct received a response outside the success range and "
+                "_failure_for_status fell through to its default arm."
+            ),
+            hint="Retry once, then report the request ID if the problem continues.",
+            request_id=request_id,
+        )
+
+
+class ApiProtocolError(CliError):
+    """A successful response did not carry a payload the CLI can trust."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API returned an unsupported response.",
+            description=(
+                "The status said success but the body did not: it was empty, oversized, not "
+                "JSON, not the expected shape, or declared its own failure. A captive portal or "
+                "a proxy error page reaches here too, which is exactly why the CLI refuses to "
+                "read success from the status alone. Nothing was verified and nothing was "
+                "stored, because an unreadable answer is not an approval."
+            ),
+            trace=(
+                "ApiClient.post_direct passed a success response to _decode, which checks media "
+                "type, size, JSON validity, and the declared model before returning."
+            ),
+            hint="Confirm the configured API URL points at the Vidbyte API, then retry.",
+            cause=cause,
+        )
+
+
+class ApiRequestPathInvalid(CliError):
+    """An endpoint group asked the client to send a request somewhere unsafe."""
+
+    code = CliErrorCode.INTERNAL_ERROR
+    exit_status = ExitCode.SOFTWARE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The CLI built an invalid API request path.",
+            description=(
+                "Only CLI code constructs request paths, so a path that is absolute, "
+                "protocol-relative, or missing its leading slash is a defect in this release "
+                "rather than anything the caller did. It is refused before a socket is opened, "
+                "because such a path could send the API key to a host the caller never "
+                "configured. No request was made and nothing was stored."
+            ),
+            trace=(
+                "An endpoint group called ApiClient.post_direct, whose _url rejected the "
+                "supplied path before joining it onto the configured origin."
+            ),
+            hint="Report this with the command you ran; no local change will fix it.",
         )

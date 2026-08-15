@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 T = TypeVar("T")
 
@@ -37,6 +37,21 @@ class ApiEnvelope(BaseModel, Generic[T]):
     pagination: ApiPagination | None = None
 
 
-class WhoAmI(BaseModel):
-    user_id: str
-    email: str | None = None
+class KeyIdentity(BaseModel):
+    """Non-secret identity behind a validated API key.
+
+    `extra="ignore"` is the one deliberate departure from this repo's `extra="forbid"` default.
+    The success body also carries a live, long-lived session token this CLI has no use for, and
+    ignoring it keeps that token out of every modelled field, output document, and log line.
+    The body's `email` is dropped for a different reason: the backend sets it to the user id,
+    so presenting it as an email address would be a lie.
+
+    `success` is modelled rather than ignored so a response that declares its own failure is a
+    detectable protocol violation instead of a silent approval.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    success: bool
+    username: str = Field(min_length=1, max_length=256)
+    account_tier: str = Field(min_length=1, max_length=64)
