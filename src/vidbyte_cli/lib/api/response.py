@@ -26,11 +26,14 @@ _MAX_RESPONSE_BYTES = 5_000_000
 
 
 class ResponseShape(StrEnum):
-    """How a route wraps the payload a caller actually wants."""
+    """How a route wraps the payload a caller actually wants.
+
+    Only two, because a collection is always enveloped: `many` unwraps unconditionally and
+    needs nothing declared. A third member for it would exist only to be passed.
+    """
 
     DIRECT = "direct"
     ENVELOPE = "envelope"
-    LIST_ENVELOPE = "list_envelope"
 
 
 class ResponseDecoder:

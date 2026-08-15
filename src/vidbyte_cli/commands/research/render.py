@@ -64,17 +64,29 @@ class ResearchRenderer:
             "continuation_count": run.continuation_count,
             "updated_at": run.updated_at.isoformat(),
             "terminal": run.status.is_terminal(),
+            # Published so an agent can branch on it without reimplementing the rule that
+            # a continuation is legal only from partial, failed, or credit-exhausted.
+            "resumable": run.status.is_resumable(),
         }
-        human = "\n".join(
-            (
-                f"Run:      {run.run_id}",
-                f"Status:   {run.status.value}",
-                f"Phase:    {run.phase}",
-                f"Continued: {run.continuation_count}",
-                f"Updated:  {run.updated_at.isoformat()}",
-            )
-        )
-        return RenderedResult(OutputDocument(kind="research.run_status", data=data), human)
+        lines = [
+            f"Run:       {run.run_id}",
+            f"Status:    {run.status.value}",
+            f"Phase:     {run.phase}",
+            f"Continued: {run.continuation_count}",
+            f"Updated:   {run.updated_at.isoformat()}",
+        ]
+        lines.extend(self._next_step(run))
+        document = OutputDocument(kind="research.run_status", data=data)
+        return RenderedResult(document, "\n".join(lines))
+
+    def _next_step(self, run: ResearchRunStatus) -> list[str]:
+        # A settled run is exactly where a caller needs the next command spelled out, and
+        # resuming is legal only from the three states `is_resumable` names.
+        if run.status.is_resumable():
+            return ["", f"Resume it:  vidbyte-cli research resume {run.run_id}"]
+        if run.status.is_terminal():
+            return []
+        return ["", f"Watch it:   vidbyte-cli research watch {run.run_id}"]
 
     def transition(self, run: ResearchRunStatus) -> RenderedResult:
         # A progress line during watch; the same record, marked as not-yet-final.

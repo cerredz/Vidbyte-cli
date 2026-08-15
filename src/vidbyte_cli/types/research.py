@@ -13,7 +13,7 @@ the internal identifier — a field the CLI must never print, since a user would
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -158,6 +158,15 @@ class ResearchRunCreateRequest(BaseModel):
         if not normalized:
             raise ValueError("prompt cannot be blank")
         return normalized
+
+    @field_validator("published_after")
+    @classmethod
+    def validate_published_after(cls, value: str | None) -> str | None:
+        # The pattern accepts 2025-13-45; the backend does not. Catching it here keeps a
+        # calendar typo from costing a request against a priced route.
+        if value is not None:
+            date.fromisoformat(value)
+        return value
 
     @field_validator("include_domains", "exclude_domains", mode="before")
     @classmethod

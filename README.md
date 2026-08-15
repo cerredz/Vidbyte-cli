@@ -125,8 +125,12 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 
 ## Follow-ups
 
-- Implement `ApiClient` requests, credential verification, the catalog fetch/cache, and the
-  `harness run/status/list` behavior once the backend routes ship.
+- Implement credential verification, the catalog fetch/cache, and the `harness
+  run/status/list` behavior once the backend routes ship. `ApiClient` itself is done — the
+  research commands run on it.
+- `research start/add/resume` could take `--wait` to block after admission, and the research
+  reads could take `--exit-status` to map a terminal outcome onto the shell status. The
+  latter needs `CliApplication._invoke` to stop discarding a command's return value.
 - The console command is `vidbyte-cli` (not `vidbyte`) to avoid the bin/name collision with
   the `vidbyte-skills` package; confirm before publishing.
 - Confirm the production API host.
