@@ -147,9 +147,10 @@ class AuthenticationRequired(CliError):
                 "the key is reused by every later invocation."
             ),
             trace=(
-                "BaseHarness.dispatch called HarnessContext.require_credentials, whose "
-                "CredentialResolver found no key in the environment, the keyring, or the "
-                "restricted file for this profile and host."
+                "A command requiring the Vidbyte API — BaseHarness.dispatch through "
+                "HarnessContext.require_credentials, or WhoamiCommand.execute directly — "
+                "reached CredentialResolver.resolve, which found no key in the environment, "
+                "the keyring, or the restricted file for this profile and host."
             ),
             hint="Run 'vidbyte-cli login' first.",
         )
@@ -745,29 +746,6 @@ class EnvironmentApiKeyNotLive(CliError):
         )
 
 
-class CredentialVerificationUnavailable(CliError):
-    """This build has no verifier, so no credential may be persisted."""
-
-    code = CliErrorCode.API_UNAVAILABLE
-    exit_status = ExitCode.OPERATIONAL_FAILURE
-
-    def __init__(self) -> None:
-        super().__init__(
-            "Credential verification is unavailable in this CLI build.",
-            description=(
-                "Login stores a key only after the backend confirms it, and the HTTP client "
-                "that performs that check ships in a later release. The CLI fails rather than "
-                "storing an unverified key, so an invalid credential can never reach durable "
-                "storage. Nothing was written and no request was made."
-            ),
-            trace=(
-                "LoginCommand.execute read the token and called CredentialVerifier.verify, "
-                "which ApplicationContext had bound to PendingCredentialVerifier."
-            ),
-            hint="Upgrade to the release that includes the reusable HTTP client.",
-        )
-
-
 class NoninteractiveLoginRequiresToken(CliError):
     """Login had no terminal to prompt on and no explicit token source."""
 
@@ -937,6 +915,31 @@ class ApiUnreachable(CliError):
         )
 
 
+class ApiRouteMissing(CliError):
+    """The configured host does not serve the route the CLI asked for."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, request_id: str | None = None) -> None:
+        super().__init__(
+            "The Vidbyte API does not serve this route.",
+            description=(
+                "The host answered but has no handler at the requested path, so it is either "
+                "not the Vidbyte API or is running a release older than this CLI expects. This "
+                "says nothing about your API key, which was never evaluated. Nothing was "
+                "stored. Changing the key will not help; the configured API URL or the "
+                "deployed backend has to change."
+            ),
+            trace=(
+                "ApiClient.post_direct received a response outside the success range and "
+                "ApiProblemMapper classified its 404 status as a missing route."
+            ),
+            hint="Check 'vidbyte-cli config get api_url', then upgrade the CLI if it is correct.",
+            request_id=request_id,
+        )
+
+
 class ApiCredentialsRejected(CliError):
     """The backend refused the API key this invocation presented."""
 
@@ -1095,7 +1098,12 @@ class ApiRateLimited(CliError):
     exit_status = ExitCode.OPERATIONAL_FAILURE
     retryable = True
 
-    def __init__(self, request_id: str | None = None) -> None:
+    def __init__(self, request_id: str | None = None, retry_after: int | None = None) -> None:
+        wait = (
+            f"Wait {retry_after} seconds before retrying."
+            if retry_after is not None
+            else "Wait a minute before retrying, and avoid polling faster than every 10s."
+        )
         super().__init__(
             "The Vidbyte API request budget for this key is exhausted.",
             description=(
@@ -1109,7 +1117,7 @@ class ApiRateLimited(CliError):
                 "ApiClient exhausted RetryPolicy against a rate-limited status and raised "
                 "through ApiProblemMapper.from_response."
             ),
-            hint="Wait a minute before retrying, and avoid polling faster than every 10s.",
+            hint=wait,
             request_id=request_id,
         )
 

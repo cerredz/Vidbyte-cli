@@ -5,10 +5,11 @@ and manage configuration. Harnesses execute entirely on the Vidbyte backend — 
 submits runs, tracks status, and retrieves results (branch / draft PR).
 
 > **Status:** Python platform scaffold. Local configuration, profiles, platform paths,
-> credential resolution, `config get`/`set`, `doctor`, and `logout` are implemented; login's
-> verify-before-store HTTP seam and the other network commands land with the reusable HTTP
-> platform. Commands that have not reached their implementation PR return a typed "not
-> implemented yet" error.
+> credential resolution, `config get`/`set`, `doctor`, `logout`, `login`, and `whoami` are
+> implemented; `login` verifies a key against the backend before storing it, and `whoami`
+> reports the identity behind the stored key using that same check. The remaining network
+> commands land with the reusable HTTP platform, and commands that have not reached their
+> implementation PR return a typed "not implemented yet" error.
 
 ## Install (development)
 
@@ -131,6 +132,9 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 - `research start/add/resume` could take `--wait` to block after admission, and the research
   reads could take `--exit-status` to map a terminal outcome onto the shell status. The
   latter needs `CliApplication._invoke` to stop discarding a command's return value.
+- Credential verification uses the backend's permission-free liveness check, which allows only
+  a few authentication attempts per address per quarter hour. A read-only identity route with
+  no such budget would suit `whoami` better; see `docs/design/login-key-verification.md` §14.
 - The console command is `vidbyte-cli` (not `vidbyte`) to avoid the bin/name collision with
   the `vidbyte-skills` package; confirm before publishing.
 - Confirm the production API host.

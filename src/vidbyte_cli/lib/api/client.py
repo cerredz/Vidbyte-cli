@@ -1,8 +1,8 @@
 """Typed HTTP client for the Vidbyte public API.
 
-Owns the base URL, API-key header injection, and response-envelope unwrapping. Commands
-and harnesses never call httpx directly — all HTTP goes through a typed endpoint group
-built on this client.
+Owns the base URL, API-key header injection, bounded response decoding, and status-driven
+failure classification. Commands and harnesses never call httpx directly — all HTTP goes
+through a typed endpoint group built on this client.
 
 Settings and the credential arrive already resolved, so this client never reads the
 environment: doing so would let a stale variable outrank an explicit option and would skip
@@ -10,23 +10,28 @@ the origin validation that `ResolvedConfig.api_url` has already passed.
 
 One request is serialized once and re-issued byte-identically under the same idempotency
 key, because every retry of a priced mutation must be the same mutation.
+Classification is by HTTP status only. The backend serves several different error-body
+shapes, so no single `code` field is a platform contract, and a generic client that knew one
+route's spelling would be wrong for the next one.
 """
 
 from __future__ import annotations
 
 import time
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
-import httpx
 from pydantic import BaseModel
 
 from ..auth.credentials import Credentials
 from ..config import ResolvedConfig
 from ..errors.failures import ApiRouteMisconfigured
 from ..runtime.version import current_version
-from .problem import ApiProblemMapper
 from .response import ResponseDecoder, ResponseShape
-from .retry import RequestMetadata, RequestOutcome, RetryPolicy
+
+if TYPE_CHECKING:
+    import httpx
+
+    from .retry import RequestOutcome
 
 # The backend reads this header first and accepts `Authorization: Bearer` only as a fallback,
 # so the key travels here and nowhere else. Sending both would be worse than sending one: the
@@ -47,6 +52,9 @@ class ApiClient:
         self._credentials = credentials
         # Built on first send, so constructing a client opens no socket and `--help` is free.
         self._transport: httpx.Client | None = None
+        from .problem import ApiProblemMapper
+        from .retry import RetryPolicy
+
         self._retry = RetryPolicy()
         self._decoder = ResponseDecoder()
         self._problems = ApiProblemMapper()
@@ -64,6 +72,11 @@ class ApiClient:
     ) -> TModel:
         # Performs an authenticated GET, unwraps the declared shape, validates into `model`.
         return self.request("GET", path, response_model=model, response_shape=shape)
+
+    def post_direct(self, path: str, model: type[TModel]) -> TModel:
+        # POSTs with no body and validates the response object itself, not an envelope's `data`.
+        response = self._send("POST", path, None, None, route_not_found=True)
+        return self._decoder.one(response, model, ResponseShape.DIRECT)
 
     def get_list(self, path: str, model: type[TModel]) -> list[TModel]:
         # GET returning an enveloped list payload, each item validated into `model`.
@@ -115,8 +128,12 @@ class ApiClient:
         path: str,
         body: BaseModel | None,
         idempotency_key: str | None,
+        *,
+        route_not_found: bool = False,
     ) -> httpx.Response:
         # Re-issues one identical request while the retry policy allows, then classifies.
+        from .retry import RequestMetadata
+
         url = self._url(path)
         content = self._content(body)
         headers = self._headers(idempotency_key, body is not None)
@@ -126,7 +143,7 @@ class ApiClient:
             outcome = self._attempt(method, url, content, headers)
             decision = self._retry.decide(metadata, attempt, outcome)
             if not decision.retry:
-                return self._settle(outcome)
+                return self._settle(outcome, route_not_found=route_not_found)
             time.sleep(decision.delay_seconds)
             attempt += 1
 
@@ -138,24 +155,31 @@ class ApiClient:
         headers: dict[str, str],
     ) -> RequestOutcome:
         # One attempt is either a reply or a transport failure, never both and never neither.
+        import httpx
+
         try:
             return self._client().request(method, url, content=content, headers=headers)
         except httpx.HTTPError as error:
             return error
 
-    def _settle(self, outcome: RequestOutcome) -> httpx.Response:
+    def _settle(self, outcome: RequestOutcome, *, route_not_found: bool = False) -> httpx.Response:
         # The retry policy has given up, so this outcome is the caller's answer.
+        import httpx
+
         if isinstance(outcome, httpx.HTTPError):
             raise self._problems.from_transport(outcome) from outcome
         if not 200 <= outcome.status_code < 300:
-            raise self._problems.from_response(outcome)
+            raise self._problems.from_response(outcome, route_not_found=route_not_found)
         return outcome
 
     def _client(self) -> httpx.Client:
         # Built once per invocation so a watch loop reuses one pool across many polls.
+        import httpx
+
         if self._transport is None:
             self._transport = httpx.Client(
                 timeout=httpx.Timeout(self.timeout_seconds),
+                follow_redirects=False,
                 limits=httpx.Limits(
                     max_connections=_MAX_CONNECTIONS,
                     max_keepalive_connections=_MAX_KEEPALIVE_CONNECTIONS,

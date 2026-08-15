@@ -13,16 +13,18 @@ from __future__ import annotations
 
 import json
 from enum import StrEnum
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
-import httpx
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from ..errors.failures import ApiResponseUnsupported
 
+if TYPE_CHECKING:
+    import httpx
+
 TModel = TypeVar("TModel", bound=BaseModel)
 # Bounds a hostile or misrouted response before it is parsed into memory.
-_MAX_RESPONSE_BYTES = 5_000_000
+_MAX_RESPONSE_BYTES = 1_048_576
 
 
 class ResponseShape(StrEnum):
