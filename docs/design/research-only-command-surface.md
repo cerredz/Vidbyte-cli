@@ -439,7 +439,7 @@ Holds one `CliError` subclass per failure the CLI can raise, with the agent-nati
 3. Delete `MissingHarnessArgument` — raised only by `lib/harness/invocation.py`.
 4. Rewrite `AuthenticationRequired.trace`, which currently names two deleted symbols:
 
-   ```python
+   ```text
    #  before
    trace=(
        "A command requiring the Vidbyte API — BaseHarness.dispatch through "

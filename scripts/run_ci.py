@@ -46,6 +46,8 @@ class CiRunner:
             ("offline smoke", (python, "scripts/smoke.py")),
             # Loopback-only, so it stays as offline as the smoke gate above it.
             ("login key verification", (python, "scripts/test_login_key_verification.py")),
+            # Offline: inspects the command tree and runs help/usage paths only.
+            ("research-only surface", (python, "scripts/test_research_only_surface.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):
