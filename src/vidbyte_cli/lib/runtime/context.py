@@ -4,9 +4,8 @@ Commands reach services through here instead of module globals. Everything expen
 built lazily, so `--help` and `--version` never touch the keyring, the config file, or the
 network — a keyring lookup can pop an OS unlock dialog, which no help invocation may do.
 
-Root options arrive through `configure()` before any command service exists — output policy
-has to be settled before the first byte is written, and before an optional harness context
-can capture the wrong OutputManager.
+Root options arrive through `configure()` before any command service exists, because output
+policy has to be settled before the first byte is written.
 
 The environment is injected rather than read at each use, so a test or an embedding process
 gets one place to control credential and configuration discovery.
@@ -32,7 +31,6 @@ from ..config.migration import StateMigration
 from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
 from ..errors.failures import AuthenticationRequired
 from ..errors.handler import ErrorHandler
-from ..harness.context import HarnessContext
 from ..io import IOStreams
 from ..io.terminal import TerminalCapabilities, TerminalPolicy
 from ..output.formats import ColorMode, OutputFormat
@@ -58,7 +56,6 @@ class ApplicationContext:
     def __init__(
         self,
         streams: IOStreams,
-        harness_factory: Callable[[], HarnessContext] | None = None,
         *,
         environment: Mapping[str, str] | None = None,
         paths: VidbytePaths | None = None,
@@ -79,16 +76,12 @@ class ApplicationContext:
         self._verifier: CredentialVerifier | None = None
         self._output = self._build_output()
         self._errors = ErrorHandler(self._output)
-        self._harness_factory = harness_factory or self._build_harness_context
-        self._harness_context: HarnessContext | None = None
         self._api_client: ApiClient | None = None
         self._research_endpoints: ResearchEndpoints | None = None
 
     def configure(self, options: InvocationOptions, config: ResolvedConfig) -> None:
-        # The harness context captured the current OutputManager, so changing policy after
-        # it exists would leave two managers disagreeing about the same streams.
-        if self._harness_context is not None and options != self.options:
-            raise RuntimeError("Invocation options cannot change after harness construction.")
+        # Root options are read twice — once by the pre-scan, once by Click — so an unchanged
+        # policy must not rebuild the OutputManager and leave two disagreeing about a stream.
         if options == self.options and config == self._resolved_config:
             return
         self.options = options
@@ -177,12 +170,6 @@ class ApplicationContext:
     def error_handler(self) -> ErrorHandler:
         return self._errors
 
-    def harness_context(self) -> HarnessContext:
-        # One invocation reuses one graph, and never leaks it into the next run.
-        if self._harness_context is None:
-            self._harness_context = self._harness_factory()
-        return self._harness_context
-
     def _build_output(self) -> OutputManager:
         # Terminal detection reruns whenever color or no-input preferences change.
         terminal_policy = TerminalPolicy(
@@ -192,12 +179,3 @@ class ApplicationContext:
         )
         terminal = TerminalCapabilities.detect(self.streams, terminal_policy)
         return OutputManager(self.streams, OutputPolicy(self.options.output_format, terminal))
-
-    def _build_harness_context(self) -> HarnessContext:
-        # The harness adapter shares this invocation's output contract and credential scope.
-        return HarnessContext.default(
-            self._output,
-            credentials=self.credential_resolver(),
-            config=self.resolved_config(),
-            paths=self.paths(),
-        )

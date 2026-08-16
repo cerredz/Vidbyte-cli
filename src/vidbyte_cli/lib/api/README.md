@@ -1,8 +1,8 @@
 # Transport boundary
 
-`ApiClient` is the only place in the CLI that speaks HTTP. Commands and harnesses reach the
-backend through a typed endpoint group under `endpoints/`, never through httpx directly, so
-timeout policy, header injection, response bounds, and failure classification are decided once.
+`ApiClient` is the only place in the CLI that speaks HTTP. Commands reach the backend through
+a typed endpoint group under `endpoints/`, never through httpx directly, so timeout policy,
+header injection, response bounds, and failure classification are decided once.
 
 The client resolves nothing. Host, timeout, and credential all arrive as an already-validated
 `ResolvedConfig` and `Credentials`, because reading the environment here would let a stale
@@ -29,6 +29,13 @@ that reason.
 imported eagerly when the command tree is built, so a module-scope import would put the httpx
 import cost on `--help` and `--version`. `scripts/smoke.py` asserts the boundary.
 
-`get`, `get_list`, and `post` still raise `NotImplementedFeature`. They carry response-envelope
-semantics for `/harness/*` routes that the backend does not serve yet; implementing them before
-there is something to call would be designing against an imagined API.
+There are exactly two endpoint groups, because there are exactly two route families an API key
+may call: `auth.py` (one key-validation route) and `research.py` (the six research routes).
+An endpoint method is added only once the backend serves the route — writing one against a
+planned route is designing against an imagined API, which is how this client accumulated a
+`/harness/*` group for routes that were never built.
+
+`ResponseShape.ENVELOPE` is the default for `get` and `post` but nothing uses it today: the
+research surface returns its DTOs directly and declares `DIRECT` at every call site. It stays
+because it is the shape the older public resources use, and the next non-research route will
+need it.

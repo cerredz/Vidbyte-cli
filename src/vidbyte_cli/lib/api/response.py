@@ -15,7 +15,7 @@ import json
 from enum import StrEnum
 from typing import TYPE_CHECKING, TypeVar
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ..errors.failures import ApiResponseUnsupported
 
@@ -30,8 +30,9 @@ _MAX_RESPONSE_BYTES = 1_048_576
 class ResponseShape(StrEnum):
     """How a route wraps the payload a caller actually wants.
 
-    Only two, because a collection is always enveloped: `many` unwraps unconditionally and
-    needs nothing declared. A third member for it would exist only to be passed.
+    The research surface returns its DTO directly; the older public resources wrap it in
+    `{success, data}`. Every route declares which, so adding one cannot silently unwrap
+    something that was never wrapped.
     """
 
     DIRECT = "direct"
@@ -53,14 +54,6 @@ class ResponseDecoder:
             payload = self._unwrap(response, payload)
         try:
             return model.model_validate(payload)
-        except ValidationError as error:
-            raise self._unsupported(response, error) from error
-
-    def many(self, response: httpx.Response, model: type[TModel]) -> list[TModel]:
-        # Decodes an enveloped collection; no route returns a bare top-level JSON array.
-        payload = self._unwrap(response, self._payload(response))
-        try:
-            return TypeAdapter(list[model]).validate_python(payload)  # type: ignore[valid-type]
         except ValidationError as error:
             raise self._unsupported(response, error) from error
 
