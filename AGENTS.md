@@ -124,6 +124,9 @@ Root options precede the command: `vidbyte-cli --format json --profile work rese
 - `vidbyte-cli harness list`
   Lists your runs.
   Params: none.
+- `vidbyte-cli harness <name> <command> ...`
+  A harness's own command surface, built from its manifest — each harness is effectively its own sub-CLI.
+  Params: `<name>` from `harness catalog`; run `vidbyte-cli harness <name> --help` for its verbs.
 - `vidbyte-cli config get <key>` / `config set <key> <value>`
   Manages CLI configuration; `get` reports both the effective value and where it came from.
   Params: `<key>` config key; profile-scoped via root `--profile`.
