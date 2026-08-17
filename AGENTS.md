@@ -49,3 +49,90 @@ The shared substrate every command depends on, and the largest part of the packa
 ##### `src/vidbyte_cli/types/`
 
 Typed payload definitions shared between the API client and the commands that render its responses. `api.py` describes the request and response envelopes including `schema_version` and `kind`; `research.py` describes thread and run shapes — state, phase, continuation count, timestamp — that `status`, `watch`, `threads`, and `thread` print. Keeping these separate from `lib/api/` is what lets a command depend on the *shape* of a response without depending on the transport that fetched it.
+
+## Command Deck
+
+This section is the run-command reference for this repository's toolchain and command surface. It is deliberately **not** part of the Map's topology contract above — it exists so nobody burns tokens guessing or searching for an invocation. Each entry is the literal command, what it does, and its notable parameters. Run everything from the repository root. Remember the output contract: results go to stdout only; diagnostics go to stderr — safe to pipe stdout into `jq` or a parser.
+
+### Repository gates
+
+- `python -m pip install -e ".[dev]"`
+  Installs the package editable with the dev extra, including the `vidbyte-cli` console script. The prerequisite for every other command here.
+  Params: `-e` editable; `.[dev]` selects the extra.
+- `python scripts/run_ci.py`
+  The canonical gate — the single command both a developer and GitHub Actions run: lint, type checks, tests, distribution build, and a clean-install smoke check. Required green before any PR.
+  Params: none — this repository's gate is one full run with no stage selector.
+- `python scripts/smoke.py`
+  Targeted smoke check for quick iteration. Diagnostic only; never a substitute for a full `run_ci.py` pass.
+  Params: none.
+
+### Tests
+
+- `python -m pytest tests/ -q`
+  Runs the full test suite quietly.
+  Params: `-q` quiet; `-x` stop on first failure; `--tb=short` shorter tracebacks.
+- `python -m pytest tests/<module>.py -q`
+  Runs one test module — the fast loop while iterating.
+  Params: any test file path.
+- `python -m pytest tests/ -k "login"`
+  Filters tests by keyword expression against test names.
+  Params: `-k <expr>` supports `and`/`or`/`not`.
+
+### vidbyte-cli (the shipped command)
+
+Root options precede the command: `vidbyte-cli --format json --profile work research threads`.
+
+- `vidbyte-cli --help`
+  Shows the root options and command families. First stop when a verb's name is uncertain.
+  Params: none.
+- `vidbyte-cli login` / `logout` / `whoami`
+  Manages the stored Vidbyte API key; `login` verifies the key against the API before storing it.
+  Params: none; credentials are stored per profile.
+- `vidbyte-cli connect github`
+  Links GitHub for harness repository access.
+  Params: none; interactive.
+- `vidbyte-cli research start <prompt>`
+  Opens a research thread and admits its first run. A priced mutation — the CLI generates the idempotency key.
+  Params: `<prompt>` the research task text.
+- `vidbyte-cli research add <thread_id> <prompt>`
+  Adds another run to an existing research thread.
+  Params: `<thread_id>` the owning thread; `<prompt>` the follow-up task.
+- `vidbyte-cli research resume <run_id>`
+  Continues a partial, failed, or out-of-credit run.
+  Params: `<run_id>` the run to continue.
+- `vidbyte-cli research status <run_id>`
+  Shows one run's current durable status and phase.
+  Params: `<run_id>`; JSON output via root `--format json`.
+- `vidbyte-cli research watch <run_id>`
+  Follows one run, printing state transitions until it settles.
+  Params: `<run_id>`.
+- `vidbyte-cli research threads`
+  Lists the research threads you own.
+  Params: none.
+- `vidbyte-cli research thread <thread_id>`
+  Shows one thread and its rollup counters.
+  Params: `<thread_id>`.
+- `vidbyte-cli harness catalog`
+  Lists the harnesses available to run.
+  Params: none.
+- `vidbyte-cli harness run <name> --task <task>`
+  Low-level generic run for the current repository.
+  Params: `<name>` harness name; `--task <text>` the task to run.
+- `vidbyte-cli harness status <run_id>`
+  Shows a run's status, events, and result.
+  Params: `<run_id>`.
+- `vidbyte-cli harness list`
+  Lists your runs.
+  Params: none.
+- `vidbyte-cli config get <key>` / `config set <key> <value>`
+  Manages CLI configuration; `get` reports both the effective value and where it came from.
+  Params: `<key>` config key; profile-scoped via root `--profile`.
+- `vidbyte-cli doctor`
+  Diagnoses CLI setup: credentials, configuration, API reachability.
+  Params: none.
+- Root options (before any command)
+  `--format <human|json|jsonl|none>` selects rendering; `--json` shorthand for JSON; `--profile <name>` selects a credential/config profile; `--no-input` forbids interactive prompts; `--color` forces color; `--debug` prints redacted debug frames.
+  Params: as listed.
+- `python -m vidbyte_cli <command>`
+  Module form — equivalent to the console script, works without Scripts on PATH.
+  Params: same commands and root options.
