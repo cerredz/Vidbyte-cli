@@ -88,18 +88,15 @@ Root options precede the command: `vidbyte-cli --format json --profile work rese
 - `vidbyte-cli login` / `logout` / `whoami`
   Manages the stored Vidbyte API key; `login` verifies the key against the API before storing it.
   Params: none; credentials are stored per profile.
-- `vidbyte-cli connect github`
-  Links GitHub for harness repository access.
-  Params: none; interactive.
 - `vidbyte-cli research start <prompt>`
-  Opens a research thread and admits its first run. A priced mutation — the CLI generates the idempotency key.
-  Params: `<prompt>` the research task text.
+  Opens a research thread and admits its first run. Priced and idempotent — the CLI generates an `Idempotency-Key` and reports it.
+  Params: `<prompt>` the research task text; `--idempotency-key <value>` retries a prior mutation with the same key.
 - `vidbyte-cli research add <thread_id> <prompt>`
-  Adds another run to an existing research thread.
-  Params: `<thread_id>` the owning thread; `<prompt>` the follow-up task.
+  Adds another run to an existing research thread. Priced and idempotent like `start`.
+  Params: `<thread_id>` the owning thread; `<prompt>` the follow-up task; `--idempotency-key <value>`.
 - `vidbyte-cli research resume <run_id>`
-  Continues a partial, failed, or out-of-credit run.
-  Params: `<run_id>` the run to continue.
+  Continues a partial, failed, or out-of-credit run. Priced and idempotent like `start`.
+  Params: `<run_id>` the run to continue; `--idempotency-key <value>`.
 - `vidbyte-cli research status <run_id>`
   Shows one run's current durable status and phase.
   Params: `<run_id>`; JSON output via root `--format json`.
@@ -112,21 +109,6 @@ Root options precede the command: `vidbyte-cli --format json --profile work rese
 - `vidbyte-cli research thread <thread_id>`
   Shows one thread and its rollup counters.
   Params: `<thread_id>`.
-- `vidbyte-cli harness catalog`
-  Lists the harnesses available to run.
-  Params: none.
-- `vidbyte-cli harness run <name> --task <task>`
-  Low-level generic run for the current repository.
-  Params: `<name>` harness name; `--task <text>` the task to run.
-- `vidbyte-cli harness status <run_id>`
-  Shows a run's status, events, and result.
-  Params: `<run_id>`.
-- `vidbyte-cli harness list`
-  Lists your runs.
-  Params: none.
-- `vidbyte-cli harness <name> <command> ...`
-  A harness's own command surface, built from its manifest — each harness is effectively its own sub-CLI.
-  Params: `<name>` from `harness catalog`; run `vidbyte-cli harness <name> --help` for its verbs.
 - `vidbyte-cli config get <key>` / `config set <key> <value>`
   Manages CLI configuration; `get` reports both the effective value and where it came from.
   Params: `<key>` config key; profile-scoped via root `--profile`.
@@ -134,7 +116,7 @@ Root options precede the command: `vidbyte-cli --format json --profile work rese
   Diagnoses CLI setup: credentials, configuration, API reachability.
   Params: none.
 - Root options (before any command)
-  `--format <human|json|jsonl|none>` selects rendering; `--json` shorthand for JSON; `--profile <name>` selects a credential/config profile; `--no-input` forbids interactive prompts; `--color` forces color; `--debug` prints redacted debug frames.
+  `--format <human|json|jsonl|none>` selects rendering; `--json` shorthand for JSON; `--profile <name>` selects a credential/config profile; `--no-input` forbids interactive prompts; `--color` forces color; `--debug` prints redacted debug frames; `--version` prints the CLI version.
   Params: as listed.
 - `python -m vidbyte_cli <command>`
   Module form — equivalent to the console script, works without Scripts on PATH.

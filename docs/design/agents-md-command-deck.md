@@ -26,7 +26,7 @@ Add a **Command Deck** section to the root `AGENTS.md`: the verified commands an
 
 ## 3. Background & Context
 
-`AGENTS.md` is already on `main` (PR #19), so this branch cuts from `main` directly. The CLI is a Python package installed with `pip install -e ".[dev]"`, gated by a single `python scripts/run_ci.py` (no stage selector), with `scripts/smoke.py` as the targeted diagnostic. The command surface is `vidbyte-cli` with root options `--format`, `--json`, `--profile`, `--no-input`, `--color`, `--debug` that precede any command, and command families `auth`, `harness`, `research`, `config`, and `doctor` documented in `README.md`.
+`AGENTS.md` is already on `main` (PR #19), so this branch cuts from `main` directly. The CLI is a Python package installed with `pip install -e ".[dev]"`, gated by a single `python scripts/run_ci.py` (no stage selector), with `scripts/smoke.py` as the targeted diagnostic. The command surface is `vidbyte-cli` with root options `--format`, `--json`, `--profile`, `--no-input`, `--color`, `--debug` that precede any command, and command families `auth` (login, logout, whoami), `research`, `config`, and `doctor`. Caution: a stale local checkout on another branch carries a README with extra `harness`/`connect` verbs that are not on `main`.
 
 ## 4. Requirements
 
@@ -35,7 +35,7 @@ Add a **Command Deck** section to the root `AGENTS.md`: the verified commands an
 2. The section opens with a one-paragraph note stating it is a run-command reference, deliberately outside the Map's topology contract.
 3. The gates subsection leads with `python -m pip install -e ".[dev]"` then `python scripts/run_ci.py`, then `python scripts/smoke.py` as a diagnostic.
 4. The deck states the root-option rule: global options precede the command.
-5. Every documented verb from `README.md` appears: login, logout, whoami, connect github, harness run/status/list/catalog/`<name>`, research start/add/resume/status/watch/threads/thread, config get/set, doctor.
+5. Every verb the shipped CLI exposes on `main` appears: login, logout, whoami, research start/add/resume/status/watch/threads/thread, config get/set, doctor. (`harness` and `connect` verbs exist only on an open feature branch's README and are deliberately excluded.)
 6. `python -m vidbyte_cli` appears as the no-install invocation form.
 
 ### Non-Functional Requirements
@@ -52,7 +52,7 @@ AGENTS.md
   ## Command Deck        <- new
     ### Repository gates
     ### Tests
-    ### vidbyte-cli (root options, auth, harness, research, config, doctor)
+    ### vidbyte-cli (root options, auth, research, config, doctor)
 ```
 
 ## 6. Detailed Design
