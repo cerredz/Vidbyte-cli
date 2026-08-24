@@ -3,7 +3,7 @@
 **Status:** Draft
 **Author:** Grok
 **Created:** 2026-08-24
-**Last Updated:** 2026-08-24
+**Last Updated:** 2026-08-24 (implementation: `Retry-After: nan` measured as a 0.0 wait)
 
 ## 1. Overview
 
@@ -40,8 +40,8 @@ rather than unifying them.
 - **No pytest and no `tests/` directory.** Verification stays in `scripts/`, matching
   `test_login_key_verification.py` and `test_research_only_surface.py`.
 - **No production behavior changes** under `src/`. Hostile `Retry-After: nan` currently
-  yields a non-finite delay that would crash `time.sleep`; that is recorded as a follow-up,
-  not fixed here.
+  becomes a 0.0 wait because `max(0.0, float("nan"))` returns `0.0`; that is pinned, not
+  changed into a local-backoff fallback.
 - **No unification of the two Retry-After parsers.** Policy accepts floats and HTTP-dates;
   the mapper accepts only `str.isdigit()` after strip. Both are pinned.
 - **No `CredentialResolver` tests.** Secrets have a separate order already covered by the
@@ -356,7 +356,7 @@ Local path never sets `delay_clamped`.
 | D12 | GET 429, `Retry-After: 2.5` | 2.5 |
 | D13 | GET 429, `Retry-After: 1e2` | 10.0, clamped True (`float("1e2")==100`) |
 | D14 | GET 429, `Retry-After: inf` | 10.0, clamped True (`inf > 10`) |
-| D15 | GET 429, `Retry-After: nan` | `math.isnan(delay_seconds)`, `delay_clamped is False` (NaN comparison is false). **Pin, do not fix.** Follow-up: `time.sleep(nan)` raises `ValueError`. |
+| D15 | GET 429, `Retry-After: nan` | delay `0.0`, not clamped. `float("nan")` succeeds, then `max(0.0, nan)` returns `0.0` because the finite argument is first. **Pin, do not treat as unparseable.** |
 | D16 | GET 429, `Retry-After: 5 ` (trailing space) | 5.0 (`float` allows surrounding whitespace; mapper also strips — agreement on this form) |
 | D17 | GET 429, missing header | local backoff, not clamped |
 | D18 | GET 429, empty header `""` | `float("")` fails, date parse fails, local backoff |
@@ -510,8 +510,8 @@ fields.
   previous gate list and deletes the spec.
 - No feature flag. A failing case is a merge blocker, which is the point.
 - Follow-up PR (not this one): `SECURITY.md`, `CHANGELOG.md`, tag-triggered OIDC publish.
-- Follow-up (not this one): reject non-finite `Retry-After` in `RetryPolicy._retry_after`
-  so `time.sleep` cannot raise `ValueError` on `nan`.
+- Follow-up (not this one): decide whether `Retry-After: nan` should fall through to local
+  backoff instead of a zero wait. Current code is safe (`time.sleep(0.0)`), just surprising.
 
 ## 12. Open Questions
 
@@ -521,7 +521,8 @@ fields.
   `test_retry_policy.py` / `test_api_problem_mapper.py` / `test_config_resolver.py` only
   if ruff C90 cannot be satisfied with tables. Prefer tables over a split.
 - [x] Unify Retry-After parsers — resolved: no, pin the disagreement.
-- [x] Fix `Retry-After: nan` — resolved: pin current behavior, do not fix in this PR.
+- [x] Fix `Retry-After: nan` — resolved: pin current behavior (`max(0.0, nan) == 0.0`),
+  do not change it in this PR. Measured against httpx 0.28.1 during implementation.
 - [ ] N/A - no unresolved questions remaining.
 
 ## 13. Alternatives Considered
