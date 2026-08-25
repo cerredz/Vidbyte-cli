@@ -49,3 +49,52 @@ The shared substrate every command depends on, and the largest part of the packa
 ##### `src/vidbyte_cli/types/`
 
 Typed payload definitions shared between the API client and the commands that render its responses. `api.py` describes the request and response envelopes including `schema_version` and `kind`; `research.py` describes thread and run shapes — state, phase, continuation count, timestamp — that `status`, `watch`, `threads`, and `thread` print. Keeping these separate from `lib/api/` is what lets a command depend on the *shape* of a response without depending on the transport that fetched it.
+
+## Command Deck
+
+This is the developer command reference for the repository's Python toolchain. It is deliberately **not** part of the Map's topology contract above, and it does not document package installation or end-user CLI usage. Run commands from the repository root with the development dependencies available.
+
+### Fast feedback
+
+- `python -m ruff check .`
+  Runs the configured Ruff lint rules across the repository and reports import, style, and complexity violations.
+  Params: add `--fix` to apply Ruff's safe automatic fixes.
+- `python -m ruff format --check .`
+  Verifies that Python files match the repository's Ruff formatter configuration without changing them.
+  Params: use `python -m ruff format .` to apply formatting.
+- `python -m mypy src`
+  Runs strict mypy checks against the `vidbyte_cli` package configured in `pyproject.toml`.
+  Params: `src` is the package root; keep this target aligned with the mypy configuration.
+- `python -m compileall -q src`
+  Byte-compiles the source tree to catch syntax and import-compilation failures quickly.
+  Params: `-q` suppresses successful-file output.
+
+### Targeted diagnostics
+
+- `python scripts/smoke.py`
+  Boots the public module entry point in isolated scratch state and checks command-tree startup, output streams, exit codes, and machine-error envelopes. It is offline and diagnostic; it does not replace the full gate.
+  Params: none.
+- `python scripts/test_login_key_verification.py`
+  Runs the login verification checks against a loopback server, including the invariant that rejected credentials are never persisted.
+  Params: none; it does not call the live API.
+- `python scripts/test_research_only_surface.py`
+  Checks that the authored command surface matches the API-backed research scope and that removed commands are not still importable or documented.
+  Params: none.
+- `python -m vidbyte_cli --help`
+  Inspects the assembled command tree through the package entry point while debugging command registration or import-boundary changes.
+  Params: add `--version` to check the package version path.
+- `python -c "import vidbyte_cli; print(vidbyte_cli.__file__)"`
+  Confirms which checkout or environment supplies the imported package, useful when an editable install or `PYTHONPATH` may be stale.
+  Params: replace the expression only when diagnosing a specific import boundary.
+
+### Packaging checks
+
+- `python -m build --sdist --wheel --outdir dist`
+  Builds the source distribution and wheel locally using the declared build-system requirements.
+  Params: `--outdir dist` places artifacts in the repository's `dist/` directory.
+- `python -m twine check dist/*`
+  Validates the metadata and rendered descriptions of the distributions in `dist/`.
+  Params: pass the artifact paths to limit validation to a selected build.
+- `python scripts/run_ci.py`
+  Runs the canonical local gate in the same order as GitHub Actions: lint, formatting, strict typing, byte compilation, targeted diagnostics, distribution build, Twine validation, and clean-wheel smoke checks.
+  Params: none; this repository intentionally has one full gate and no stage selector.
