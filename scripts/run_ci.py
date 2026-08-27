@@ -44,6 +44,8 @@ class CiRunner:
             ("mypy strict", (python, "-m", "mypy", "src")),
             ("byte compilation", (python, "-m", "compileall", "-q", "src")),
             ("offline smoke", (python, "scripts/smoke.py")),
+            # CPU-only spec of retry, problem mapping, and config precedence.
+            ("core logic", (python, "scripts/test_core_logic.py")),
             # Loopback-only, so it stays as offline as the smoke gate above it.
             ("login key verification", (python, "scripts/test_login_key_verification.py")),
             # Offline: inspects the command tree and runs help/usage paths only.
