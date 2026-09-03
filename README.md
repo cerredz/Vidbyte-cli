@@ -1,5 +1,10 @@
 # Vidbyte CLI
 
+Vidbyte runtime primitives are designed to execute through the user's installed coding
+agent, preserving its repository, tools, skills, permissions, and model subscription. The
+current runtime scaffold performs discovery and validation only; it does not charge or
+launch sub-agents yet.
+
 The Vidbyte CLI: authenticate, run Vidbyte research threads, and manage configuration.
 Research executes entirely on the Vidbyte backend — this CLI admits runs, reads their durable
 status, and lists the threads you own.
@@ -53,6 +58,9 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli research watch <run_id>` | Follow one run until it settles |
 | `vidbyte-cli research threads` | List your research threads |
 | `vidbyte-cli research thread <thread_id>` | Show one thread and its rollup counters |
+| `vidbyte-cli runtime list` | List local runtime primitives and admission prices |
+| `vidbyte-cli runtime doctor` | Detect supported native coding-agent hosts |
+| `vidbyte-cli runtime adversarial-team <task>` | Validate the first local primitive launch (executor not yet implemented) |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 
@@ -95,9 +103,15 @@ leaves the originals in place.
 
 ## Architecture
 
-Every command is static and known at release time, and exists only because a shipped backend
-route can answer it. The CLI calls seven routes in total — the six that make up the API-key
-research surface, plus the key-validation route behind `login` and `whoami`. See
+Local runtimes are separate from hosted harnesses. Vidbyte authenticates a launch and will
+charge a flat admission fee from the API-key wallet, while Codex, Claude Code, or OpenCode
+executes locally using the user's own account. x402 funds that wallet through the backend's
+`POST /agent/topup` route; machine environment and repository contents are never uploaded
+for admission.
+
+Every command is static and known at release time. Runtime discovery adds one authenticated
+catalog route, while the paid admission operation is typed but deliberately unreachable from
+this scaffold. See
 [docs/architecture.md](docs/architecture.md) for the layering rules and the full
 [backend contract](docs/architecture.md#backend-contract).
 

@@ -57,7 +57,7 @@ class CliApplication:
 
         @click.group(
             name="vidbyte-cli",
-            help="Vidbyte CLI: authenticate and run Vidbyte research threads",
+            help="Vidbyte CLI: hosted research and local agent runtimes",
         )
         @click.version_option(current_version(), "--version")
         @click.option(

@@ -25,6 +25,7 @@ src/vidbyte_cli/lib/auth/          scoped env/keyring/restricted-file credential
 src/vidbyte_cli/lib/config/        typed profiles, provenance, native paths, safe migration
 src/vidbyte_cli/lib/output/        versioned documents + the invocation's output manager
 src/vidbyte_cli/lib/errors/        stable codes, CliError metadata, one central handler
+src/vidbyte_cli/lib/runtime_primitives/ local host discovery, planning, executor seam
 src/vidbyte_cli/types/             wire models mirroring backend DTOs
 ```
 
@@ -64,6 +65,19 @@ src/vidbyte_cli/types/             wire models mirroring backend DTOs
     keyring → explicitly approved restricted file. An environment key is never persisted.
 15. **Configuration is typed and attributable.** Command → environment → selected profile →
     default profile → built-in, recorded per field so `config get` can report the source.
+
+16. **Local runtime context stays local.** Native agent children inherit the current working
+   directory and process environment; environment values and repository contents are never
+   serialized into a Vidbyte admission request.
+
+## Local runtime primitives
+
+The `runtime` command family is intentionally independent from hosted research. Host
+discovery identifies an installed Codex, Claude Code, or OpenCode executable; launch
+planning validates safe local prerequisites; and `RuntimeExecutor` is the only place a
+future algorithm may request paid admission and spawn the native-agent topology. This
+explicitly requested scaffold is the narrow exception to rule 6: its executor always raises
+before payment or process launch, and the exception should disappear with the first runtime.
 
 ## Output and failure contracts
 
