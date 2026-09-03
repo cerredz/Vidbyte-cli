@@ -107,12 +107,22 @@ Defines strict capability, admission request, and admission grant models and bin
 
 ```python
 class RuntimeCapability(BaseModel): ...
+
+
 class RuntimeCapabilityCatalog(BaseModel): ...
+
+
 class RuntimeAdmissionRequest(BaseModel): ...
+
+
 class RuntimeAdmissionGrant(BaseModel): ...
+
+
 class RuntimeEndpoints:
     def list_capabilities(self) -> RuntimeCapabilityCatalog: ...
-    def admit_adversarial_team(self, request: RuntimeAdmissionRequest, idempotency_key: str) -> RuntimeAdmissionGrant: ...
+    def admit_adversarial_team(
+        self, request: RuntimeAdmissionRequest, idempotency_key: str
+    ) -> RuntimeAdmissionGrant: ...
 ```
 
 #### Logic / Algorithm
@@ -140,13 +150,25 @@ Discovers supported executables, selects an explicit or automatic host, validate
 
 ```python
 class RuntimeHost(str, Enum): ...
+
+
 class RuntimeHostStatus(BaseModel): ...
+
+
 class RuntimeLaunchPlan(BaseModel): ...
+
+
 class RuntimeHostRegistry:
     def inspect(self) -> tuple[RuntimeHostStatus, ...]: ...
     def resolve(self, requested: RuntimeHost | None) -> RuntimeHostStatus: ...
+
+
 class RuntimeLaunchPlanner:
-    def build(self, task: str, requested_host: RuntimeHost | None, working_directory: Path) -> RuntimeLaunchPlan: ...
+    def build(
+        self, task: str, requested_host: RuntimeHost | None, working_directory: Path
+    ) -> RuntimeLaunchPlan: ...
+
+
 class RuntimeExecutor:
     def execute_adversarial_team(self, plan: RuntimeLaunchPlan) -> NoReturn: ...
 ```
@@ -181,9 +203,13 @@ Registers the local-runtime group and presents catalog, environment diagnosis, a
 class RuntimeListCommand:
     def register(self, parent: click.Group) -> None: ...
     def execute(self, context: ApplicationContext) -> None: ...
+
+
 class RuntimeDoctorCommand:
     def register(self, parent: click.Group) -> None: ...
     def execute(self, context: ApplicationContext) -> None: ...
+
+
 class AdversarialTeamCommand:
     def register(self, parent: click.Group) -> None: ...
     def execute(self, context: ApplicationContext, task: str, host: str) -> None: ...
@@ -214,8 +240,14 @@ Adds specific local-runtime failures and documents the local execution/payment b
 
 ```python
 class RuntimeHostUnavailable(CliError): ...
+
+
 class RuntimeWorkingDirectoryInvalid(CliError): ...
+
+
 class RuntimeTaskInvalid(CliError): ...
+
+
 class RuntimeExecutionNotImplemented(CliError): ...
 ```
 
@@ -312,7 +344,8 @@ class RuntimeExecutionNotImplemented(CliError): ...
   "admission_id": "opaque string",
   "capability_id": "runtime.review.adversarial-team@1",
   "execution_location": "local",
-  "charged_cents": 25
+  "charged_cents": 25,
+  "admitted_at": "RFC 3339 timestamp"
 }
 ```
 
@@ -346,9 +379,11 @@ class RuntimeExecutionNotImplemented(CliError): ...
 | CREATE | `src/vidbyte_cli/commands/runtime/adversarial_team.py` | First primitive command shell |
 | MODIFY | `src/vidbyte_cli/commands/__init__.py` | Register the static runtime group |
 | MODIFY | `src/vidbyte_cli/lib/runtime/context.py` | Lazily compose runtime services |
+| MODIFY | `src/vidbyte_cli/lib/runtime/application.py` | Update root help for local runtimes |
 | MODIFY | `src/vidbyte_cli/lib/errors/failures.py` | Add typed runtime failures and top-up guidance |
 | MODIFY | `README.md` | Document commands, local execution, and payment model |
 | MODIFY | `docs/architecture.md` | Document the local-runtime layer and executor seam |
+| MODIFY | `scripts/test_research_only_surface.py` | Reconcile the existing exact command-surface gate |
 
 ---
 

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from ..api.client import ApiClient
 from ..api.endpoints.research import ResearchEndpoints
+from ..api.endpoints.runtime import RuntimeEndpoints
 from ..auth import (
     ApiCredentialVerifier,
     CredentialResolver,
@@ -35,6 +36,7 @@ from ..io import IOStreams
 from ..io.terminal import TerminalCapabilities, TerminalPolicy
 from ..output.formats import ColorMode, OutputFormat
 from ..output.manager import OutputManager, OutputPolicy
+from ..runtime_primitives import RuntimeExecutor, RuntimeHostRegistry, RuntimeLaunchPlanner
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,10 @@ class ApplicationContext:
         self._errors = ErrorHandler(self._output)
         self._api_client: ApiClient | None = None
         self._research_endpoints: ResearchEndpoints | None = None
+        self._runtime_endpoints: RuntimeEndpoints | None = None
+        self._runtime_hosts: RuntimeHostRegistry | None = None
+        self._runtime_launch_planner: RuntimeLaunchPlanner | None = None
+        self._runtime_executor: RuntimeExecutor | None = None
 
     def configure(self, options: InvocationOptions, config: ResolvedConfig) -> None:
         # Root options are read twice — once by the pre-scan, once by Click — so an unchanged
@@ -157,6 +163,30 @@ class ApplicationContext:
         if self._research_endpoints is None:
             self._research_endpoints = ResearchEndpoints(self.api_client())
         return self._research_endpoints
+
+    def runtime_endpoints(self) -> RuntimeEndpoints:
+        # Lazily binds runtime HTTP operations to this invocation's authenticated client.
+        if self._runtime_endpoints is None:
+            self._runtime_endpoints = RuntimeEndpoints(self.api_client())
+        return self._runtime_endpoints
+
+    def runtime_hosts(self) -> RuntimeHostRegistry:
+        # Shares one PATH discovery policy between doctor and launch planning.
+        if self._runtime_hosts is None:
+            self._runtime_hosts = RuntimeHostRegistry()
+        return self._runtime_hosts
+
+    def runtime_launch_planner(self) -> RuntimeLaunchPlanner:
+        # Builds local launch plans without credentials, network calls, or subprocesses.
+        if self._runtime_launch_planner is None:
+            self._runtime_launch_planner = RuntimeLaunchPlanner(self.runtime_hosts())
+        return self._runtime_launch_planner
+
+    def runtime_executor(self) -> RuntimeExecutor:
+        # Returns the inert boundary a later runtime implementation will replace.
+        if self._runtime_executor is None:
+            self._runtime_executor = RuntimeExecutor()
+        return self._runtime_executor
 
     def close(self) -> None:
         # Releases network resources this invocation opened; a help path opened none.

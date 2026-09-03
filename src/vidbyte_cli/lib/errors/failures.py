@@ -133,6 +133,100 @@ class AuthenticationRequired(CliError):
         )
 
 
+class RuntimeHostUnavailable(CliError):
+    """The selected native coding-agent executable is absent from PATH."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, host: str) -> None:
+        # Describes the missing executable without inspecting host configuration.
+        super().__init__(
+            f"No available local runtime host matched '{host}'.",
+            description=(
+                "The runtime requires an installed Codex, Claude Code, or OpenCode executable "
+                "and PATH discovery did not find the requested host. No host process started, "
+                "no Vidbyte request was sent, and no credits were spent. Install the host or "
+                "select one that runtime doctor reports as available."
+            ),
+            trace=(
+                "RuntimeLaunchPlanner asked RuntimeHostRegistry to resolve the requested "
+                "native host before paid admission."
+            ),
+            hint="Run 'vidbyte-cli runtime doctor' to inspect supported hosts.",
+        )
+
+
+class RuntimeWorkingDirectoryInvalid(CliError):
+    """The current path cannot be used as a native agent working directory."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Keeps the actual path out of failure prose because it may identify private projects.
+        super().__init__(
+            "The local runtime working directory is unavailable.",
+            description=(
+                "The current path did not resolve to a readable directory suitable for a native "
+                "agent process. The runtime stopped before authentication, payment, or process "
+                "creation, so no credits were spent and no local command ran. Change to the "
+                "intended project directory and retry."
+            ),
+            trace=(
+                "RuntimeLaunchPlanner validated the current working directory before "
+                "building a launch plan."
+            ),
+        )
+
+
+class RuntimeTaskInvalid(CliError):
+    """The local runtime task is blank or above its bounded input limit."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the contract, never the submitted task text.
+        super().__init__(
+            "The runtime task must contain 1 to 20,000 characters.",
+            description=(
+                "The supplied task was blank after trimming or exceeded the local runtime's "
+                "bounded input contract. It was rejected before credentials, payment, or host "
+                "execution, and the task is not repeated in this error. Shorten the task or "
+                "supply non-whitespace instructions and retry."
+            ),
+            trace=(
+                "RuntimeLaunchPlanner validated task length before selecting a host or "
+                "building a plan."
+            ),
+        )
+
+
+class RuntimeExecutionNotImplemented(CliError):
+    """The command scaffold reached the deliberately absent runtime executor."""
+
+    code = CliErrorCode.NOT_IMPLEMENTED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Makes the no-charge boundary explicit for human and agent callers.
+        super().__init__(
+            "The adversarial-team runtime executor is not implemented yet.",
+            description=(
+                "The CLI validated the task, working directory, and native host, but this release "
+                "contains only the runtime platform scaffold. It stopped before requesting a paid "
+                "Vidbyte admission and before launching any local agent, so no credits were spent "
+                "and no machine state changed. Retrying cannot proceed until the executor ships."
+            ),
+            trace=(
+                "AdversarialTeamCommand built a RuntimeLaunchPlan and reached the "
+                "intentionally inert RuntimeExecutor."
+            ),
+            hint="Use 'vidbyte-cli runtime list' for published capability metadata.",
+        )
+
+
 class AmbiguousPromptSource(CliError):
     """More than one prompt source was supplied for a single run."""
 
@@ -938,7 +1032,10 @@ class ApiCreditExhausted(CliError):
                 "ApiClient submitted a priced mutation and the backend refused admission at "
                 "the wallet rail before reserving usage."
             ),
-            hint="Add credits to the account, then run the command again.",
+            hint=(
+                "Fund this API key's wallet through POST /agent/topup, then retry with the "
+                "same idempotency key."
+            ),
             request_id=request_id,
         )
 

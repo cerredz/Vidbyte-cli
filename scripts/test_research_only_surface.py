@@ -31,8 +31,9 @@ from vidbyte_cli.lib.errors import codes, failures  # noqa: E402
 from vidbyte_cli.lib.runtime.context import ApplicationContext  # noqa: E402
 from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
-EXPECTED_TOP_LEVEL = {"config", "doctor", "login", "logout", "research", "whoami"}
+EXPECTED_TOP_LEVEL = {"config", "doctor", "login", "logout", "research", "runtime", "whoami"}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
+EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list"}
 # Every module that existed only to serve a backend route that was never built.
 DELETED_MODULES = (
     "vidbyte_cli.commands.harness",
@@ -164,7 +165,7 @@ class SurfaceSuite:
         results = self.results
         actual = set(self.program.commands)
         results.check(
-            "the CLI exposes exactly six top-level commands",
+            "the CLI exposes exactly seven top-level commands",
             actual == EXPECTED_TOP_LEVEL,
             f"got {sorted(actual)}",
         )
@@ -177,6 +178,10 @@ class SurfaceSuite:
         results.check(
             "config exposes exactly get and set",
             self._subcommands("config") == {"get", "set"},
+        )
+        results.check(
+            "runtime exposes exactly the scaffolded local commands",
+            self._subcommands("runtime") == EXPECTED_RUNTIME,
         )
         results.check(
             "registration returns nothing, because no subtree is attached later",

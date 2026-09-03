@@ -23,6 +23,7 @@ from .research.status import ResearchStatusCommand
 from .research.thread import ResearchThreadCommand
 from .research.threads import ResearchThreadsCommand
 from .research.watch import ResearchWatchCommand
+from .runtime import AdversarialTeamCommand, RuntimeDoctorCommand, RuntimeListCommand
 from .setup.doctor import DoctorCommand
 
 
@@ -43,6 +44,12 @@ def register_all_commands(program: click.Group) -> None:
     ResearchThreadsCommand().register(research)
     ResearchThreadCommand().register(research)
     program.add_command(research)
+
+    runtime = click.Group(name="runtime", help="Run Vidbyte primitives on this machine")
+    RuntimeListCommand().register(runtime)
+    RuntimeDoctorCommand().register(runtime)
+    AdversarialTeamCommand().register(runtime)
+    program.add_command(runtime)
 
     config = click.Group(name="config", help="Manage CLI configuration")
     ConfigGetCommand().register(config)
