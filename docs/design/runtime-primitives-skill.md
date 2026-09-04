@@ -174,3 +174,15 @@ Merge as additive developer guidance. The skill is available from the source rep
 
 - What: Describe only controls shared by Codex and Claude.
 - Why rejected: Runtime primitives need native strengths, and hiding provider-specific features would encourage lowest-common-denominator adapters.
+
+---
+
+## 14. Refinement Checklist
+
+- [x] The skill is a concise router and detailed material lives in focused references.
+- [x] Provider inventories separate available controls from provider-owned behavior.
+- [x] The matrix distinguishes exact, policy-based, emulated, and unavailable translations.
+- [x] Capability checks are required before paid admission or process launch.
+- [x] The documentation index contains twenty described official provider pages.
+- [x] No CLI command, Python runtime, dependency, or execution side effect changed.
+- [x] No critical or notable design/documentation mismatch remains after review.
