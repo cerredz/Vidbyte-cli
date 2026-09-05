@@ -1,10 +1,10 @@
-"""Verification for extended provider BYOK login: grok, deepseek, glm, muse.
+"""Verification for extended provider BYOK login: grok, deepseek, glm, muse, gemini.
 
 Run with `python scripts/test-provider-byok-login-extended.py`. Drives real
 verifiers over a loopback HTTP server by patching PROVIDER_PROBE_URLS to
-point at the fake backend. Nothing reaches the internet. Covers all six
-providers (openai, claude, grok, deepseek, glm, muse) and is the Phase 5
-script for provider-byok-login-extended.
+point at the fake backend. Nothing reaches the internet. Covers all seven
+providers (openai, claude, grok, deepseek, glm, muse, gemini) and is the
+Phase 5 script for provider-byok-login-extended.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from vidbyte_cli.lib.auth.provider_store import (  # noqa: E402
 from vidbyte_cli.lib.auth.provider_verifier import (  # noqa: E402
     ClaudeVerifier,
     DeepSeekVerifier,
+    GeminiVerifier,
     GlmVerifier,
     GrokVerifier,
     MuseVerifier,
@@ -67,6 +68,7 @@ DEEPSEEK_KEY = "sk-deepseek-" + "c" * 40
 MUSE_KEY = "LLM|12345|" + "d" * 40
 GROK_KEY = "xai-" + "e" * 40
 GLM_KEY = "glm-" + "f" * 40
+GEMINI_KEY = "AIza" + "g" * 35
 BAD_SCHOICE = "not-a-key"
 
 
@@ -303,11 +305,12 @@ class Suite:
             r.check(f"{p.value} has display", p in PROVIDER_DISPLAY)
             r.check(f"{p.value} has prefix entry", p in PROVIDER_KEY_PREFIXES)
         # Case sensitive via click Choice is tested implicitly; enum is value-based
-        r.check("Provider enum has 6 members", len(list(Provider)) == 6)
+        r.check("Provider enum has 7 members", len(list(Provider)) == 7)
         r.check("muse prefix is LLM|", PROVIDER_KEY_PREFIXES[Provider.MUSE] == ("LLM|",))
         r.check("deepseek prefix is sk-", PROVIDER_KEY_PREFIXES[Provider.DEEPSEEK] == ("sk-",))
         r.check("grok prefix empty (opaque)", PROVIDER_KEY_PREFIXES[Provider.GROK] == ())
         r.check("glm prefix empty (opaque)", PROVIDER_KEY_PREFIXES[Provider.GLM] == ())
+        r.check("gemini prefix is AIza", PROVIDER_KEY_PREFIXES[Provider.GEMINI] == ("AIza",))
 
     def check_prefix_validation(self) -> None:
         r = self.results
@@ -321,6 +324,9 @@ class Suite:
         r.check("muse LLM| is live", ProviderCredentials.is_live_format(Provider.MUSE, MUSE_KEY))
         r.check("grok opaque is live", ProviderCredentials.is_live_format(Provider.GROK, GROK_KEY))
         r.check("glm opaque is live", ProviderCredentials.is_live_format(Provider.GLM, GLM_KEY))
+        r.check(
+            "gemini AIza is live", ProviderCredentials.is_live_format(Provider.GEMINI, GEMINI_KEY)
+        )
         r.check(
             "openai sk-ant not live for openai",
             not ProviderCredentials.is_live_format(Provider.OPENAI, CLAUDE_KEY),
@@ -336,6 +342,10 @@ class Suite:
         r.check(
             "deepseek LLM| not live for deepseek",
             not ProviderCredentials.is_live_format(Provider.DEEPSEEK, MUSE_KEY),
+        )
+        r.check(
+            "gemini sk- not live for gemini",
+            not ProviderCredentials.is_live_format(Provider.GEMINI, OPENAI_KEY),
         )
         # Wrong prefix raises without network
         ws = Workspace("http://127.0.0.1:9")
@@ -422,6 +432,17 @@ class Suite:
         r.check("muse sends Bearer", sent.headers.get("authorization") == f"Bearer {MUSE_KEY}")
         r.check("muse no x-api-key", "x-api-key" not in sent.headers)
         self.backend.reset()
+        # Gemini x-goog-api-key
+        self.backend.expect(
+            ScriptedResponse.json_body({"models": [{"name": "models/gemini-2.0-flash"}]})
+        )
+        GeminiVerifier().verify(
+            ProviderCredentials(provider=Provider.GEMINI, api_key=GEMINI_KEY)  # type: ignore[arg-type]
+        )
+        sent = self.backend.requests[-1]
+        r.check("gemini sends x-goog-api-key", sent.headers.get("x-goog-api-key") == GEMINI_KEY)
+        r.check("gemini no authorization", "authorization" not in sent.headers)
+        self.backend.reset()
         # Claude still x-api-key + version
         self.backend.expect(ScriptedResponse.json_body({"data": [{"id": "m"}]}))
         ClaudeVerifier().verify(
@@ -460,6 +481,11 @@ class Suite:
             ExitCode.AUTHENTICATION,
         )
         # Valid 200
+        self.backend.expect(ScriptedResponse.json_body({"models": [{"name": "models/gemini-1.5"}]}))
+        ident_gem = GeminiVerifier().verify(
+            ProviderCredentials(provider=Provider.GEMINI, api_key=GEMINI_KEY)  # type: ignore[arg-type]
+        )
+        r.check("gemini valid models verified", ident_gem.verified is True)
         self.backend.expect(ScriptedResponse.json_body({"data": [{"id": "m"}]}))
         ident = GlmVerifier().verify(
             ProviderCredentials(provider=Provider.GLM, api_key=GLM_KEY)  # type: ignore[arg-type]
@@ -491,6 +517,7 @@ class Suite:
             (Provider.DEEPSEEK, DeepSeekVerifier),
             (Provider.GLM, GlmVerifier),
             (Provider.MUSE, MuseVerifier),
+            (Provider.GEMINI, GeminiVerifier),
         ]:
             inst = verifier_for_provider(p)
             r.check(f"factory {p.value} returns {cls.__name__}", isinstance(inst, cls))
@@ -502,6 +529,7 @@ class Suite:
             (Provider.DEEPSEEK, DEEPSEEK_KEY),
             (Provider.GLM, GLM_KEY),
             (Provider.MUSE, MUSE_KEY),
+            (Provider.GEMINI, GEMINI_KEY),
         ]
         for provider, key in cases:
             ws = Workspace(self.backend.origin)
@@ -568,6 +596,31 @@ class Suite:
         ctx2 = w.context(environment={"XAI_API_KEY": "any-opaque-key"}, provider=Provider.GROK)
         resolved2 = ctx2.provider_resolver().resolve(w.config.profile, Provider.GROK)
         r.check("grok env opaque accepted", resolved2 is not None)
+        # Gemini GOOGLE alias precedence
+        w2 = Workspace(self.backend.origin)
+        ctx3 = w2.context(environment={"GEMINI_API_KEY": GEMINI_KEY}, provider=Provider.GEMINI)
+        resolved3 = ctx3.provider_resolver().resolve(w2.config.profile, Provider.GEMINI)
+        r.check(
+            "gemini GEMINI_API_KEY accepted",
+            resolved3 is not None and resolved3.credentials.secret_value() == GEMINI_KEY,
+        )
+        ctx4 = w2.context(
+            environment={"GOOGLE_API_KEY": GEMINI_KEY, "GEMINI_API_KEY": GEMINI_KEY},
+            provider=Provider.GEMINI,
+        )
+        resolved4 = ctx4.provider_resolver().resolve(w2.config.profile, Provider.GEMINI)
+        r.check("gemini GOOGLE_API_KEY outranks GEMINI", resolved4 is not None)
+        r.raises(
+            "invalid gemini env raises",
+            lambda: (
+                w2.context(environment={"GEMINI_API_KEY": OPENAI_KEY}, provider=Provider.GEMINI)
+                .provider_resolver()
+                .resolve(w2.config.profile, Provider.GEMINI)
+            ),
+            CliErrorCode.AUTH_REQUIRED,
+            ExitCode.AUTHENTICATION,
+        )
+        w2.cleanup()
         w.cleanup()
 
     def check_whoami(self) -> None:

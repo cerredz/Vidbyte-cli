@@ -96,9 +96,14 @@ class _BaseProviderVerifier:
             raise ProviderApiProtocolError(credentials.provider.value, error) from error
         if not isinstance(payload, dict):
             raise ProviderApiProtocolError(credentials.provider.value)
+        # OpenAI-style uses data; Gemini/Cohere use models.
         data = payload.get("data")
-        if not isinstance(data, list):
-            raise ProviderApiProtocolError(credentials.provider.value)
+        if isinstance(data, list):
+            return
+        models = payload.get("models")
+        if isinstance(models, list):
+            return
+        raise ProviderApiProtocolError(credentials.provider.value)
 
 
 class OpenAIVerifier(_BaseProviderVerifier):
@@ -182,6 +187,19 @@ class MuseVerifier(_BaseProviderVerifier):
         return {"Authorization": f"Bearer {credentials.secret_value()}"}
 
 
+class GeminiVerifier(_BaseProviderVerifier):
+    """Proves a Gemini key via GET /v1beta/models with x-goog-api-key."""
+
+    def verify(self, credentials: ProviderCredentials) -> ProviderIdentity:
+        # Google uses x-goog-api-key on generativelanguage.googleapis.com.
+        self._probe(credentials, timeout_seconds=15.0)
+        return ProviderIdentity(provider=credentials.provider)
+
+    def _headers(self, credentials: ProviderCredentials) -> dict[str, str]:
+        # Per Google docs: x-goog-api-key: $GEMINI_API_KEY
+        return {"x-goog-api-key": credentials.secret_value()}
+
+
 def verifier_for_provider(provider: Provider) -> ProviderVerifier:
     # Factory keeps command branching closed over Provider variants.
     if provider == Provider.OPENAI:
@@ -196,4 +214,6 @@ def verifier_for_provider(provider: Provider) -> ProviderVerifier:
         return GlmVerifier()
     if provider == Provider.MUSE:
         return MuseVerifier()
+    if provider == Provider.GEMINI:
+        return GeminiVerifier()
     raise ValueError(f"unsupported provider {provider}")

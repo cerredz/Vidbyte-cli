@@ -110,9 +110,34 @@ class Provider(StrEnum):
     MUSE = "muse"
     GEMINI = "gemini"
 
-PROVIDER_KEY_PREFIXES: dict[Provider, tuple[str, ...]] = {OPENAI: ("sk-",), CLAUDE: ("sk-ant-",), GROK: (), DEEPSEEK: ("sk-",), GLM: (), MUSE: ("LLM|",), GEMINI: ("AIza",)}
-PROVIDER_ENV_VARS: dict[Provider, str] = {OPENAI: "OPENAI_API_KEY", CLAUDE: "ANTHROPIC_API_KEY", GROK: "XAI_API_KEY", DEEPSEEK: "DEEPSEEK_API_KEY", GLM: "ZAI_API_KEY", MUSE: "MODEL_API_KEY", GEMINI: "GEMINI_API_KEY"}
-PROVIDER_PROBE_URLS: dict[Provider, str] = {OPENAI: "https://api.openai.com/v1/models", CLAUDE: "https://api.anthropic.com/v1/models", GROK: "https://api.x.ai/v1/models", DEEPSEEK: "https://api.deepseek.com/v1/models", GLM: "https://api.z.ai/api/paas/v4/models", MUSE: "https://api.meta.ai/v1/models", GEMINI: "https://generativelanguage.googleapis.com/v1beta/models"}
+
+PROVIDER_KEY_PREFIXES: dict[Provider, tuple[str, ...]] = {
+    OPENAI: ("sk-",),
+    CLAUDE: ("sk-ant-",),
+    GROK: (),
+    DEEPSEEK: ("sk-",),
+    GLM: (),
+    MUSE: ("LLM|",),
+    GEMINI: ("AIza",),
+}
+PROVIDER_ENV_VARS: dict[Provider, str] = {
+    OPENAI: "OPENAI_API_KEY",
+    CLAUDE: "ANTHROPIC_API_KEY",
+    GROK: "XAI_API_KEY",
+    DEEPSEEK: "DEEPSEEK_API_KEY",
+    GLM: "ZAI_API_KEY",
+    MUSE: "MODEL_API_KEY",
+    GEMINI: "GEMINI_API_KEY",
+}
+PROVIDER_PROBE_URLS: dict[Provider, str] = {
+    OPENAI: "https://api.openai.com/v1/models",
+    CLAUDE: "https://api.anthropic.com/v1/models",
+    GROK: "https://api.x.ai/v1/models",
+    DEEPSEEK: "https://api.deepseek.com/v1/models",
+    GLM: "https://api.z.ai/api/paas/v4/models",
+    MUSE: "https://api.meta.ai/v1/models",
+    GEMINI: "https://generativelanguage.googleapis.com/v1beta/models",
+}
 # Env precedence for Gemini needs a list; single canonical entry stays here and resolver handles alias.
 GEMINI_ENV_FALLBACK = "GOOGLE_API_KEY"
 ```
@@ -166,6 +191,7 @@ Adds `GeminiVerifier` with `x-goog-api-key` header and Gemini-specific body vali
 class GeminiVerifier(_BaseProviderVerifier):
     def verify(self, credentials: ProviderCredentials) -> ProviderIdentity: ...
     def _headers(self, credentials: ProviderCredentials) -> dict[str, str]: ...
+
 
 def verifier_for_provider(provider: Provider) -> ProviderVerifier: ...
 ```

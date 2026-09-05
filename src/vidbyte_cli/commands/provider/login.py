@@ -18,7 +18,7 @@ class ProviderLoginCommand:
         # Adds `provider login <provider>` with optional stdin and fallback flags.
         @parent.command(
             name="login",
-            help="Authenticate a provider API key (openai, claude, grok, deepseek, glm, muse)",
+            help="Authenticate a provider API key (openai, claude, grok, deepseek, glm, muse, gemini)",  # noqa: E501
         )
         @click.argument("provider", type=click.Choice([p.value for p in Provider]))
         @click.option(
