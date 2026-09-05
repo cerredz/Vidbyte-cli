@@ -77,6 +77,8 @@ class EnsembleService:
             reply = await root.arun(stages.sdk.run_input(prompt))
         # CancelledError is a BaseException, so Ctrl-C passes through this handler untouched.
         except Exception as error:
+            if stages.sdk.is_schema_error(error):
+                raise EnsembleRolePlanInvalid(stages.inputs.roles) from error
             raise EnsembleHostFailed("planner", error) from error
         plan = getattr(reply, "structured", None)
         if not isinstance(plan, RolePlan) or len(plan.roles) != stages.inputs.roles:

@@ -521,8 +521,11 @@ class EnsembleService:
    every generated role with `return_exceptions=True`, partitions successes from failures,
    aborts with `EnsembleAllRolesFailed` if nothing survived, awaits `_implement`, and builds the
    result.
-3. `_plan_roles` runs one turn and reads `structured`. A reply whose structured output is absent
-   or has the wrong role count raises `EnsembleRolePlanInvalid`.
+3. `_plan_roles` runs one turn and reads `structured`. A wrong role count raises
+   `EnsembleRolePlanInvalid`, and so does a schema violation — the SDK *raises*
+   `OutputSchemaViolationError` rather than returning `None`, and that class is a sibling of
+   `CodexAgentError`, not a subclass. `EnsembleSdk.is_schema_error` tells them apart so a model
+   that produced invalid output is not reported as a broken host.
 4. `_propose` wraps its work in `asyncio.timeout(inputs.role_timeout_seconds)`, forks the root
    read-only, runs one turn, and validates the structured proposal.
 5. `_implement` forks the root with write access and runs one turn carrying every surviving
@@ -585,11 +588,18 @@ class SameHostEnsembleCommand:
   whether the value arrives from the CLI or from a future programmatic caller.
 - A plan that resolves to a non-Codex host raises `EnsembleHostUnsupported` before the executor.
 
-### 6.7 Executor and Failures
+### 6.7 Runner and Failures
 
-**File(s):** `src/vidbyte_cli/lib/runtime_primitives/executor.py`,
-`src/vidbyte_cli/lib/errors/failures.py`, `src/vidbyte_cli/lib/runtime/context.py`
-**Type:** Modified
+**File(s):** `src/vidbyte_cli/services/ensemble/runner.py`,
+`src/vidbyte_cli/lib/runtime_primitives/executor.py`,
+`src/vidbyte_cli/lib/errors/failures.py`
+**Type:** New and Modified
+
+> **Deviation from the original plan.** This section first placed admission and execution on
+> `RuntimeExecutor.execute_ensemble`. That would make `lib/` import `services/`, inverting the
+> layering `AGENTS.md` declares for this package. The orchestration moved to
+> `services/ensemble/runner.py` instead; `RuntimeExecutor` keeps only the adversarial-team stub,
+> and the command calls `EnsembleRunner` directly.
 
 #### What it does
 
