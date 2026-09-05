@@ -15,7 +15,7 @@ from pydantic import JsonValue, ValidationError
 from ...lib.errors.failures import EnsembleHostUnsupported, EnsembleInputsInvalid
 from ...lib.output import OutputDocument
 from ...lib.runtime.context import ApplicationContext
-from ...services.ensemble import EnsembleRunner
+from ...services.ensemble.runner import EnsembleRunner
 from ...types.ensemble import (
     EnsembleHost,
     EnsembleInputs,

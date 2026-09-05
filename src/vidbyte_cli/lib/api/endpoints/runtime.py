@@ -20,7 +20,9 @@ from ..response import ResponseShape
 
 RUNTIME_CATALOG_PATH = "/api/x402/runtime"
 ADVERSARIAL_TEAM_ADMISSION_PATH = "/api/x402/runtime/adversarial-team/admissions"
-SAME_HOST_ENSEMBLE_ADMISSION_PATH = "/api/x402/runtime/same-host-ensemble/admissions"
+# Matches the capability declared in the backend x402 catalog (vidbyte PR #508), which
+# names this route "activate" rather than "admissions".
+SAME_HOST_ENSEMBLE_ADMISSION_PATH = "/api/x402/runtime/same-host-ensemble/activate"
 
 
 class RuntimeEndpoints:
