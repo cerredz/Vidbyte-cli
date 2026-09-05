@@ -69,11 +69,18 @@ class RuntimeHostStatus(BaseModel):
     executable: str | None = None
 
 
+class RuntimeCapabilityId(StrEnum):
+    """Every local runtime primitive this CLI can build a launch plan for."""
+
+    ADVERSARIAL_TEAM = "runtime.review.adversarial-team@1"
+    SAME_HOST_ENSEMBLE = "runtime.same-host-ensemble@1"
+
+
 class RuntimeLaunchPlan(BaseModel):
     """Local-only handoff a future executor will turn into an agent topology."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
-    capability_id: Literal["runtime.review.adversarial-team@1"]
+    capability_id: RuntimeCapabilityId
     host: RuntimeHost
     executable: Path
     working_directory: Path

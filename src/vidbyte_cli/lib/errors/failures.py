@@ -1580,3 +1580,225 @@ class ResearchWatchTimedOut(CliError):
             ),
             hint=f"Run 'vidbyte-cli research status {run_id}' to check on it.",
         )
+
+
+class EnsembleInputsInvalid(CliError):
+    """The supplied ensemble options failed their validated input contract."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, cause: Exception) -> None:
+        # Reports the contract, never the submitted values: a task can be sensitive.
+        super().__init__(
+            "The ensemble options are outside their accepted bounds.",
+            description=(
+                "One or more options failed validation before anything else ran. The task must "
+                "hold 1 to 20,000 characters, --roles must be 3 to 100, and --role-timeout "
+                "must be 1 to 3600 seconds. Nothing was submitted, no admission was requested, "
+                "and no agent started, so correcting the option and retrying is safe."
+            ),
+            trace=(
+                "SameHostEnsembleCommand built EnsembleInputs from the parsed options before "
+                "planning a launch."
+            ),
+            hint="Check --roles (3-100) and --role-timeout (1-3600), then retry.",
+            cause=cause,
+        )
+
+
+class EnsembleHostUnsupported(CliError):
+    """The resolved host is not the one host this primitive can run on."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, host: str) -> None:
+        # Auto mode can still resolve to a host this primitive never offers explicitly.
+        super().__init__(
+            f"'{host}' is not a supported host for same-host-ensemble.",
+            description=(
+                "This primitive runs only on Codex, the sole native host with verified thread "
+                "forking and per-fork sandbox control, which is what keeps proposal roles from "
+                "writing to the workspace. No admission was requested and no process started."
+            ),
+            trace=(
+                "SameHostEnsembleCommand checked the resolved RuntimeLaunchPlan's host before "
+                "calling the executor."
+            ),
+            hint="Install Codex, then run 'vidbyte-cli runtime doctor' to confirm discovery.",
+        )
+
+
+class EnsembleSdkUnavailable(CliError):
+    """The Vidbyte SDK is missing, or predates its Codex integration."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # Raised before admission, so an unmet dependency never costs the caller anything.
+        super().__init__(
+            "The ensemble requires the Vidbyte SDK's Codex integration.",
+            description=(
+                "The Codex agent this primitive drives could not be imported. Either the SDK is "
+                "not installed, or the installed release predates the Codex integration and so "
+                "imports without the required symbols. This check runs before paid admission, "
+                "so nothing was charged. Install the extra and retry."
+            ),
+            trace="EnsembleRunner.run called EnsembleSdk.load before requesting admission.",
+            hint="Install with: pip install 'vidbyte-cli[codex]'",
+            cause=cause,
+        )
+
+
+class EnsembleRolePlanInvalid(CliError):
+    """The planner turn did not return a usable roster of generated roles."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, expected: int) -> None:
+        # The roster is generated, so a bad plan is a host failure rather than caller error.
+        super().__init__(
+            f"The planner did not return {expected} usable roles.",
+            description=(
+                "The first ensemble stage returned no structured role plan, returned a "
+                "different number of roles than requested, or reused a role name. Every later "
+                "stage forks from that plan and every candidate is labeled by its role, so the "
+                "run stopped here rather than fanning out to an ambiguous roster. Admission "
+                "was already granted for this attempt."
+            ),
+            trace=(
+                "EnsembleService._plan_roles read the planner reply's structured output before "
+                "forking any proposal role."
+            ),
+            hint="Retry, or lower --roles if the host struggles to differentiate that many.",
+        )
+
+
+class EnsembleProposalUnusable(CliError):
+    """One role returned no structured proposal, so that branch produced nothing."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.PARTIAL_OUTCOME
+
+    def __init__(self, role: str) -> None:
+        # Recorded as a per-role failure; it aborts the run only if every role fails.
+        super().__init__(
+            f"Role '{role}' returned no usable proposals.",
+            description=(
+                "This role's fork completed without producing structured output matching the "
+                "proposal contract, which requires 5 to 10 approaches with pros and cons on "
+                "each. The role is recorded as failed and the run continues with whichever "
+                "roles did succeed, because a partial ensemble still beats a single agent. "
+                "Only an empty slate stops the run."
+            ),
+            trace=(
+                "EnsembleService._propose validated one fork's structured reply before the "
+                "fan-in stage collected it."
+            ),
+            hint="Inspect the failures list in the result document for the affected roles.",
+        )
+
+
+class EnsembleAllRolesFailed(CliError):
+    """Every proposal role failed, so there is nothing to hand the implementer."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, failed: int) -> None:
+        # Running the implementer on an empty proposal set would just be a solo agent.
+        super().__init__(
+            f"All {failed} ensemble roles failed.",
+            description=(
+                "No role produced a usable slate, through timeout, host failure, or invalid "
+                "output. The selection and implementer stages were not started, because "
+                "running them with no candidates would be an expensive way to run one ordinary "
+                "agent. No file in the workspace was modified; admission for this attempt was "
+                "already granted."
+            ),
+            trace=(
+                "EnsembleService._orchestrate partitioned the gathered role outcomes and found "
+                "no surviving proposal."
+            ),
+            hint="Raise --role-timeout, or check 'vidbyte-cli runtime doctor' for host health.",
+        )
+
+
+class EnsembleHostFailed(CliError):
+    """The native host failed during a stage whose failure ends the run."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, stage: str, cause: Exception) -> None:
+        # The provider message is withheld: it can carry workspace paths and prompt text.
+        super().__init__(
+            f"The native host failed during the ensemble {stage} stage.",
+            description=(
+                "Codex raised while running this stage. The provider's own message is withheld "
+                "because it can quote workspace paths and prompt text. Planner and selector "
+                "failures end the run, unlike a single role's failure, because every later "
+                "stage depends on them. No partial work was applied by this stage."
+            ),
+            trace=(
+                "EnsembleService drove one Codex turn or fork through the Vidbyte SDK's Codex "
+                "agent and the SDK raised."
+            ),
+            hint="Run 'vidbyte-cli runtime doctor', then retry.",
+            cause=cause,
+        )
+
+
+class EnsembleSelectionInvalid(CliError):
+    """A narrowing round did not return the survivors it was told to return."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, expected: int) -> None:
+        # The ladder is computed locally, so a round that ignores its target is unrecoverable.
+        super().__init__(
+            f"The selector did not keep exactly {expected} candidate(s).",
+            description=(
+                "One narrowing round returned no structured output, kept a number of "
+                "candidates other than the one it was given, repeated a candidate, or named an "
+                "identifier that was not on the slate for that round. Each round's survivors "
+                "decide the next round's slate, so the run stopped rather than continuing from "
+                "an unverifiable set. No workspace file was modified; admission for this "
+                "attempt was already granted."
+            ),
+            trace=(
+                "EnsembleService._round validated one selection round's structured reply "
+                "against the candidate identifiers that round was offered."
+            ),
+            hint="Retry, or lower --roles so the first round weighs fewer candidates.",
+        )
+
+
+class EnsembleImplementerFailed(CliError):
+    """The write-enabled implementer stage failed after an approach was selected."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.PARTIAL_OUTCOME
+
+    def __init__(self, cause: Exception) -> None:
+        # The one stage that may write, so a failure here can leave partial edits behind.
+        super().__init__(
+            "The ensemble implementer stage failed.",
+            description=(
+                "An approach was proposed and selected successfully, but the write-enabled "
+                "implementer fork failed. This is the only stage permitted to modify the "
+                "workspace, so it may have applied some changes before failing. Review the "
+                "working tree before retrying, because a retry starts the task from the "
+                "beginning."
+            ),
+            trace=(
+                "EnsembleService._implement forked the root thread with write access and ran "
+                "the implementation turn."
+            ),
+            hint="Check 'git status' for partial edits before retrying.",
+            cause=cause,
+        )
