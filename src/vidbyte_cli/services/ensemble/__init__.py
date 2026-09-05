@@ -1,9 +1,7 @@
 """The same-host ensemble: one planner turn, N read-only proposals, one implementer.
 
-Exports only what a caller outside this package needs. Every Vidbyte SDK symbol stays
-behind `sdk.py`, which is the single module that imports the SDK at all.
+This module stays free of imports on purpose. `runner` pulls in the whole API stack, so
+re-exporting it here would make importing `sdk` or `settings` drag that stack along and
+expose the import-order cycle between `lib.auth` and `lib.api.client`. Import the module
+you actually need.
 """
-
-from .runner import EnsembleRunner
-
-__all__ = ["EnsembleRunner"]
