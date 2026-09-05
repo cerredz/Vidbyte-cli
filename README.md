@@ -61,6 +61,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime list` | List local runtime primitives and admission prices |
 | `vidbyte-cli runtime doctor` | Detect supported native coding-agent hosts |
 | `vidbyte-cli runtime adversarial-team <task>` | Validate the first local primitive launch (executor not yet implemented) |
+| `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Validate a persistence-guard launch across six strength tiers (executor not yet implemented) |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 

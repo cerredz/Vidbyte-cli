@@ -227,6 +227,31 @@ class RuntimeExecutionNotImplemented(CliError):
         )
 
 
+class PersistenceExecutionNotImplemented(CliError):
+    """The command scaffold reached the deliberately absent persistence executor."""
+
+    code = CliErrorCode.NOT_IMPLEMENTED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Makes the no-charge boundary explicit for human and agent callers.
+        super().__init__(
+            "The persistence runtime executor is not implemented yet.",
+            description=(
+                "The CLI validated the task, working directory, native host, and strength "
+                "tier, but this release contains only the runtime platform scaffold. It "
+                "stopped before requesting a paid Vidbyte admission and before launching any "
+                "local agent, so no credits were spent and no machine state changed. Retrying "
+                "cannot proceed until the executor ships."
+            ),
+            trace=(
+                "PersistenceCommand built a RuntimeLaunchPlan and PersistenceSettings, then "
+                "reached the intentionally inert RuntimeExecutor."
+            ),
+            hint="Use 'vidbyte-cli runtime list' for published capability metadata.",
+        )
+
+
 class AmbiguousPromptSource(CliError):
     """More than one prompt source was supplied for a single run."""
 

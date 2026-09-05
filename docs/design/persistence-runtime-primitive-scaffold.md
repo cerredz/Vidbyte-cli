@@ -310,9 +310,7 @@ the executor boundary — mirroring `adversarial_team.py`'s shape exactly, with 
 ```python
 class PersistenceCommand:
     def register(self, parent: click.Group) -> None: ...
-    def execute(
-        self, context: ApplicationContext, task: str, host: str, strength: int
-    ) -> None: ...
+    def execute(self, context: ApplicationContext, task: str, host: str, strength: int) -> None: ...
 ```
 
 #### Logic / Algorithm
@@ -357,9 +355,7 @@ class RuntimeExecutor:
 
 
 class RuntimeEndpoints:
-    def admit_adversarial_team(
-        self, request: AdmissionRequest, key: str
-    ) -> AdmissionGrant: ...
+    def admit_adversarial_team(self, request: AdmissionRequest, key: str) -> AdmissionGrant: ...
     def admit_persistence(self, request: AdmissionRequest, key: str) -> AdmissionGrant: ...
 ```
 

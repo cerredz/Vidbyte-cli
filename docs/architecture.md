@@ -76,8 +76,14 @@ The `runtime` command family is intentionally independent from hosted research. 
 discovery identifies an installed Codex, Claude Code, or OpenCode executable; launch
 planning validates safe local prerequisites; and `RuntimeExecutor` is the only place a
 future algorithm may request paid admission and spawn the native-agent topology. This
-explicitly requested scaffold is the narrow exception to rule 6: its executor always raises
-before payment or process launch, and the exception should disappear with the first runtime.
+explicitly requested scaffold is the narrow exception to rule 6: every executor method always
+raises before payment or process launch, and the exception should disappear one primitive at a
+time as each one's own executor ships. `adversarial-team` and `persistence` are the first two
+primitives to share this boundary; `RuntimeLaunchPlan.capability_id` and
+`RuntimeLaunchPlanner.build()` carry an explicit capability id per primitive so a third can
+reuse the same host-discovery and launch-planning machinery without duplicating it. The
+`persistence` command additionally resolves a caller-facing `--strength` tier (1-6) into a
+fixed `PersistenceSettings.repeat_count` before reaching its own inert executor method.
 
 ## Output and failure contracts
 

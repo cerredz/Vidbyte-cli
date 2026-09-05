@@ -6,8 +6,9 @@ extra-forbid models make contract drift fail before a paid execution can begin.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -73,8 +74,41 @@ class RuntimeLaunchPlan(BaseModel):
     """Local-only handoff a future executor will turn into an agent topology."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
-    capability_id: Literal["runtime.review.adversarial-team@1"]
+    capability_id: Literal["runtime.review.adversarial-team@1", "runtime.persistence@1"]
     host: RuntimeHost
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
+
+
+class PersistenceStrength(IntEnum):
+    """The six caller-facing persistence tiers, from lightest to most insistent."""
+
+    TIER_1 = 1
+    TIER_2 = 2
+    TIER_3 = 3
+    TIER_4 = 4
+    TIER_5 = 5
+    TIER_6 = 6
+
+
+_PERSISTENCE_REPEAT_COUNTS: Mapping[PersistenceStrength, int] = {
+    PersistenceStrength.TIER_1: 3,
+    PersistenceStrength.TIER_2: 8,
+    PersistenceStrength.TIER_3: 20,
+    PersistenceStrength.TIER_4: 40,
+    PersistenceStrength.TIER_5: 70,
+    PersistenceStrength.TIER_6: 100,
+}
+
+
+class PersistenceSettings(BaseModel):
+    """Bounded, frozen persistence-primitive settings for a future executor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    strength: PersistenceStrength
+
+    @property
+    def repeat_count(self) -> int:
+        # Resolves the caller-facing tier to its fixed continuation-turn count.
+        return _PERSISTENCE_REPEAT_COUNTS[self.strength]

@@ -33,7 +33,7 @@ from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
 EXPECTED_TOP_LEVEL = {"config", "doctor", "login", "logout", "research", "runtime", "whoami"}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
-EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list"}
+EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list", "persistence"}
 # Every module that existed only to serve a backend route that was never built.
 DELETED_MODULES = (
     "vidbyte_cli.commands.harness",
