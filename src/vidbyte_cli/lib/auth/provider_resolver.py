@@ -44,6 +44,8 @@ class ProviderResolver:
 
     def resolve(self, profile: str, provider: Provider) -> ResolvedProviderCredential | None:
         # Env var is highest; set-but-unusable is an error, not a silent miss.
+        if provider == Provider.GEMINI:
+            return self._resolve_gemini(profile)
         env_var = PROVIDER_ENV_VARS[provider]
         environment_value = self._environment.get(env_var)
         if environment_value is not None:
@@ -60,6 +62,28 @@ class ProviderResolver:
         if keyring_value is not None:
             return ResolvedProviderCredential(keyring_value, ProviderSource.KEYRING)
         file_value = self._store.file.read(profile, provider)
+        if file_value is not None:
+            return ResolvedProviderCredential(file_value, ProviderSource.RESTRICTED_FILE)
+        return None
+
+    def _resolve_gemini(self, profile: str) -> ResolvedProviderCredential | None:
+        # Google supports GEMINI_API_KEY and legacy GOOGLE_API_KEY, with GOOGLE taking precedence.
+        for env_var in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+            environment_value = self._environment.get(env_var)
+            if environment_value is not None:
+                token = environment_value.strip()
+                if not token or len(token) > _MAX_KEY_CHARACTERS:
+                    raise InvalidProviderEnvironmentKey(Provider.GEMINI.value, env_var)
+                if not ProviderCredentials.is_live_format(Provider.GEMINI, token):
+                    raise InvalidProviderEnvironmentKey(Provider.GEMINI.value, env_var)
+                return ResolvedProviderCredential(
+                    ProviderCredentials(provider=Provider.GEMINI, api_key=token),  # type: ignore[arg-type]
+                    ProviderSource.ENVIRONMENT,
+                )
+        keyring_value = self._store.keyring.read(profile, Provider.GEMINI)
+        if keyring_value is not None:
+            return ResolvedProviderCredential(keyring_value, ProviderSource.KEYRING)
+        file_value = self._store.file.read(profile, Provider.GEMINI)
         if file_value is not None:
             return ResolvedProviderCredential(file_value, ProviderSource.RESTRICTED_FILE)
         return None

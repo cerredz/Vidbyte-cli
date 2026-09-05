@@ -1,7 +1,8 @@
 """Live probe verifiers for provider BYOK keys.
 
 Verifies OpenAI via GET https://api.openai.com/v1/models with Authorization: Bearer,
-and Claude via GET https://api.anthropic.com/v1/models with x-api-key + anthropic-version.
+Claude via GET https://api.anthropic.com/v1/models with x-api-key + anthropic-version,
+and Grok/DeepSeek/GLM/Muse via Bearer probes to their native /v1/models endpoints.
 """
 
 from __future__ import annotations
@@ -95,9 +96,14 @@ class _BaseProviderVerifier:
             raise ProviderApiProtocolError(credentials.provider.value, error) from error
         if not isinstance(payload, dict):
             raise ProviderApiProtocolError(credentials.provider.value)
+        # OpenAI-style uses data; Gemini/Cohere use models.
         data = payload.get("data")
-        if not isinstance(data, list):
-            raise ProviderApiProtocolError(credentials.provider.value)
+        if isinstance(data, list):
+            return
+        models = payload.get("models")
+        if isinstance(models, list):
+            return
+        raise ProviderApiProtocolError(credentials.provider.value)
 
 
 class OpenAIVerifier(_BaseProviderVerifier):
@@ -129,10 +135,85 @@ class ClaudeVerifier(_BaseProviderVerifier):
         }
 
 
+class GrokVerifier(_BaseProviderVerifier):
+    """Proves a Grok key via GET /v1/models with Bearer auth."""
+
+    def verify(self, credentials: ProviderCredentials) -> ProviderIdentity:
+        # xAI uses OpenAI-compatible Bearer on https://api.x.ai/v1/models.
+        self._probe(credentials, timeout_seconds=15.0)
+        return ProviderIdentity(provider=credentials.provider)
+
+    def _headers(self, credentials: ProviderCredentials) -> dict[str, str]:
+        # Exact string per xAI docs: Authorization: Bearer $XAI_API_KEY
+        return {"Authorization": f"Bearer {credentials.secret_value()}"}
+
+
+class DeepSeekVerifier(_BaseProviderVerifier):
+    """Proves a DeepSeek key via GET /v1/models with Bearer auth."""
+
+    def verify(self, credentials: ProviderCredentials) -> ProviderIdentity:
+        # DeepSeek is OpenAI-compatible on https://api.deepseek.com/v1/models.
+        self._probe(credentials, timeout_seconds=15.0)
+        return ProviderIdentity(provider=credentials.provider)
+
+    def _headers(self, credentials: ProviderCredentials) -> dict[str, str]:
+        # Per DeepSeek docs: Authorization: Bearer $DEEPSEEK_API_KEY
+        return {"Authorization": f"Bearer {credentials.secret_value()}"}
+
+
+class GlmVerifier(_BaseProviderVerifier):
+    """Proves a GLM key via GET /models with Bearer auth."""
+
+    def verify(self, credentials: ProviderCredentials) -> ProviderIdentity:
+        # Z.AI is OpenAI-compatible on https://api.z.ai/api/paas/v4/models.
+        self._probe(credentials, timeout_seconds=15.0)
+        return ProviderIdentity(provider=credentials.provider)
+
+    def _headers(self, credentials: ProviderCredentials) -> dict[str, str]:
+        # Per Z.AI docs: Authorization: Bearer $ZAI_API_KEY
+        return {"Authorization": f"Bearer {credentials.secret_value()}"}
+
+
+class MuseVerifier(_BaseProviderVerifier):
+    """Proves a Muse key via GET /v1/models with Bearer auth."""
+
+    def verify(self, credentials: ProviderCredentials) -> ProviderIdentity:
+        # Meta is OpenAI-compatible on https://api.meta.ai/v1/models.
+        self._probe(credentials, timeout_seconds=15.0)
+        return ProviderIdentity(provider=credentials.provider)
+
+    def _headers(self, credentials: ProviderCredentials) -> dict[str, str]:
+        # Per Meta docs: Authorization: Bearer $MODEL_API_KEY
+        return {"Authorization": f"Bearer {credentials.secret_value()}"}
+
+
+class GeminiVerifier(_BaseProviderVerifier):
+    """Proves a Gemini key via GET /v1beta/models with x-goog-api-key."""
+
+    def verify(self, credentials: ProviderCredentials) -> ProviderIdentity:
+        # Google uses x-goog-api-key on generativelanguage.googleapis.com.
+        self._probe(credentials, timeout_seconds=15.0)
+        return ProviderIdentity(provider=credentials.provider)
+
+    def _headers(self, credentials: ProviderCredentials) -> dict[str, str]:
+        # Per Google docs: x-goog-api-key: $GEMINI_API_KEY
+        return {"x-goog-api-key": credentials.secret_value()}
+
+
 def verifier_for_provider(provider: Provider) -> ProviderVerifier:
     # Factory keeps command branching closed over Provider variants.
     if provider == Provider.OPENAI:
         return OpenAIVerifier()
     if provider == Provider.CLAUDE:
         return ClaudeVerifier()
+    if provider == Provider.GROK:
+        return GrokVerifier()
+    if provider == Provider.DEEPSEEK:
+        return DeepSeekVerifier()
+    if provider == Provider.GLM:
+        return GlmVerifier()
+    if provider == Provider.MUSE:
+        return MuseVerifier()
+    if provider == Provider.GEMINI:
+        return GeminiVerifier()
     raise ValueError(f"unsupported provider {provider}")

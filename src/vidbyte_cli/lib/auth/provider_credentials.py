@@ -40,12 +40,20 @@ class ProviderCredentials(BaseModel):
 
     @classmethod
     def is_live_format(cls, provider: Provider, value: str) -> bool:
-        # Provider-specific prefix: openai accepts sk- but not sk-ant-; claude accepts sk-ant-.
+        # Prefix: openai/deepseek sk- not sk-ant-; claude sk-ant-; muse LLM|; gemini AIza.
         if provider == Provider.CLAUDE:
             return value.startswith("sk-ant-")
-        if provider == Provider.OPENAI:
+        if provider in (Provider.OPENAI, Provider.DEEPSEEK):
             return value.startswith("sk-") and not value.startswith("sk-ant-")
+        if provider == Provider.MUSE:
+            return value.startswith("LLM|")
+        if provider == Provider.GEMINI:
+            return value.startswith("AIza")
+        if provider in (Provider.GROK, Provider.GLM):
+            return bool(value)
         prefixes = PROVIDER_KEY_PREFIXES.get(provider, ())
+        if not prefixes:
+            return bool(value)
         return any(value.startswith(prefix) for prefix in prefixes)
 
     def secret_value(self) -> str:
