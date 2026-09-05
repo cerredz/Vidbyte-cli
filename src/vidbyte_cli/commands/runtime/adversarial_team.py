@@ -11,7 +11,7 @@ from pathlib import Path
 import click
 
 from ...lib.runtime.context import ApplicationContext
-from ...types.runtime import RuntimeHost
+from ...types.runtime import RuntimeCapabilityId, RuntimeHost
 
 
 class AdversarialTeamCommand:
@@ -35,5 +35,7 @@ class AdversarialTeamCommand:
     def execute(self, context: ApplicationContext, task: str, host: str) -> None:
         # Builds a local plan first; the executor then fails before payment or process launch.
         requested = None if host == "auto" else RuntimeHost(host)
-        plan = context.runtime_launch_planner().build(task, requested, Path.cwd())
+        plan = context.runtime_launch_planner().build(
+            RuntimeCapabilityId.ADVERSARIAL_TEAM, task, requested, Path.cwd()
+        )
         context.runtime_executor().execute_adversarial_team(plan)
