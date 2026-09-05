@@ -85,21 +85,3 @@ class RuntimeLaunchPlan(BaseModel):
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
-
-
-class EnsembleRole(BaseModel):
-    """One fan-out role: a name and the system prompt framing its proposal."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    name: str = Field(min_length=1, max_length=64)
-    system_prompt: str = Field(min_length=1, max_length=20_000)
-
-
-class EnsembleRoster(BaseModel):
-    """Every same-host-ensemble setting a caller can tune, fully resolved."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    roles: tuple[EnsembleRole, ...] = Field(min_length=1, max_length=8)
-    implementer_prompt: str = Field(min_length=1, max_length=20_000)
-    model: str | None = Field(default=None, max_length=128)
-    reasoning_effort: str | None = Field(default=None, max_length=32)

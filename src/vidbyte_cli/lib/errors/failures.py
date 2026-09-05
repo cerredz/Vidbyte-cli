@@ -1269,125 +1269,33 @@ class ResearchWatchTimedOut(CliError):
         )
 
 
-class EnsembleRoleSourceConflict(CliError):
-    """Both --role and --roles-file were supplied for one ensemble run."""
+class EnsembleInputsInvalid(CliError):
+    """The supplied ensemble options failed their validated input contract."""
 
     code = CliErrorCode.INVALID_ARGUMENT
     exit_status = ExitCode.USAGE
 
-    def __init__(self) -> None:
-        # Mirrors AmbiguousPromptSource: never guess which role source the caller meant.
+    def __init__(self, cause: Exception) -> None:
+        # Reports the contract, never the submitted values: a task can be sensitive.
         super().__init__(
-            "Provide roles with --role or --roles-file, not both.",
+            "The ensemble options are outside their accepted bounds.",
             description=(
-                "Both a repeatable --role option and --roles-file were supplied, and the CLI "
-                "will not guess which one the caller meant. Neither source was read, so no "
-                "file was opened and no role list was built."
+                "One or more options failed validation before anything else ran. The task must "
+                "hold 1 to 20,000 characters, --roles must be 2 to 8, and --role-timeout must "
+                "be 1 to 3600 seconds. Nothing was submitted, no admission was requested, and "
+                "no agent started, so correcting the option and retrying is safe."
             ),
             trace=(
-                "SameHostEnsembleCommand._build_roster checked role-source exclusivity before "
-                "reading either source."
+                "SameHostEnsembleCommand built EnsembleInputs from the parsed options before "
+                "planning a launch."
             ),
-            hint="Use repeated --role NAME:PROMPT flags, or a single --roles-file PATH.",
-        )
-
-
-class EnsembleRoleInvalid(CliError):
-    """A --role entry is malformed, or two roles share the same name."""
-
-    code = CliErrorCode.INVALID_ARGUMENT
-    exit_status = ExitCode.USAGE
-
-    def __init__(self, detail: str) -> None:
-        # Reports only structural detail (a name or missing separator), never prompt text.
-        super().__init__(
-            f"Invalid --role entry: {detail}.",
-            description=(
-                "Each --role value must be 'NAME:SYSTEM_PROMPT' with a non-empty name and "
-                "prompt, and role names must be unique within one run, since they identify "
-                "each fork to the future executor. Nothing was submitted to the backend."
-            ),
-            trace=(
-                "SameHostEnsembleCommand._build_roster parsed --role values before building "
-                "a launch plan."
-            ),
-            hint="Use --role NAME:SYSTEM_PROMPT, with a unique name per role.",
-        )
-
-
-class EnsembleRolesFileUnreadable(CliError):
-    """The path given to --roles-file could not be opened or read."""
-
-    code = CliErrorCode.INVALID_ARGUMENT
-    exit_status = ExitCode.USAGE
-
-    def __init__(self, path: str, cause: Exception) -> None:
-        # Mirrors PromptFileUnreadable: withhold the OS message, it can expose local layout.
-        super().__init__(
-            f"Unable to read roles file '{path}'.",
-            description=(
-                "The path passed to --roles-file could not be opened for reading. It is "
-                "typically missing, a directory, or blocked by filesystem permissions. Nothing "
-                "was submitted to the backend."
-            ),
-            trace=(
-                "SameHostEnsembleCommand._build_roster selected the file source and attempted "
-                "to open the path in UTF-8 text mode."
-            ),
-            hint="Check that the path exists and is a readable file.",
-            cause=cause,
-        )
-
-
-class EnsembleRolesFileNotValidJson(CliError):
-    """The roles file exists but does not contain valid JSON."""
-
-    code = CliErrorCode.INVALID_ARGUMENT
-    exit_status = ExitCode.USAGE
-
-    def __init__(self, path: str, cause: Exception) -> None:
-        # File content is never echoed: role prompts may hold sensitive text.
-        super().__init__(
-            f"Roles file '{path}' must contain valid JSON.",
-            description=(
-                "The file opened but its contents did not parse as JSON. Re-save it as a JSON "
-                "array of objects, each with 'name' and 'system_prompt' fields."
-            ),
-            trace=(
-                "SameHostEnsembleCommand._build_roster called json.loads on the opened "
-                "--roles-file handle."
-            ),
-            hint="Use a JSON array of objects with 'name' and 'system_prompt' fields.",
-            cause=cause,
-        )
-
-
-class EnsembleRolesFileInvalid(CliError):
-    """The roles file is valid JSON but does not match the required role shape."""
-
-    code = CliErrorCode.INVALID_ARGUMENT
-    exit_status = ExitCode.USAGE
-
-    def __init__(self, path: str, cause: Exception) -> None:
-        # The underlying Pydantic detail is withheld: it can echo submitted prompt text.
-        super().__init__(
-            f"Roles file '{path}' does not match the required role shape.",
-            description=(
-                "The file parsed as JSON but at least one entry failed validation: 'name' and "
-                "'system_prompt' must both be non-empty strings, and there must be one to "
-                "eight roles."
-            ),
-            trace=(
-                "SameHostEnsembleCommand._build_roster validated the parsed JSON against "
-                "EnsembleRole before constructing an EnsembleRoster."
-            ),
-            hint="Use a JSON array of 1-8 objects, each with 'name' and 'system_prompt'.",
+            hint="Check --roles (2-8) and --role-timeout (1-3600), then retry.",
             cause=cause,
         )
 
 
 class EnsembleHostUnsupported(CliError):
-    """The resolved host has no verified fork/sandbox support for this primitive."""
+    """The resolved host is not the one host this primitive can run on."""
 
     code = CliErrorCode.CONFIG_INVALID
     exit_status = ExitCode.OPERATIONAL_FAILURE
@@ -1397,39 +1305,160 @@ class EnsembleHostUnsupported(CliError):
         super().__init__(
             f"'{host}' is not a supported host for same-host-ensemble.",
             description=(
-                "Auto-selection resolved to a host with no verified native fork or sandbox "
-                "support in Vidbyte's cross-provider control matrix, so this primitive cannot "
-                "honestly isolate proposal roles from the implementer role on it. No admission "
-                "was requested and no process started."
+                "This primitive runs only on Codex, the sole native host with verified thread "
+                "forking and per-fork sandbox control, which is what keeps proposal roles from "
+                "writing to the workspace. No admission was requested and no process started."
             ),
             trace=(
                 "SameHostEnsembleCommand checked the resolved RuntimeLaunchPlan's host before "
                 "calling the executor."
             ),
-            hint="Use --host codex or --host claude, or run 'vidbyte-cli runtime doctor'.",
+            hint="Install Codex, then run 'vidbyte-cli runtime doctor' to confirm discovery.",
         )
 
 
-class EnsembleExecutionNotImplemented(CliError):
-    """The command scaffold reached the deliberately absent ensemble executor."""
+class EnsembleSdkUnavailable(CliError):
+    """The Vidbyte SDK is missing, or predates its Codex integration."""
 
-    code = CliErrorCode.NOT_IMPLEMENTED
+    code = CliErrorCode.CONFIG_INVALID
     exit_status = ExitCode.OPERATIONAL_FAILURE
 
-    def __init__(self) -> None:
-        # Makes the no-charge boundary explicit for human and agent callers.
+    def __init__(self, cause: Exception) -> None:
+        # Raised before admission, so an unmet dependency never costs the caller anything.
         super().__init__(
-            "The same-host-ensemble runtime executor is not implemented yet.",
+            "The ensemble requires the Vidbyte SDK's Codex integration.",
             description=(
-                "The CLI validated the task, roles, and native host, but this release contains "
-                "only the runtime platform scaffold. It stopped before requesting a paid "
-                "Vidbyte admission and before launching any local agent, so no credits were "
-                "spent and no machine state changed. Retrying cannot proceed until the "
-                "executor ships."
+                "The Codex agent this primitive drives could not be imported. Either the SDK is "
+                "not installed, or the installed release predates the Codex integration and so "
+                "imports without the required symbols. This check runs before paid admission, "
+                "so nothing was charged. Install the extra and retry."
             ),
             trace=(
-                "SameHostEnsembleCommand built a RuntimeLaunchPlan and reached the "
-                "intentionally inert RuntimeExecutor."
+                "RuntimeExecutor.execute_ensemble called EnsembleSdk.load before requesting "
+                "admission."
             ),
-            hint="Use 'vidbyte-cli runtime list' for published capability metadata.",
+            hint="Install with: pip install 'vidbyte-cli[codex]'",
+            cause=cause,
+        )
+
+
+class EnsembleRolePlanInvalid(CliError):
+    """The planner turn did not return a usable roster of generated roles."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, expected: int) -> None:
+        # The roster is generated, so a bad plan is a host failure rather than caller error.
+        super().__init__(
+            f"The planner did not return {expected} usable roles.",
+            description=(
+                "The first ensemble stage returned no structured role plan, or returned a "
+                "different number of roles than requested. Every later stage forks from that "
+                "plan, so the run stopped here rather than fanning out to an unintended number "
+                "of agents. Admission was already granted for this attempt."
+            ),
+            trace=(
+                "EnsembleService._plan_roles read the planner reply's structured output before "
+                "forking any proposal role."
+            ),
+            hint="Retry, or lower --roles if the host struggles to differentiate that many.",
+        )
+
+
+class EnsembleProposalUnusable(CliError):
+    """One role returned no structured proposal, so that branch produced nothing."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.PARTIAL_OUTCOME
+
+    def __init__(self, role: str) -> None:
+        # Recorded as a per-role failure; it aborts the run only if every role fails.
+        super().__init__(
+            f"Role '{role}' returned no usable proposal.",
+            description=(
+                "This role's fork completed without producing structured output matching the "
+                "proposal contract. The role is recorded as failed and the run continues with "
+                "whichever roles did succeed, because a partial ensemble still beats a single "
+                "agent. Only an empty proposal set stops the run."
+            ),
+            trace=(
+                "EnsembleService._propose validated one fork's structured reply before the "
+                "fan-in stage collected it."
+            ),
+            hint="Inspect the failures list in the result document for the affected roles.",
+        )
+
+
+class EnsembleAllRolesFailed(CliError):
+    """Every proposal role failed, so there is nothing to hand the implementer."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, failed: int) -> None:
+        # Running the implementer on an empty proposal set would just be a solo agent.
+        super().__init__(
+            f"All {failed} ensemble roles failed.",
+            description=(
+                "No role produced a usable proposal, through timeout, host failure, or invalid "
+                "output. The implementer stage was not started, because running it with no "
+                "proposals would be an expensive way to run one ordinary agent. No file in the "
+                "workspace was modified; admission for this attempt was already granted."
+            ),
+            trace=(
+                "EnsembleService._orchestrate partitioned the gathered role outcomes and found "
+                "no surviving proposal."
+            ),
+            hint="Raise --role-timeout, or check 'vidbyte-cli runtime doctor' for host health.",
+        )
+
+
+class EnsembleHostFailed(CliError):
+    """The native host failed during a stage whose failure ends the run."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, stage: str, cause: Exception) -> None:
+        # The provider message is withheld: it can carry workspace paths and prompt text.
+        super().__init__(
+            f"The native host failed during the ensemble {stage} stage.",
+            description=(
+                "Codex raised while running this stage. The provider's own message is withheld "
+                "because it can quote workspace paths and prompt text. Planner and implementer "
+                "failures end the run, unlike a single role's failure, because every later "
+                "stage depends on them. No partial work was applied by this stage."
+            ),
+            trace=(
+                "EnsembleService drove one Codex turn or fork through the Vidbyte SDK's Codex "
+                "agent and the SDK raised."
+            ),
+            hint="Run 'vidbyte-cli runtime doctor', then retry.",
+            cause=cause,
+        )
+
+
+class EnsembleImplementerFailed(CliError):
+    """The write-enabled implementer stage failed after proposals were collected."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.PARTIAL_OUTCOME
+
+    def __init__(self, cause: Exception) -> None:
+        # The one stage that may write, so a failure here can leave partial edits behind.
+        super().__init__(
+            "The ensemble implementer stage failed.",
+            description=(
+                "Proposals were collected successfully, but the write-enabled implementer fork "
+                "failed. This is the only stage permitted to modify the workspace, so it may "
+                "have applied some changes before failing. Review the working tree before "
+                "retrying, because a retry starts the task from the beginning."
+            ),
+            trace=(
+                "EnsembleService._implement forked the root thread with write access and ran "
+                "the reconciliation turn."
+            ),
+            hint="Check 'git status' for partial edits before retrying.",
+            cause=cause,
         )

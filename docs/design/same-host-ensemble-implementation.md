@@ -389,6 +389,7 @@ present, and hands back a typed handle. This is the only module in `src/` that t
 ```python
 class EnsembleAgent(Protocol):
     thread_id: str
+
     async def arun(self, request: Any) -> Any: ...
     async def afork(self, settings: Any) -> "EnsembleAgent": ...
 
@@ -400,7 +401,9 @@ class EnsembleSdk:
     def agent(self, settings: Any) -> EnsembleAgent: ...
     def run_input(self, prompt: str) -> Any: ...
     def root_settings(self, name: str, system_prompt: str, schema: type, options: Any) -> Any: ...
-    def fork_settings(self, name: str, system_prompt: str, schema: type | None, options: Any) -> Any: ...
+    def fork_settings(
+        self, name: str, system_prompt: str, schema: type | None, options: Any
+    ) -> Any: ...
     def is_provider_error(self, error: Exception) -> bool: ...
 ```
 
@@ -439,7 +442,9 @@ write-enabled implementer fork — so sandbox policy lives in exactly one place.
 
 ```python
 class EnsembleSettingsFactory:
-    def __init__(self, sdk: EnsembleSdk, inputs: EnsembleInputs, working_directory: Path) -> None: ...
+    def __init__(
+        self, sdk: EnsembleSdk, inputs: EnsembleInputs, working_directory: Path
+    ) -> None: ...
     def root(self, system_prompt: str) -> Any: ...
     def proposal(self, role: GeneratedRole, system_prompt: str) -> Any: ...
     def implementer(self, system_prompt: str) -> Any: ...
@@ -482,12 +487,30 @@ scoped around.
 ```python
 class EnsembleService:
     def __init__(self, sdk: EnsembleSdk, prompts: EnsemblePrompts) -> None: ...
-    def run(self, plan: RuntimeLaunchPlan, inputs: EnsembleInputs, charged_cents: int) -> EnsembleResult: ...
-    async def _orchestrate(self, factory: EnsembleSettingsFactory, inputs: EnsembleInputs, charged_cents: int) -> EnsembleResult: ...
+    def run(
+        self, plan: RuntimeLaunchPlan, inputs: EnsembleInputs, charged_cents: int
+    ) -> EnsembleResult: ...
+    async def _orchestrate(
+        self, factory: EnsembleSettingsFactory, inputs: EnsembleInputs, charged_cents: int
+    ) -> EnsembleResult: ...
     async def _plan_roles(self, root: EnsembleAgent, inputs: EnsembleInputs) -> RolePlan: ...
-    async def _propose(self, root: EnsembleAgent, factory: EnsembleSettingsFactory, role: GeneratedRole, inputs: EnsembleInputs) -> RoleProposal: ...
-    async def _implement(self, root: EnsembleAgent, factory: EnsembleSettingsFactory, proposals: tuple[RoleProposal, ...], inputs: EnsembleInputs) -> tuple[str, str]: ...
-    def _partition(self, roles: tuple[GeneratedRole, ...], outcomes: list[object]) -> tuple[tuple[RoleProposal, ...], tuple[EnsembleRoleFailure, ...]]: ...
+    async def _propose(
+        self,
+        root: EnsembleAgent,
+        factory: EnsembleSettingsFactory,
+        role: GeneratedRole,
+        inputs: EnsembleInputs,
+    ) -> RoleProposal: ...
+    async def _implement(
+        self,
+        root: EnsembleAgent,
+        factory: EnsembleSettingsFactory,
+        proposals: tuple[RoleProposal, ...],
+        inputs: EnsembleInputs,
+    ) -> tuple[str, str]: ...
+    def _partition(
+        self, roles: tuple[GeneratedRole, ...], outcomes: list[object]
+    ) -> tuple[tuple[RoleProposal, ...], tuple[EnsembleRoleFailure, ...]]: ...
 ```
 
 #### Logic / Algorithm
@@ -533,7 +556,15 @@ the result. Every trace of caller-supplied roles is removed.
 class SameHostEnsembleCommand:
     def register(self, parent: click.Group) -> None: ...
     def execute(self, context: ApplicationContext, inputs: EnsembleInputs) -> None: ...
-    def _inputs(self, task: str, host: str, roles: int, model: str | None, reasoning_effort: str | None, role_timeout: int) -> EnsembleInputs: ...
+    def _inputs(
+        self,
+        task: str,
+        host: str,
+        roles: int,
+        model: str | None,
+        reasoning_effort: str | None,
+        role_timeout: int,
+    ) -> EnsembleInputs: ...
     def _render(self, context: ApplicationContext, result: EnsembleResult) -> None: ...
 ```
 
@@ -571,7 +602,9 @@ role-file failures with the failures the real algorithm can actually produce.
 class RuntimeExecutor:
     def __init__(self, endpoints: RuntimeEndpoints | None = None) -> None: ...
     def execute_adversarial_team(self, plan: RuntimeLaunchPlan) -> NoReturn: ...
-    def execute_ensemble(self, plan: RuntimeLaunchPlan, inputs: EnsembleInputs) -> EnsembleResult: ...
+    def execute_ensemble(
+        self, plan: RuntimeLaunchPlan, inputs: EnsembleInputs
+    ) -> EnsembleResult: ...
 ```
 
 Failures removed: `EnsembleRoleSourceConflict`, `EnsembleRoleInvalid`,
@@ -611,9 +644,16 @@ longer colliding with the SDK's live `CodexHarnessAgent` class name.
 
 ```python
 FORBIDDEN_SOURCE_TOKENS = (
-    "BaseHarness", "HarnessRun", "RepoInspector", "NotImplementedFeature",
-    "lib.harness", "lib/harness", "commands.harness", "types.harness",
-    "endpoints.harness", "vidbyte_cli.harnesses",
+    "BaseHarness",
+    "HarnessRun",
+    "RepoInspector",
+    "NotImplementedFeature",
+    "lib.harness",
+    "lib/harness",
+    "commands.harness",
+    "types.harness",
+    "endpoints.harness",
+    "vidbyte_cli.harnesses",
 )
 ```
 
