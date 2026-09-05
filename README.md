@@ -93,19 +93,21 @@ Install the extra first — it is not part of the base package:
 pip install "vidbyte-cli[codex]"
 ```
 
-`runtime same-host-ensemble <task>` runs three stages on one machine. A planner agent reads
+`runtime same-host-ensemble <task>` runs four stages on one machine. A planner agent reads
 your task and generates the ensemble's roles, writing each role's complete system prompt
 rather than picking from a fixed list, so the perspectives match the task. Each role then runs
-concurrently in its own read-only fork and returns a structured proposal: an approach, the
-risks it sees, and the files it would change. It cannot edit anything — the sandbox forbids it,
-not just the prompt. Finally one write-enabled fork receives every surviving proposal,
-reconciles the conflicts, and does the work. That last fork is the only agent in the topology
-permitted to modify your workspace.
+concurrently in its own read-only fork and returns 5 to 10 distinct approaches, each with its
+pros, cons, risks, and the files it would touch. A role cannot edit anything — the sandbox
+forbids it, not just the prompt. A selector fork then narrows every approach from every role
+down to one, in rounds: each round keeps a fifth of what it was given, weighs the pros and
+cons of every candidate it keeps, and records why the rest were dropped. Finally one
+write-enabled fork receives the selected approach and the selector's brief, and does the work.
+That last fork is the only agent in the topology permitted to modify your workspace.
 
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `--host` | `codex` | Native host. Codex is the only one with verified fork and sandbox support. |
-| `--roles` | `3` | How many roles the planner generates, 2 to 8. |
+| `--roles` | `3` | How many roles the planner generates, 3 to 100. |
 | `--model` | provider default | Model override passed through to the host. |
 | `--reasoning-effort` | provider default | One of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. |
 | `--role-timeout` | `300` | Seconds one role may take before it is recorded as failed. |
@@ -116,7 +118,8 @@ partial ensemble still beats a single agent. The run stops only when every role 
 Two costs are worth separating. Admission is two cents, charged once, after the CLI has
 confirmed your input, the SDK, and the host — so a missing Codex never costs you anything.
 The larger cost is your own provider usage: the SDK opens a fresh Codex app-server per turn
-and per fork, so a three-role run is nine of them against your subscription.
+and per fork, so a three-role run is roughly a dozen of them against your subscription, and
+`--roles 100` is a thousand approaches for the selector to read. Raise it deliberately.
 
 ## Configuration
 

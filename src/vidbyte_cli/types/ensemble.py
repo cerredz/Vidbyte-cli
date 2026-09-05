@@ -1,8 +1,9 @@
 """Typed contracts for the same-host ensemble runtime primitive.
 
 `EnsembleInputs` is the whole command surface as one validated value, so a bound holds
-whether the value came from Click or from a programmatic caller. `GeneratedRole` and
-`RoleProposal` are the two structured-output schemas the agents themselves fill in.
+whether the value came from Click or from a programmatic caller. `RolePlan`, `RoleProposal`,
+and `SelectionRound` are the three structured-output schemas the agents themselves fill in;
+each is the only shape its stage can return, which is what makes the handoffs deterministic.
 
 Nothing here crosses the API boundary: the backend sees only admission metadata.
 """
@@ -13,6 +14,15 @@ from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# The proposal band every role is held to, named once so the schema and the authored mandate
+# that tells the role about it cannot drift apart.
+APPROACHES_PER_ROLE_MIN = 5
+APPROACHES_PER_ROLE_MAX = 10
+
+# The largest roster the planner may be asked for, which also bounds RolePlan's own schema.
+ROLES_MIN = 3
+ROLES_MAX = 100
 
 
 class EnsembleHost(StrEnum):
@@ -33,7 +43,7 @@ class EnsembleReasoningEffort(StrEnum):
 
 
 class EnsembleConfidence(StrEnum):
-    """How strongly a role stands behind the approach it proposed."""
+    """How strongly a role stands behind one approach it proposed."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -46,7 +56,7 @@ class EnsembleInputs(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     task: str = Field(min_length=1, max_length=20_000)
     host: EnsembleHost = EnsembleHost.CODEX
-    roles: int = Field(default=3, ge=2, le=8)
+    roles: int = Field(default=3, ge=ROLES_MIN, le=ROLES_MAX)
     model: str | None = Field(default=None, max_length=128)
     reasoning_effort: EnsembleReasoningEffort | None = None
     role_timeout_seconds: int = Field(default=300, ge=1, le=3600)
@@ -67,18 +77,70 @@ class RolePlan(BaseModel):
     """The planner turn's structured output: the ensemble's whole roster."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    roles: tuple[GeneratedRole, ...] = Field(min_length=1, max_length=8)
+    roles: tuple[GeneratedRole, ...] = Field(min_length=1, max_length=ROLES_MAX)
+
+
+class ProposedApproach(BaseModel):
+    """One candidate way to do the task, weighed by the role that thought of it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    title: str = Field(min_length=1, max_length=120)
+    approach: str = Field(min_length=1, max_length=8_000)
+    pros: tuple[str, ...] = Field(min_length=1, max_length=10)
+    cons: tuple[str, ...] = Field(min_length=1, max_length=10)
+    risks: tuple[str, ...] = Field(default=(), max_length=10)
+    files: tuple[str, ...] = Field(default=(), max_length=50)
+    confidence: EnsembleConfidence
 
 
 class RoleProposal(BaseModel):
-    """One read-only role's structured recommendation, never an edit."""
+    """One read-only role's whole slate of candidate approaches, never an edit."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     role: str = Field(min_length=1, max_length=64)
-    approach: str = Field(min_length=1, max_length=20_000)
-    risks: tuple[str, ...] = Field(default=(), max_length=20)
-    files: tuple[str, ...] = Field(default=(), max_length=50)
-    confidence: EnsembleConfidence
+    approaches: tuple[ProposedApproach, ...] = Field(
+        min_length=APPROACHES_PER_ROLE_MIN, max_length=APPROACHES_PER_ROLE_MAX
+    )
+
+
+class CandidateVerdict(BaseModel):
+    """The selector's weighing of one candidate it chose to keep in a round."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    candidate_id: str = Field(min_length=1, max_length=32)
+    pros: tuple[str, ...] = Field(min_length=1, max_length=10)
+    cons: tuple[str, ...] = Field(min_length=1, max_length=10)
+    score: int = Field(ge=1, le=100)
+    rationale: str = Field(min_length=1, max_length=4_000)
+
+
+class SelectionRound(BaseModel):
+    """One narrowing round's structured output: who survived it, and who did not."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    kept: tuple[CandidateVerdict, ...] = Field(min_length=1, max_length=1_000)
+    eliminated: tuple[str, ...] = Field(default=(), max_length=1_000)
+
+
+class ApproachCandidate(BaseModel):
+    """One numbered approach on the selector's slate, joined to the role that proposed it.
+
+    The id is assigned by the service rather than by any agent, so the identifiers the
+    selector echoes back can be checked against the slate it was actually given.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    candidate_id: str
+    role: str
+    approach: ProposedApproach
+
+
+class SelectedApproach(BaseModel):
+    """The single approach the selector ended on, with the verdict that chose it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    candidate: ApproachCandidate
+    verdict: CandidateVerdict
 
 
 class EnsembleRoleFailure(BaseModel):
@@ -98,7 +160,11 @@ class EnsembleResult(BaseModel):
     roles: tuple[GeneratedRole, ...]
     proposals: tuple[RoleProposal, ...]
     failures: tuple[EnsembleRoleFailure, ...]
+    candidates: int
+    rounds: tuple[SelectionRound, ...]
+    selected: SelectedApproach
     implementation: str
     root_thread_id: str
+    selector_thread_id: str
     implementer_thread_id: str
     charged_cents: int

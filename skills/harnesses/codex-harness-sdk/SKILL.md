@@ -73,6 +73,18 @@ not a paragraph someone has to notice.
 `CodexForkSettings` can override the schema per fork, and `clear_output_schema=True` removes an
 inherited one. The implementer fork clears it, because its output is a report for a human.
 
+The schema is resolved once at construction and belongs to the agent, not to the turn, so a
+stage that runs several turns has one shape for all of them. That is why the ensemble's selector
+uses a single `SelectionRound` schema for every narrowing round: giving the last round a richer
+shape would mean a second fork starting cold, unable to see why the earlier rounds eliminated
+what they did.
+
+One thing the schema does *not* carry: `OutputSchemaFormatter.annotate` strips `minItems`,
+`maxItems`, `minLength`, and `maxLength` and folds them into property descriptions, because no
+provider grammar enforces them. Pydantic still rejects a violation on the way back — as a raised
+`OutputSchemaViolationError`, which costs the whole stage — so restate any count bound in the
+prompt rather than trusting the schema to enforce it.
+
 ## Packaging: the SDK is optional, and the published release is behind
 
 `CodexHarnessAgent` is on the SDK's `main`, but the published `vidbyte-sdk==0.1.0` wheel contains

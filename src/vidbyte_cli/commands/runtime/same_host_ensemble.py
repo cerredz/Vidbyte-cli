@@ -46,7 +46,7 @@ class SameHostEnsembleCommand:
             type=int,
             default=3,
             show_default=True,
-            help="How many roles the planner generates (2-8).",
+            help="How many roles the planner generates (3-100).",
         )
         @click.option("--model", default=None, help="Optional provider model override.")
         @click.option(
@@ -124,12 +124,24 @@ class SameHostEnsembleCommand:
 
     def _summary(self, result: EnsembleResult) -> str:
         # Roles and failures are listed before the implementation, so partial runs are obvious.
-        lines = [f"{len(result.proposals)}/{len(result.roles)} roles proposed:"]
+        proposed, total = len(result.proposals), len(result.roles)
+        lines = [f"{proposed}/{total} roles proposed {result.candidates} approaches:"]
         lines.extend(
-            f"  {item.role}: {item.confidence.value} confidence, {len(item.files)} file(s)"
-            for item in result.proposals
+            f"  {item.role}: {len(item.approaches)} approaches" for item in result.proposals
         )
         lines.extend(f"  {item.role}: failed ({item.reason})" for item in result.failures)
+        lines.append(self._narrowing(result))
+        selected, verdict = result.selected.candidate, result.selected.verdict
+        lines.append(
+            f"selected {selected.candidate_id} ({selected.role}, score {verdict.score}): "
+            f"{selected.approach.title}"
+        )
+        lines.append(f"  {verdict.rationale}")
         lines.append("")
         lines.append(result.implementation)
         return "\n".join(lines)
+
+    def _narrowing(self, result: EnsembleResult) -> str:
+        # The ladder is the audit trail of the selection, so it prints even when it is short.
+        widths = [str(result.candidates), *(str(len(item.kept)) for item in result.rounds)]
+        return f"selection narrowed {' -> '.join(widths)} over {len(result.rounds)} round(s)"
