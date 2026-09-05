@@ -56,3 +56,7 @@ class VidbytePaths:
 
     def legacy_credentials_file(self) -> Path:
         return self.legacy_root / "credentials.json"
+
+    def provider_credentials_file(self) -> Path:
+        # Data, not config: provider fallback keys must not be synced as settings.
+        return self.data_root / "provider-credentials.json"
