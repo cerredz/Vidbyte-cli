@@ -43,6 +43,11 @@ vidbyte-cli = "vidbyte_cli.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The ensemble's prompts are authored Markdown, not Python, so setuptools would leave them out
+# of the wheel by default and the primitive would fail at its first turn on an installed copy.
+[tool.setuptools.package-data]
+vidbyte_cli = ["services/ensemble/prompts/*.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

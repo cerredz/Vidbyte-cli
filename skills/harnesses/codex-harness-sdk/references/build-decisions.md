@@ -62,16 +62,28 @@ thing we described? If not, it is not an option.
 **Default:** author the prompts for fixed stages; generate the prompts for stages whose count or
 character depends on the task.
 
-**Worked example:** the ensemble's planner and implementer prompts are authored — those roles are
-the same every run. The proposal roles' prompts are generated, because which perspectives a task
-needs depends entirely on the task. A database migration and a CSS refactor do not want the same
-three reviewers.
+**Worked example:** the ensemble's planner, selector, and implementer prompts are authored —
+those roles are the same every run. The proposal roles' prompts are generated, because which
+perspectives a task needs depends entirely on the task. A database migration and a CSS refactor
+do not want the same three reviewers.
 
-**Rule:** authored prompts live in their own file, never inline in the logic.
+**Rule:** prompts live in their own Markdown file, one prompt per file, never inline in the
+logic and never in a Python string. Prompt text is prose and is reviewed as prose; a `.py` file
+full of adjacent string literals hides which words actually changed. Ship them as package data
+or the wheel installs the code without them.
 
-**Rule:** an authored system prompt gets `identity`, `goal`, `checklist`, and `examples`
-sections, wrapped in XML tags. Identity first, because everything after is read through it;
-the most consequential constraints last, because attention is strongest at the beginning and end.
+**Rule:** an authored system prompt gets `identity`, `goal`, `checklist`, `things-not-to-do`,
+`instructions-and-output`, and `examples` sections, wrapped in XML tags. Identity first, because
+everything after is read through it; the most consequential constraints last, because attention
+is strongest at the beginning and end. Keep `checklist` and `things-not-to-do` disjoint — the
+first is what to verify about the finished output, the second is failures of authorship that
+re-reading the output would not reveal.
+
+**Rule:** `instructions-and-output` names the exact keys the stage must return, including any
+count bounds, even though the schema already declares them. `OutputSchemaFormatter.annotate`
+strips `minItems`, `maxItems`, `minLength`, and `maxLength` out of the wire schema and folds them
+into property descriptions, because no provider grammar enforces them. Say it in the prompt or it
+reaches the model only as a description, and a count violation costs a whole failed stage.
 
 **Rule:** a generated system prompt is specified as a schema, not as free text. The ensemble's
 `GeneratedRole` requires `identity`, `personality`, `knowledge`, and `goal`, so a planner that
@@ -98,6 +110,17 @@ not be silently half-parsed.
 **Rule:** include the fields that make disagreement visible. `files` exists on `RoleProposal`
 specifically so overlap is detectable; `confidence` exists so the implementer can be told, in
 its own prompt, that self-reported confidence is not evidence.
+
+**Rule:** `output_schema` belongs to the agent, not to the turn. `CodexVidbyteTranslator`
+resolves it once at construction, so a stage that needs two different shapes needs two agents. A
+multi-turn stage — the ensemble's selector runs one turn per narrowing round — gets one schema
+covering every round, which is what lets those rounds share a thread and see their own earlier
+reasoning.
+
+**Rule:** identifiers an agent must echo back are assigned by your code, never by the model. The
+ensemble numbers each candidate `<role index>.<approach index>` before the selector sees it, so a
+reply naming an id that was not on offer is a detectable failure rather than a silent
+substitution.
 
 ---
 

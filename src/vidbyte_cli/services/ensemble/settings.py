@@ -1,8 +1,12 @@
-"""One run's shared collaborators, and the sandbox policy for each of its three stages.
+"""One run's shared collaborators, and the sandbox policy for each of its four stages.
 
 This is where "exactly one agent may write" is decided, so the invariant is checkable by
-reading a single file: `root` and `proposal` are read-only, `implementer` is not. It also
-carries the run's sdk, prompts, and inputs so the service does not thread them everywhere.
+reading a single file: `root`, `proposal`, and `selector` are read-only, `implementer` is not.
+It also carries the run's sdk, prompts, and inputs so the service does not thread them
+everywhere.
+
+Each stage gets a complete system prompt of its own rather than an addition to the previous
+stage's, because a fork inherits its parent's prompt unless it is replaced.
 """
 
 from __future__ import annotations
@@ -10,8 +14,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...types.ensemble import EnsembleInputs, GeneratedRole, RolePlan, RoleProposal
-from .prompts import EnsemblePrompts
+from ...types.ensemble import (
+    EnsembleInputs,
+    GeneratedRole,
+    RolePlan,
+    RoleProposal,
+    SelectionRound,
+)
+from .prompts.library import EnsemblePrompts
 from .sdk import EnsembleSdk
 
 
@@ -35,8 +45,13 @@ class EnsembleStages:
         prompt = self.prompts.role_system_prompt(role)
         return self.sdk.fork_settings(role.name, prompt, RoleProposal, self._codex(write=False))
 
+    def selector(self) -> Any:
+        # Stage three reads the workspace to check a candidate's premise, but never edits it.
+        prompt = self.prompts.selector_system_prompt()
+        return self.sdk.fork_settings("selector", prompt, SelectionRound, self._codex(write=False))
+
     def implementer(self) -> Any:
-        # Stage three is the only bundle in this file that enables workspace writes.
+        # Stage four is the only bundle in this file that enables workspace writes.
         prompt = self.prompts.implementer_system_prompt()
         return self.sdk.fork_settings("implementer", prompt, None, self._codex(write=True))
 
