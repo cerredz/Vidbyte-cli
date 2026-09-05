@@ -30,6 +30,10 @@ _REQUIRED = (
 )
 
 
+# The two SDK exception classes the service must tell apart: host fault, schema violation.
+ErrorTypes = tuple[type[Exception], type[Exception]]
+
+
 class EnsembleAgent(Protocol):
     """The subset of the SDK agent surface this service actually drives."""
 
@@ -43,11 +47,11 @@ class EnsembleAgent(Protocol):
 class EnsembleSdk:
     """Holds the resolved SDK symbols and builds every provider value from them."""
 
-    def __init__(self, symbols: dict[str, Any], agent: Any, error: type[Exception]) -> None:
+    def __init__(self, symbols: dict[str, Any], agent: Any, errors: ErrorTypes) -> None:
         # Storing the resolved symbols is what keeps every SDK name confined to this module.
         self._symbols = symbols
         self._agent_type = agent
-        self._error_type = error
+        self._error_type, self._schema_error_type = errors
 
     @classmethod
     def load(cls) -> EnsembleSdk:
@@ -57,10 +61,10 @@ class EnsembleSdk:
             errors = __import__(_ERRORS_MODULE, fromlist=["*"])
             symbols = {name: getattr(codex, name) for name in _REQUIRED}
             agent_type = codex.CodexHarnessAgent
-            error_type = errors.CodexAgentError
+            resolved = (errors.CodexAgentError, errors.OutputSchemaViolationError)
         except (ImportError, AttributeError) as error:
             raise EnsembleSdkUnavailable(error) from error
-        return cls(symbols, agent_type, error_type)
+        return cls(symbols, agent_type, resolved)
 
     def agent(self, settings: Any) -> EnsembleAgent:
         # Constructs a root agent; forks are produced by the agent itself, never here.
@@ -74,6 +78,11 @@ class EnsembleSdk:
     def is_provider_error(self, error: Exception) -> bool:
         # Lets the service classify a host failure without importing the SDK's error class.
         return isinstance(error, self._error_type)
+
+    def is_schema_error(self, error: Exception) -> bool:
+        # A schema violation is a sibling of CodexAgentError, not a subclass: the host worked,
+        # the model just produced output that did not validate. The two need different errors.
+        return isinstance(error, self._schema_error_type)
 
     def root_settings(self, prompt: str, schema: type, codex: Any) -> Any:
         # The planner reads the workspace to design roles, so it is read-only like the roles.
