@@ -74,10 +74,18 @@ src/vidbyte_cli/types/             wire models mirroring backend DTOs
 
 The `runtime` command family is intentionally independent from hosted research. Host
 discovery identifies an installed Codex, Claude Code, or OpenCode executable; launch
-planning validates safe local prerequisites; and `RuntimeExecutor` is the only place a
-future algorithm may request paid admission and spawn the native-agent topology. This
-explicitly requested scaffold is the narrow exception to rule 6: its executor always raises
-before payment or process launch, and the exception should disappear with the first runtime.
+planning validates safe local prerequisites; and each primitive decides for itself where
+paid admission sits relative to execution.
+
+`same-host-ensemble` is implemented. It lives in `services/ensemble/` rather than in
+`RuntimeExecutor`, because a service may depend on `lib/` while nothing in `lib/` may depend on
+a service. It runs only on `codex`, the one host with a merged Vidbyte SDK adapter and verified
+native fork and sandbox control, and it resolves that SDK before requesting admission so an
+unmet local dependency costs the caller nothing.
+
+`adversarial-team` is still a scaffold, and it is now the sole exception to rule 6:
+`RuntimeExecutor` always raises before payment or process launch. The exception disappears when
+that primitive is built.
 
 ## Output and failure contracts
 

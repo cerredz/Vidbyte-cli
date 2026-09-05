@@ -61,6 +61,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime list` | List local runtime primitives and admission prices |
 | `vidbyte-cli runtime doctor` | Detect supported native coding-agent hosts |
 | `vidbyte-cli runtime adversarial-team <task>` | Validate the first local primitive launch (executor not yet implemented) |
+| `vidbyte-cli runtime same-host-ensemble <task>` | Run a role-differentiated agent ensemble on this machine |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 
@@ -79,6 +80,43 @@ Starting, adding, and resuming are priced and idempotent. Each sends a generated
 whose outcome you did not see without paying for it twice. `research watch` polls every ten
 seconds and backs off from there: API keys are metered on a weighted per-minute budget, and
 polling harder can exhaust the budget you need to start the next run.
+
+### Local runtime primitives
+
+`runtime` commands execute on your machine, driving a native coding agent you already
+installed. Vidbyte charges a small flat admission fee for the orchestration; the model usage
+runs against your own provider subscription, not ours.
+
+Install the extra first — it is not part of the base package:
+
+```bash
+pip install "vidbyte-cli[codex]"
+```
+
+`runtime same-host-ensemble <task>` runs three stages on one machine. A planner agent reads
+your task and generates the ensemble's roles, writing each role's complete system prompt
+rather than picking from a fixed list, so the perspectives match the task. Each role then runs
+concurrently in its own read-only fork and returns a structured proposal: an approach, the
+risks it sees, and the files it would change. It cannot edit anything — the sandbox forbids it,
+not just the prompt. Finally one write-enabled fork receives every surviving proposal,
+reconciles the conflicts, and does the work. That last fork is the only agent in the topology
+permitted to modify your workspace.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--host` | `codex` | Native host. Codex is the only one with verified fork and sandbox support. |
+| `--roles` | `3` | How many roles the planner generates, 2 to 8. |
+| `--model` | provider default | Model override passed through to the host. |
+| `--reasoning-effort` | provider default | One of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. |
+| `--role-timeout` | `300` | Seconds one role may take before it is recorded as failed. |
+
+A role that times out or fails is reported in the result and the run continues, because a
+partial ensemble still beats a single agent. The run stops only when every role failed.
+
+Two costs are worth separating. Admission is two cents, charged once, after the CLI has
+confirmed your input, the SDK, and the host — so a missing Codex never costs you anything.
+The larger cost is your own provider usage: the SDK opens a fresh Codex app-server per turn
+and per fork, so a three-role run is nine of them against your subscription.
 
 ## Configuration
 

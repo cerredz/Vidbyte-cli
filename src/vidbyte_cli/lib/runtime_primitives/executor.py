@@ -1,7 +1,8 @@
-"""The explicit implementation boundary for local runtime algorithms.
+"""The explicit implementation boundary for runtime algorithms that have none yet.
 
-This release cannot charge or launch accidentally: execution always raises before either
-side effect. A later PR replaces only this class with admission and process orchestration.
+Only `adversarial-team` still lives here. `same-host-ensemble` graduated out of this class
+in the ensemble implementation PR: it now runs in `services/ensemble/`, because a service
+may depend on `lib/` but nothing in `lib/` may depend on a service.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from ..errors.failures import RuntimeExecutionNotImplemented
 
 
 class RuntimeExecutor:
-    """Guards the absent runtime implementation from accidental paid execution."""
+    """Guards the absent adversarial-team implementation from accidental paid execution."""
 
     def execute_adversarial_team(self, plan: RuntimeLaunchPlan) -> NoReturn:
         # Accepts the validated plan only to make the future implementation seam exact.
