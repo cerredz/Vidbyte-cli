@@ -26,7 +26,12 @@ from .research.status import ResearchStatusCommand
 from .research.thread import ResearchThreadCommand
 from .research.threads import ResearchThreadsCommand
 from .research.watch import ResearchWatchCommand
-from .runtime import AdversarialTeamCommand, RuntimeDoctorCommand, RuntimeListCommand
+from .runtime import (
+    AdversarialTeamCommand,
+    RuntimeDoctorCommand,
+    RuntimeListCommand,
+    SameHostEnsembleCommand,
+)
 from .setup.doctor import DoctorCommand
 
 
@@ -52,6 +57,7 @@ def register_all_commands(program: click.Group) -> None:
     RuntimeListCommand().register(runtime)
     RuntimeDoctorCommand().register(runtime)
     AdversarialTeamCommand().register(runtime)
+    SameHostEnsembleCommand().register(runtime)
     program.add_command(runtime)
 
     config = click.Group(name="config", help="Manage CLI configuration")

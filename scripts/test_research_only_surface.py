@@ -42,7 +42,7 @@ EXPECTED_TOP_LEVEL = {
     "whoami",
 }
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
-EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list"}
+EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list", "same-host-ensemble"}
 # Every module that existed only to serve a backend route that was never built.
 DELETED_MODULES = (
     "vidbyte_cli.commands.harness",

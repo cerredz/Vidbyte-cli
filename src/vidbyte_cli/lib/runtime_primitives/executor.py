@@ -8,8 +8,12 @@ from __future__ import annotations
 
 from typing import NoReturn
 
-from ...types.runtime import RuntimeLaunchPlan
-from ..errors.failures import RuntimeAdmissionNotVerified, RuntimeExecutionNotImplemented
+from ...types.runtime import EnsembleRoster, RuntimeLaunchPlan
+from ..errors.failures import (
+    EnsembleExecutionNotImplemented,
+    RuntimeAdmissionNotVerified,
+    RuntimeExecutionNotImplemented,
+)
 
 
 class RuntimeExecutor:
@@ -24,3 +28,8 @@ class RuntimeExecutor:
         if verdict.capability_id != plan.capability_id or verdict.admission_id.strip() == "":
             raise RuntimeAdmissionNotVerified()
         raise RuntimeExecutionNotImplemented()
+
+    def execute_ensemble(self, plan: RuntimeLaunchPlan, roster: EnsembleRoster) -> NoReturn:
+        # Accepts the validated plan and roster only to make the future implementation seam exact.
+        del plan, roster
+        raise EnsembleExecutionNotImplemented()

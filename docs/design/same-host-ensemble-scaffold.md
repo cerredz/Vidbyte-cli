@@ -118,7 +118,12 @@ mechanism.
 1. `vidbyte-cli runtime same-host-ensemble <task> [options]` must validate every input and
    build a `RuntimeLaunchPlan` before reaching the executor boundary.
 2. `--host {auto,codex,claude}` must be the only accepted values; `auto` prefers Codex, then
-   Claude (mirroring `adversarial-team`'s existing preference order minus OpenCode).
+   Claude (mirroring `adversarial-team`'s existing preference order minus OpenCode). Because
+   the shared `RuntimeHostRegistry`'s auto-resolution order still includes OpenCode (it is not
+   given a primitive-specific candidate list, to avoid widening shared discovery code for one
+   primitive's policy), auto mode can still resolve to OpenCode when it is the only installed
+   host. This command must reject that resolved plan itself, immediately, before reaching the
+   executor.
 3. Roles must be settable two ways: repeatable `--role NAME:SYSTEM_PROMPT`, or `--roles-file
    PATH` pointing at a JSON array of `{"name": ..., "system_prompt": ...}` objects. The two are
    mutually exclusive. If neither is given, a built-in three-role default set applies
@@ -130,17 +135,22 @@ mechanism.
    strings. They are not validated against the SDK's own enum in this PR, because this PR does
    not depend on the SDK; the future executor PR performs that translation at its own
    boundary.
-6. The command must reach `RuntimeExecutor.execute_same_host_ensemble(plan, roster)`, which
+6. The command must reach `RuntimeExecutor.execute_ensemble(plan, roster)`, which
    must raise `EnsembleExecutionNotImplemented` unconditionally, before any admission request
    or process is created, regardless of which valid host was selected.
 7. `RuntimeEndpoints` must expose a future-ready `admit_same_host_ensemble` operation
    analogous to `admit_adversarial_team`, unreachable from the scaffold executor.
 8. Empty task, empty/invalid role entries, an unreadable or malformed `--roles-file`,
-   specifying both `--role` and `--roles-file`, and reaching the execution boundary must each
-   raise their own `CliError` subclass.
+   specifying both `--role` and `--roles-file`, an auto-resolved plan landing on an
+   unsupported host, and reaching the execution boundary must each raise their own `CliError`
+   subclass.
 9. `--help` and `--version` must remain free of filesystem, credential, and network side
    effects.
-10. `scripts/test_research_only_surface.py` must be updated to expect the new command and must
+10. Credential/authentication resolution is deferred to the future executor PR's admission
+    call, matching `adversarial-team`'s identical current behavior: neither primitive checks
+    credentials before its stub boundary today, since neither ever reaches the point where a
+    credential would actually be used.
+11. `scripts/test_research_only_surface.py` must be updated to expect the new command and must
     continue to pass with no forbidden tokens reintroduced.
 
 ### Non-Functional Requirements
@@ -163,7 +173,7 @@ mechanism.
 role roster (from repeatable flags or a JSON file) into a new `EnsembleRoster` Pydantic model,
 resolves the host exactly as `adversarial-team` does (minus `opencode`), and reuses
 `RuntimeLaunchPlanner.build()` — generalized to accept a `capability_id` — to produce a
-`RuntimeLaunchPlan`. It then calls `RuntimeExecutor.execute_same_host_ensemble(plan, roster)`,
+`RuntimeLaunchPlan`. It then calls `RuntimeExecutor.execute_ensemble(plan, roster)`,
 a new method that raises `EnsembleExecutionNotImplemented` before any side effect, mirroring
 `execute_adversarial_team`'s existing stub exactly.
 
@@ -177,7 +187,7 @@ a new method that raises `EnsembleExecutionNotImplemented` before any side effec
 [host registry] -> [launch planner (capability_id="runtime.same-host-ensemble@1")]
         |
         v
-[executor.execute_same_host_ensemble: STOP -> EnsembleExecutionNotImplemented]
+[executor.execute_ensemble: STOP -> EnsembleExecutionNotImplemented]
         |
         +-> [admit_same_host_ensemble endpoint: wired, not called by scaffold]
 
@@ -265,7 +275,7 @@ built-in default roles when neither is given.
 #### Interface / API
 
 ```python
-_DEFAULT_ROLES: tuple[EnsembleRole, ...] = (...)  # correctness, simplification, security
+_DEFAULT_ROLES: tuple[EnsembleRole, ...] = ...  # correctness, simplification, security
 
 
 class SameHostEnsembleCommand:
@@ -304,6 +314,10 @@ class SameHostEnsembleCommand:
 4. If neither is given, use `_DEFAULT_ROLES`.
 5. Construct `EnsembleRoster` with the resolved roles plus implementer prompt (default if
    omitted) and optional model/reasoning-effort strings.
+6. After `RuntimeLaunchPlanner.build()` returns a plan, check `plan.host`: if it resolved to
+   `RuntimeHost.OPENCODE`, raise `EnsembleHostUnsupported` immediately, before calling the
+   executor. This only happens in `auto` mode when OpenCode is the only installed host, since
+   `--host opencode` is never an accepted value for this command.
 
 #### Edge Cases & Error Handling
 
@@ -313,6 +327,8 @@ class SameHostEnsembleCommand:
   escape to the CLI's generic exception path.
 - A role name collision (two roles with the same `name`) raises `EnsembleRoleInvalid` — role
   names are used as fork identifiers in the future executor, so collisions must fail here.
+- Auto-resolving to OpenCode raises `EnsembleHostUnsupported`, not `RuntimeHostUnavailable` —
+  a host was found, it is simply not one this primitive can honestly run on.
 
 ### 6.3 Launch Planner Generalization
 
@@ -364,9 +380,7 @@ not-yet-called admission endpoint method.
 ```python
 class RuntimeExecutor:
     def execute_adversarial_team(self, plan: RuntimeLaunchPlan) -> NoReturn: ...
-    def execute_same_host_ensemble(
-        self, plan: RuntimeLaunchPlan, roster: EnsembleRoster
-    ) -> NoReturn: ...
+    def execute_ensemble(self, plan: RuntimeLaunchPlan, roster: EnsembleRoster) -> NoReturn: ...
 
 
 class RuntimeEndpoints:
@@ -380,7 +394,7 @@ class RuntimeEndpoints:
 
 #### Logic / Algorithm
 
-1. `execute_same_host_ensemble` accepts the validated plan and roster only to fix the future
+1. `execute_ensemble` accepts the validated plan and roster only to fix the future
    implementation seam, then unconditionally raises `EnsembleExecutionNotImplemented`.
 2. `admit_same_host_ensemble` POSTs to `/api/x402/runtime/same-host-ensemble/admissions` — this
    route path is provisional pending `vidbyte` PR #507's final routing convention; see
@@ -399,7 +413,7 @@ class RuntimeEndpoints:
 
 #### What it does
 
-Adds one `CliError` subclass per new failure, following the field guide's typed-failures rule
+Adds one `CliError` subclass per new failure (seven total), following the field guide's typed-failures rule
 exactly — no bare `CliError(...)`, no shared generic class reused across primitives with a
 hardcoded message that would then be wrong for the new one.
 
@@ -407,10 +421,31 @@ hardcoded message that would then be wrong for the new one.
 
 ```python
 class EnsembleRoleSourceConflict(CliError): ...
+
+
 class EnsembleRoleInvalid(CliError): ...
-class EnsembleRolesFileInvalid(CliError): ...
+
+
+class EnsembleRolesFileUnreadable(CliError): ...  # mirrors PromptFileUnreadable
+
+
+class EnsembleRolesFileNotValidJson(
+    CliError
+): ...  # mirrors PromptFileNotUtf8's slot, for JSON syntax
+
+
+class EnsembleRolesFileInvalid(CliError): ...  # valid JSON, wrong shape (Pydantic validation)
+
+
+class EnsembleHostUnsupported(CliError): ...
+
+
 class EnsembleExecutionNotImplemented(CliError): ...
 ```
+
+Splitting the roles-file failure into three mirrors this repo's own `PromptFileUnreadable` /
+`PromptFileNotUtf8` precedent for `--prompt-file` exactly — I/O failure, syntax failure, and
+(new here, since roles-file is structured) shape failure are three distinct causes, not one.
 
 #### Logic / Algorithm
 
@@ -483,11 +518,12 @@ and PR #508 (see Section 12) — this PR wires the client-side call shape only.
 |--------|-----------|--------|
 | CREATE | `docs/design/same-host-ensemble-scaffold.md` | This design doc |
 | CREATE | `src/vidbyte_cli/commands/runtime/same_host_ensemble.py` | New command: role parsing, launch plan, executor call |
-| MODIFY | `src/vidbyte_cli/commands/runtime/__init__.py` | Register the new command in the `runtime` group |
+| MODIFY | `src/vidbyte_cli/commands/runtime/__init__.py` | Export the new command class |
+| MODIFY | `src/vidbyte_cli/commands/__init__.py` | Instantiate and register the new command in the `runtime` group |
 | MODIFY | `src/vidbyte_cli/commands/runtime/adversarial_team.py` | Pass `RuntimeCapabilityId.ADVERSARIAL_TEAM` explicitly |
 | MODIFY | `src/vidbyte_cli/types/runtime.py` | Generalize `capability_id`; add `EnsembleRole`/`EnsembleRoster` |
 | MODIFY | `src/vidbyte_cli/lib/runtime_primitives/planner.py` | `build()` takes `capability_id` |
-| MODIFY | `src/vidbyte_cli/lib/runtime_primitives/executor.py` | Add `execute_same_host_ensemble` stub |
+| MODIFY | `src/vidbyte_cli/lib/runtime_primitives/executor.py` | Add `execute_ensemble` stub |
 | MODIFY | `src/vidbyte_cli/lib/api/endpoints/runtime.py` | Add `admit_same_host_ensemble` |
 | MODIFY | `src/vidbyte_cli/lib/errors/failures.py` | Add four new `CliError` subclasses |
 | MODIFY | `scripts/test_research_only_surface.py` | Expect `same-host-ensemble` in `EXPECTED_RUNTIME` |
@@ -515,7 +551,7 @@ the follow-up executor PR, not this one.
   admission.
 - No feature flag is needed: the command is fully functional up to its documented stop point,
   the same pattern already shipped for `adversarial-team`.
-- The follow-up executor PR must not change `execute_same_host_ensemble`'s boundary until both
+- The follow-up executor PR must not change `execute_ensemble`'s boundary until both
   external prerequisites (Section 2) are satisfied and verified.
 - Rollback: remove the command registration and the four new failure classes; no local user
   state needs cleanup.
