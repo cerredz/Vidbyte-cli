@@ -16,7 +16,10 @@ class ProviderLoginCommand:
 
     def register(self, parent: click.Group) -> None:
         # Adds `provider login <provider>` with optional stdin and fallback flags.
-        @parent.command(name="login", help="Authenticate a provider API key (openai, claude)")
+        @parent.command(
+            name="login",
+            help="Authenticate a provider API key (openai, claude, grok, deepseek, glm, muse)",
+        )
         @click.argument("provider", type=click.Choice([p.value for p in Provider]))
         @click.option(
             "--with-token",

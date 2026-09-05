@@ -126,10 +126,39 @@ class Provider(StrEnum):
     GLM = "glm"
     MUSE = "muse"
 
-PROVIDER_KEY_PREFIXES: dict[Provider, tuple[str, ...]] = {OPENAI: ("sk-",), CLAUDE: ("sk-ant-",), DEEPSEEK: ("sk-",), MUSE: ("LLM|",), GROK: (), GLM: ()}
-PROVIDER_ENV_VARS: dict[Provider, str] = {OPENAI: "OPENAI_API_KEY", CLAUDE: "ANTHROPIC_API_KEY", GROK: "XAI_API_KEY", DEEPSEEK: "DEEPSEEK_API_KEY", GLM: "ZAI_API_KEY", MUSE: "MODEL_API_KEY"}
-PROVIDER_DISPLAY: dict[Provider, str] = {OPENAI: "OpenAI", CLAUDE: "Claude", GROK: "Grok", DEEPSEEK: "DeepSeek", GLM: "GLM", MUSE: "Muse"}
-PROVIDER_PROBE_URLS: dict[Provider, str] = {OPENAI: "https://api.openai.com/v1/models", CLAUDE: "https://api.anthropic.com/v1/models", GROK: "https://api.x.ai/v1/models", DEEPSEEK: "https://api.deepseek.com/v1/models", GLM: "https://api.z.ai/api/paas/v4/models", MUSE: "https://api.meta.ai/v1/models"}
+
+PROVIDER_KEY_PREFIXES: dict[Provider, tuple[str, ...]] = {
+    OPENAI: ("sk-",),
+    CLAUDE: ("sk-ant-",),
+    DEEPSEEK: ("sk-",),
+    MUSE: ("LLM|",),
+    GROK: (),
+    GLM: (),
+}
+PROVIDER_ENV_VARS: dict[Provider, str] = {
+    OPENAI: "OPENAI_API_KEY",
+    CLAUDE: "ANTHROPIC_API_KEY",
+    GROK: "XAI_API_KEY",
+    DEEPSEEK: "DEEPSEEK_API_KEY",
+    GLM: "ZAI_API_KEY",
+    MUSE: "MODEL_API_KEY",
+}
+PROVIDER_DISPLAY: dict[Provider, str] = {
+    OPENAI: "OpenAI",
+    CLAUDE: "Claude",
+    GROK: "Grok",
+    DEEPSEEK: "DeepSeek",
+    GLM: "GLM",
+    MUSE: "Muse",
+}
+PROVIDER_PROBE_URLS: dict[Provider, str] = {
+    OPENAI: "https://api.openai.com/v1/models",
+    CLAUDE: "https://api.anthropic.com/v1/models",
+    GROK: "https://api.x.ai/v1/models",
+    DEEPSEEK: "https://api.deepseek.com/v1/models",
+    GLM: "https://api.z.ai/api/paas/v4/models",
+    MUSE: "https://api.meta.ai/v1/models",
+}
 ```
 
 #### Edge Cases & Error Handling
@@ -202,11 +231,15 @@ class GrokVerifier(_BaseProviderVerifier):
     def verify(self, credentials: ProviderCredentials) -> ProviderIdentity: ...
     def _headers(self, credentials: ProviderCredentials) -> dict[str, str]: ...
 
+
 class DeepSeekVerifier(_BaseProviderVerifier): ...
+
 
 class GlmVerifier(_BaseProviderVerifier): ...
 
+
 class MuseVerifier(_BaseProviderVerifier): ...
+
 
 def verifier_for_provider(provider: Provider) -> ProviderVerifier: ...
 ```
