@@ -1580,3 +1580,169 @@ class ResearchWatchTimedOut(CliError):
             ),
             hint=f"Run 'vidbyte-cli research status {run_id}' to check on it.",
         )
+
+
+class EnsembleRoleSourceConflict(CliError):
+    """Both --role and --roles-file were supplied for one ensemble run."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Mirrors AmbiguousPromptSource: never guess which role source the caller meant.
+        super().__init__(
+            "Provide roles with --role or --roles-file, not both.",
+            description=(
+                "Both a repeatable --role option and --roles-file were supplied, and the CLI "
+                "will not guess which one the caller meant. Neither source was read, so no "
+                "file was opened and no role list was built."
+            ),
+            trace=(
+                "SameHostEnsembleCommand._build_roster checked role-source exclusivity before "
+                "reading either source."
+            ),
+            hint="Use repeated --role NAME:PROMPT flags, or a single --roles-file PATH.",
+        )
+
+
+class EnsembleRoleInvalid(CliError):
+    """A --role entry is malformed, or two roles share the same name."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Reports only structural detail (a name or missing separator), never prompt text.
+        super().__init__(
+            f"Invalid --role entry: {detail}.",
+            description=(
+                "Each --role value must be 'NAME:SYSTEM_PROMPT' with a non-empty name and "
+                "prompt, and role names must be unique within one run, since they identify "
+                "each fork to the future executor. Nothing was submitted to the backend."
+            ),
+            trace=(
+                "SameHostEnsembleCommand._build_roster parsed --role values before building "
+                "a launch plan."
+            ),
+            hint="Use --role NAME:SYSTEM_PROMPT, with a unique name per role.",
+        )
+
+
+class EnsembleRolesFileUnreadable(CliError):
+    """The path given to --roles-file could not be opened or read."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, path: str, cause: Exception) -> None:
+        # Mirrors PromptFileUnreadable: withhold the OS message, it can expose local layout.
+        super().__init__(
+            f"Unable to read roles file '{path}'.",
+            description=(
+                "The path passed to --roles-file could not be opened for reading. It is "
+                "typically missing, a directory, or blocked by filesystem permissions. Nothing "
+                "was submitted to the backend."
+            ),
+            trace=(
+                "SameHostEnsembleCommand._build_roster selected the file source and attempted "
+                "to open the path in UTF-8 text mode."
+            ),
+            hint="Check that the path exists and is a readable file.",
+            cause=cause,
+        )
+
+
+class EnsembleRolesFileNotValidJson(CliError):
+    """The roles file exists but does not contain valid JSON."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, path: str, cause: Exception) -> None:
+        # File content is never echoed: role prompts may hold sensitive text.
+        super().__init__(
+            f"Roles file '{path}' must contain valid JSON.",
+            description=(
+                "The file opened but its contents did not parse as JSON. Re-save it as a JSON "
+                "array of objects, each with 'name' and 'system_prompt' fields."
+            ),
+            trace=(
+                "SameHostEnsembleCommand._build_roster called json.loads on the opened "
+                "--roles-file handle."
+            ),
+            hint="Use a JSON array of objects with 'name' and 'system_prompt' fields.",
+            cause=cause,
+        )
+
+
+class EnsembleRolesFileInvalid(CliError):
+    """The roles file is valid JSON but does not match the required role shape."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, path: str, cause: Exception) -> None:
+        # The underlying Pydantic detail is withheld: it can echo submitted prompt text.
+        super().__init__(
+            f"Roles file '{path}' does not match the required role shape.",
+            description=(
+                "The file parsed as JSON but at least one entry failed validation: 'name' and "
+                "'system_prompt' must both be non-empty strings, and there must be one to "
+                "eight roles."
+            ),
+            trace=(
+                "SameHostEnsembleCommand._build_roster validated the parsed JSON against "
+                "EnsembleRole before constructing an EnsembleRoster."
+            ),
+            hint="Use a JSON array of 1-8 objects, each with 'name' and 'system_prompt'.",
+            cause=cause,
+        )
+
+
+class EnsembleHostUnsupported(CliError):
+    """The resolved host has no verified fork/sandbox support for this primitive."""
+
+    code = CliErrorCode.CONFIG_INVALID
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, host: str) -> None:
+        # Auto mode can still resolve to a host this primitive never offers explicitly.
+        super().__init__(
+            f"'{host}' is not a supported host for same-host-ensemble.",
+            description=(
+                "Auto-selection resolved to a host with no verified native fork or sandbox "
+                "support in Vidbyte's cross-provider control matrix, so this primitive cannot "
+                "honestly isolate proposal roles from the implementer role on it. No admission "
+                "was requested and no process started."
+            ),
+            trace=(
+                "SameHostEnsembleCommand checked the resolved RuntimeLaunchPlan's host before "
+                "calling the executor."
+            ),
+            hint="Use --host codex or --host claude, or run 'vidbyte-cli runtime doctor'.",
+        )
+
+
+class EnsembleExecutionNotImplemented(CliError):
+    """The command scaffold reached the deliberately absent ensemble executor."""
+
+    code = CliErrorCode.NOT_IMPLEMENTED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Makes the no-charge boundary explicit for human and agent callers.
+        super().__init__(
+            "The same-host-ensemble runtime executor is not implemented yet.",
+            description=(
+                "The CLI validated the task, roles, and native host, but this release contains "
+                "only the runtime platform scaffold. It stopped before requesting a paid "
+                "Vidbyte admission and before launching any local agent, so no credits were "
+                "spent and no machine state changed. Retrying cannot proceed until the "
+                "executor ships."
+            ),
+            trace=(
+                "SameHostEnsembleCommand built a RuntimeLaunchPlan and reached the "
+                "intentionally inert RuntimeExecutor."
+            ),
+            hint="Use 'vidbyte-cli runtime list' for published capability metadata.",
+        )

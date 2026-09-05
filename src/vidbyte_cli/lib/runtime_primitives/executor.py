@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import NoReturn
 
-from ...types.runtime import RuntimeLaunchPlan
-from ..errors.failures import RuntimeExecutionNotImplemented
+from ...types.runtime import EnsembleRoster, RuntimeLaunchPlan
+from ..errors.failures import EnsembleExecutionNotImplemented, RuntimeExecutionNotImplemented
 
 
 class RuntimeExecutor:
@@ -19,3 +19,8 @@ class RuntimeExecutor:
         # Accepts the validated plan only to make the future implementation seam exact.
         del plan
         raise RuntimeExecutionNotImplemented()
+
+    def execute_ensemble(self, plan: RuntimeLaunchPlan, roster: EnsembleRoster) -> NoReturn:
+        # Accepts the validated plan and roster only to make the future implementation seam exact.
+        del plan, roster
+        raise EnsembleExecutionNotImplemented()

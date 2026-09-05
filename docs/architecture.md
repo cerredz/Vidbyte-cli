@@ -79,6 +79,12 @@ future algorithm may request paid admission and spawn the native-agent topology.
 explicitly requested scaffold is the narrow exception to rule 6: its executor always raises
 before payment or process launch, and the exception should disappear with the first runtime.
 
+Two primitives share this same scaffold today: `adversarial-team` and `same-host-ensemble`.
+Both stop at the identical inert `RuntimeExecutor` boundary; `same-host-ensemble` additionally
+restricts its own host choice to `codex`/`claude` (never `opencode`), since only those two are
+rated "Exact" for native fork and sandbox support in `skills/runtime_primitives/references/
+control-matrix.md`.
+
 ## Output and failure contracts
 
 Root presentation flags precede the command:
