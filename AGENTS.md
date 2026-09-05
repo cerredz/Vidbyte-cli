@@ -46,9 +46,17 @@ One subpackage per command family, each owning argument parsing and result rende
 
 The shared substrate every command depends on, and the largest part of the package at 48 files. `api/` is the HTTP client and route surface, including idempotency-key generation for priced mutations; `auth/` is credential storage, profile scoping, and header construction; `config/` resolves configuration across profiles, environment, and defaults; `errors/` defines the typed failure envelope carrying `description`, `trace`, and `file_path`; `io/` handles stdin and interactive prompting under `--no-input`; `output/` enforces the human/json/jsonl/none rendering contract and the stdout-is-results-only rule; `runtime/` holds process-level concerns such as color detection and redacted debug frames. The dependency direction is one-way: commands may import from `lib/`, but nothing in `lib/` may import a command.
 
+##### `src/vidbyte_cli/services/`
+
+Feature services: the layer between a command and the shared substrate. Each subfolder owns one product's algorithm from validated input to normalized result. `ensemble/` implements the `runtime same-host-ensemble` primitive — a planner turn that generates the role roster, concurrent read-only forks that each return a structured proposal, and one write-enabled fork that reconciles them. Its `sdk.py` is the only module in the package that imports `vidbyte-sdk`, and it does so lazily inside a method, because the published SDK release predates the Codex integration and `--help` must work without it. The dependency direction extends the one below: commands may import services, services may import `lib/`, and nothing in `lib/` may import a service.
+
 ##### `src/vidbyte_cli/types/`
 
 Typed payload definitions shared between the API client and the commands that render its responses. `api.py` describes the request and response envelopes including `schema_version` and `kind`; `research.py` describes thread and run shapes — state, phase, continuation count, timestamp — that `status`, `watch`, `threads`, and `thread` print. Keeping these separate from `lib/api/` is what lets a command depend on the *shape* of a response without depending on the transport that fetched it.
+
+### `skills/`
+
+Agent-facing background for building runtime primitives, kept outside the package so nothing here ships in the wheel. `harnesses/runtime-primitives/` explains what a locally-executed primitive is and the seven parts every one shares; `harnesses/codex-harness-sdk/` covers driving the SDK's Codex agent, including four behaviors of its merged code that its own design doc does not describe, plus a `references/build-decisions.md` checklist of the ordered choices a new primitive requires; `harnesses/x402-runtime-economics/` covers admission, flat pricing, and why the backend catalog rather than the CLI owns a capability's route path. Read these before adding or changing a runtime primitive.
 
 ## Command Deck
 
