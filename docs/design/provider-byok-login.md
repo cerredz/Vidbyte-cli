@@ -120,6 +120,7 @@ class Provider(StrEnum):
     OPENAI = "openai"
     CLAUDE = "claude"
 
+
 PROVIDER_DISPLAY: dict[Provider, str] = ...
 PROVIDER_KEY_PREFIXES: dict[Provider, tuple[str, ...]] = {OPENAI: ("sk-",), CLAUDE: ("sk-ant-",)}
 PROVIDER_ENV_VARS: dict[Provider, str] = {OPENAI: "OPENAI_API_KEY", CLAUDE: "ANTHROPIC_API_KEY"}
@@ -280,9 +281,18 @@ Thin orchestration like `commands/auth/*`: resolve config, acquire input, verify
 ```python
 class ProviderLoginCommand:
     def register(self, parent: click.Group) -> None: ...
-    def execute(self, context: ApplicationContext, provider: str, with_token: bool, allow_file_fallback: bool) -> None: ...
+    def execute(
+        self,
+        context: ApplicationContext,
+        provider: str,
+        with_token: bool,
+        allow_file_fallback: bool,
+    ) -> None: ...
+
 
 class ProviderLogoutCommand: ...
+
+
 class ProviderWhoamiCommand: ...
 ```
 
@@ -324,7 +334,9 @@ Adds lazy factories parallel to existing credential factories:
 ```python
 def provider_store(self) -> ProviderCredentialStore: ...
 def provider_resolver(self) -> ProviderResolver: ...
-def provider_verifier(self, provider: Provider) -> ProviderVerifier: ...  # returns OpenAIVerifier/ClaudeVerifier
+def provider_verifier(
+    self, provider: Provider
+) -> ProviderVerifier: ...  # returns OpenAIVerifier/ClaudeVerifier
 ```
 
 No eager `httpx` import; no network in `configure()` or `register_all_commands`.

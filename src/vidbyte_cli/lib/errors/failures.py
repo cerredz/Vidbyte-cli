@@ -1245,6 +1245,319 @@ class ResearchIdempotencyKeyInvalid(CliError):
         )
 
 
+class StoredProviderCredentialUnreadable(CliError):
+    """The provider fallback credential file could not be parsed."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            "Stored provider credentials are invalid or unavailable.",
+            description=(
+                "The provider fallback file exists but is unreadable, is not JSON, exceeds "
+                "the size bound, or declares an unsupported schema version. The CLI will not "
+                "rewrite a file it cannot understand. No provider credential was resolved."
+            ),
+            trace=(
+                "FileProviderStore._load read the provider credential file and validated "
+                "it as a version-one ProviderDocument."
+            ),
+            hint="Move the fallback file and run 'vidbyte-cli provider login <provider>' again.",
+            cause=cause,
+        )
+
+
+class ProviderStoreUnavailable(CliError):
+    """The OS keyring for provider keys could not be used."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception | None = None) -> None:
+        super().__init__(
+            "The provider credential store is unavailable.",
+            description=(
+                "No keyring backend reported itself usable, or the backend rejected the "
+                "operation — a locked keychain or a headless session with no agent. No "
+                "provider credential was stored or read."
+            ),
+            trace=(
+                "KeyringProviderStore performed a scoped get, set, or delete against "
+                "the 'vidbyte-cli-provider' service."
+            ),
+            hint="Check the system keyring, or approve the restricted-file fallback.",
+            cause=cause,
+        )
+
+
+class NoApprovedProviderStore(CliError):
+    """No keyring and file fallback was not approved for provider storage."""
+
+    code = CliErrorCode.CREDENTIAL_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            f"No approved storage for provider '{provider}'.",
+            description=(
+                "The provider key verified successfully but has nowhere approved to live. "
+                "This machine exposes no working keyring, and the restricted-file fallback "
+                "requires explicit consent. Nothing was written; the verified key was "
+                "discarded with this process."
+            ),
+            trace=(
+                "ProviderLoginCommand verified the credential and called "
+                "ProviderCredentialStore.write, which found no available keyring and no "
+                "file-fallback consent."
+            ),
+            hint="Retry with --allow-file-fallback.",
+        )
+
+
+class ProviderCredentialsRejected(CliError):
+    """The provider rejected the supplied API key."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            f"The {provider} provider rejected the API key.",
+            description=(
+                "A provider key was sent and the provider answered 401 or 403. The key is "
+                "revoked, expired, or malformed. Nothing was stored and no Vidbyte credits "
+                "were spent. The key value is never echoed."
+            ),
+            trace=(
+                "ProviderVerifier sent the key to the provider's /v1/models and the "
+                "provider answered with an unauthenticated status."
+            ),
+            hint=f"Run 'vidbyte-cli provider login {provider}' with a valid key.",
+        )
+
+
+class ProviderApiUnreachable(CliError):
+    """The provider API could not be contacted at all."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, provider: str, cause: Exception | None = None) -> None:
+        super().__init__(
+            f"The {provider} provider API could not be reached.",
+            description=(
+                "Connecting to the provider failed, or the connection was lost before a reply "
+                "arrived. Safe to retry after checking connectivity. Nothing was stored."
+            ),
+            trace=(
+                "ProviderVerifier probed the provider's /v1/models and httpx raised an HTTPError."
+            ),
+            hint="Check connectivity and retry.",
+            cause=cause,
+        )
+
+
+class ProviderApiProtocolError(CliError):
+    """The provider returned an undecodable success response."""
+
+    code = CliErrorCode.API_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, provider: str, cause: Exception | None = None) -> None:
+        super().__init__(
+            f"The {provider} provider returned an unsupported response.",
+            description=(
+                "The reply succeeded at HTTP level but was not JSON of the expected shape: "
+                "wrong body, empty, or failed validation. The body is not quoted. Retry may "
+                "produce the same result if the provider changed shape."
+            ),
+            trace=(
+                "ProviderVerifier received a 2xx and handed the body to its JSON decoder "
+                "and shape validator."
+            ),
+            hint="Retry once; if current, report with --debug.",
+            cause=cause,
+        )
+
+
+class ProviderRateLimited(CliError):
+    """The provider rate-limited the verification probe."""
+
+    code = CliErrorCode.API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, provider: str, retry_after: int | None = None) -> None:
+        wait = (
+            f"Wait {retry_after} seconds before retrying."
+            if retry_after is not None
+            else "Wait before retrying."
+        )
+        super().__init__(
+            f"The {provider} provider rate-limited the request.",
+            description=(
+                "The provider answered 429 for the /v1/models probe. Nothing was stored. "
+                "Waiting before retrying is required."
+            ),
+            trace=(
+                "ProviderVerifier probed the provider and classified the 429 status as "
+                "rate-limited."
+            ),
+            hint=wait,
+        )
+
+
+class ProviderRequestRejected(CliError):
+    """The provider rejected the request as invalid."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            f"The {provider} provider rejected the request.",
+            description=(
+                "The provider answered 400/404/422 for the probe, meaning the request was "
+                "malformed. Nothing was stored. The provider body is not echoed."
+            ),
+            trace=(
+                "ProviderVerifier probed the provider and mapped the non-success status "
+                "to a request error."
+            ),
+            hint="Check the key and retry with a fresh token.",
+        )
+
+
+class InvalidProviderApiKeyInput(CliError):
+    """The token for a provider was empty or too large."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            f"The supplied {provider} API key is empty or too large.",
+            description=(
+                "The value after trimming was blank or longer than 4096 characters. Nothing "
+                "was verified or stored."
+            ),
+            trace=(
+                "ProviderCredentialInput.read bounds-checked the trimmed value before "
+                "constructing ProviderCredentials."
+            ),
+            hint="Paste the key from the provider dashboard, or pipe with --with-token.",
+        )
+
+
+class ProviderKeyNotLiveFormat(CliError):
+    """The token does not match the expected provider prefix."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            f"The value is not a {provider} API key.",
+            description=(
+                "The value does not begin with the expected prefix for this provider. "
+                "OpenAI keys must start with 'sk-' and Claude keys with 'sk-ant-'. "
+                "Nothing was verified or stored."
+            ),
+            trace=(
+                "ProviderCredentialInput.read asked ProviderCredentials.is_live_format "
+                "about the prefix."
+            ),
+            hint="Copy the correct provider key and retry.",
+        )
+
+
+class NoninteractiveProviderLoginRequiresToken(CliError):
+    """Provider login had no terminal and no stdin marker."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            "Provider login requires explicit token input in noninteractive mode.",
+            description=(
+                "The hidden prompt needs an interactive terminal, and this invocation has "
+                "none or passed --no-input. Stdin is read only with --with-token."
+            ),
+            trace=("ProviderCredentialInput.read checked --no-input and terminal capabilities."),
+            hint=f"Pipe the token to 'vidbyte-cli provider login {provider} --with-token'.",
+        )
+
+
+class InvalidProviderEnvironmentKey(CliError):
+    """A provider env var is set but unusable."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str, var_name: str) -> None:
+        super().__init__(
+            f"{var_name} for '{provider}' is empty or invalid.",
+            description=(
+                "The provider environment variable is set to an empty, whitespace-only, "
+                "oversized, or wrong-prefix value. Because it is set it outranks stored "
+                "credentials, so falling through would authenticate as someone the caller "
+                "did not ask for."
+            ),
+            trace=(
+                "ProviderResolver.resolve read the provider env var and bounds/prefix "
+                "checked it before any store."
+            ),
+            hint=f"Set a valid key in {var_name} or unset it to use stored credentials.",
+        )
+
+
+class ProviderAuthenticationRequired(CliError):
+    """A provider command needs a stored key but none exists."""
+
+    code = CliErrorCode.AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(
+            f"Authentication for provider '{provider}' is required.",
+            description=(
+                "The command needs a provider API key and the store held none for this "
+                "machine/profile. No provider probe was made."
+            ),
+            trace=(
+                "ProviderWhoamiCommand resolved via ProviderResolver, which found no key "
+                "in environment, keyring, or file."
+            ),
+            hint=f"Run 'vidbyte-cli provider login {provider}' first.",
+        )
+
+
+class FileFallbackNotApprovedForProvider(CliError):
+    """Provider login could not ask for fallback consent."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, typed_name: str = "provider") -> None:
+        _ = typed_name
+        super().__init__(
+            "No OS keyring is available and provider file storage was not approved.",
+            description=(
+                "Storing the provider key would require the restricted-file fallback, which "
+                "needs explicit consent. This invocation is noninteractive so the prompt "
+                "cannot be shown. Nothing was stored."
+            ),
+            trace=(
+                "ProviderLoginCommand._fallback_consent found no available keyring, no "
+                "--allow-file-fallback, and no interactive terminal."
+            ),
+            hint="Retry with --allow-file-fallback.",
+        )
+
+
 class ResearchWatchTimedOut(CliError):
     """The local wait expired while the run was still in progress."""
 

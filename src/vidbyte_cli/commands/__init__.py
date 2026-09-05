@@ -16,6 +16,9 @@ from .auth.logout import LogoutCommand
 from .auth.whoami import WhoamiCommand
 from .config.get import ConfigGetCommand
 from .config.set import ConfigSetCommand
+from .provider.login import ProviderLoginCommand
+from .provider.logout import ProviderLogoutCommand
+from .provider.whoami import ProviderWhoamiCommand
 from .research.add import ResearchAddCommand
 from .research.resume import ResearchResumeCommand
 from .research.start import ResearchStartCommand
@@ -55,3 +58,9 @@ def register_all_commands(program: click.Group) -> None:
     ConfigGetCommand().register(config)
     ConfigSetCommand().register(config)
     program.add_command(config)
+
+    provider = click.Group(name="provider", help="Manage BYOK provider API keys")
+    ProviderLoginCommand().register(provider)
+    ProviderLogoutCommand().register(provider)
+    ProviderWhoamiCommand().register(provider)
+    program.add_command(provider)

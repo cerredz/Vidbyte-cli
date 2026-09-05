@@ -31,7 +31,16 @@ from vidbyte_cli.lib.errors import codes, failures  # noqa: E402
 from vidbyte_cli.lib.runtime.context import ApplicationContext  # noqa: E402
 from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
-EXPECTED_TOP_LEVEL = {"config", "doctor", "login", "logout", "research", "runtime", "whoami"}
+EXPECTED_TOP_LEVEL = {
+    "config",
+    "doctor",
+    "login",
+    "logout",
+    "provider",
+    "research",
+    "runtime",
+    "whoami",
+}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
 EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list"}
 # Every module that existed only to serve a backend route that was never built.

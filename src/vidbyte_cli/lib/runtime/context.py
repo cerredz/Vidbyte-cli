@@ -17,6 +17,7 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from ...types.provider import Provider
 from ..api.client import ApiClient
 from ..api.endpoints.research import ResearchEndpoints
 from ..api.endpoints.runtime import RuntimeEndpoints
@@ -27,10 +28,14 @@ from ..auth import (
     CredentialVerifier,
 )
 from ..auth.credentials import Credentials
+from ..auth.provider_credentials import ProviderCredentials
+from ..auth.provider_resolver import ProviderResolver
+from ..auth.provider_store import ProviderCredentialStore
+from ..auth.provider_verifier import ProviderVerifier, verifier_for_provider
 from ..config import ConfigResolver, ConfigStore, ResolvedConfig, VidbytePaths
 from ..config.migration import StateMigration
 from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
-from ..errors.failures import AuthenticationRequired
+from ..errors.failures import AuthenticationRequired, ProviderAuthenticationRequired
 from ..errors.handler import ErrorHandler
 from ..io import IOStreams
 from ..io.terminal import TerminalCapabilities, TerminalPolicy
@@ -84,6 +89,8 @@ class ApplicationContext:
         self._runtime_hosts: RuntimeHostRegistry | None = None
         self._runtime_launch_planner: RuntimeLaunchPlanner | None = None
         self._runtime_executor: RuntimeExecutor | None = None
+        self._provider_store: ProviderCredentialStore | None = None
+        self._provider_resolver: ProviderResolver | None = None
 
     def configure(self, options: InvocationOptions, config: ResolvedConfig) -> None:
         # Root options are read twice — once by the pre-scan, once by Click — so an unchanged
@@ -196,6 +203,30 @@ class ApplicationContext:
     def output(self) -> OutputManager:
         # Callers share one policy object so stdout cardinality stays enforceable.
         return self._output
+
+    def provider_store(self) -> ProviderCredentialStore:
+        # Lazily created so --help never opens the keyring.
+        if self._provider_store is None:
+            self._provider_store = ProviderCredentialStore(paths=self.paths())
+        return self._provider_store
+
+    def provider_resolver(self) -> ProviderResolver:
+        # Env > keyring > file, scoped by profile+provider.
+        if self._provider_resolver is None:
+            self._provider_resolver = ProviderResolver(self.provider_store(), self.environment)
+        return self._provider_resolver
+
+    def provider_verifier(self, provider: Provider) -> ProviderVerifier:
+        # Factory keeps command from branching on provider.
+        return verifier_for_provider(provider)
+
+    def require_provider_credentials(self, provider: Provider) -> ProviderCredentials:
+        # Provider key for this profile, or a typed failure before any network call.
+        config = self.resolved_config()
+        resolved = self.provider_resolver().resolve(config.profile, provider)
+        if resolved is None:
+            raise ProviderAuthenticationRequired(provider.value)
+        return resolved.credentials
 
     def error_handler(self) -> ErrorHandler:
         return self._errors
