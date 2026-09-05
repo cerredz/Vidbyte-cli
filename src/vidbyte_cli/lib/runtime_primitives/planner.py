@@ -17,7 +17,7 @@ from ..errors.failures import (
 )
 from .hosts import RuntimeHostRegistry
 
-_CAPABILITY_ID: Literal["runtime.review.adversarial-team@1"] = "runtime.review.adversarial-team@1"
+_CapabilityId = Literal["runtime.review.adversarial-team@1", "runtime.persistence@1"]
 
 
 class RuntimeLaunchPlanner:
@@ -27,7 +27,9 @@ class RuntimeLaunchPlanner:
         # Uses one registry so doctor and execution selection share host semantics.
         self._hosts = hosts
 
-    def build(self, task: str, host: RuntimeHost | None, cwd: Path) -> RuntimeLaunchPlan:
+    def build(
+        self, task: str, host: RuntimeHost | None, cwd: Path, capability_id: _CapabilityId
+    ) -> RuntimeLaunchPlan:
         # Validates everything needed before a future paid admission can be requested.
         normalized_task = task.strip()
         if not normalized_task or len(normalized_task) > 20_000:
@@ -39,7 +41,7 @@ class RuntimeLaunchPlanner:
         if selected.executable is None:
             raise RuntimeHostUnavailable(selected.host.value)
         return RuntimeLaunchPlan(
-            capability_id=_CAPABILITY_ID,
+            capability_id=capability_id,
             host=selected.host,
             executable=Path(selected.executable),
             working_directory=resolved_directory,

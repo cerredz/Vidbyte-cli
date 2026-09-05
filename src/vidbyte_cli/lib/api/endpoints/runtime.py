@@ -20,6 +20,7 @@ from ..response import ResponseShape
 
 RUNTIME_CATALOG_PATH = "/api/x402/runtime"
 ADVERSARIAL_TEAM_ADMISSION_PATH = "/api/x402/runtime/adversarial-team/admissions"
+PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/admissions"
 
 
 class RuntimeEndpoints:
@@ -39,6 +40,16 @@ class RuntimeEndpoints:
         # Purchases one replay-safe local execution admission.
         return self._client.post(
             ADVERSARIAL_TEAM_ADMISSION_PATH,
+            request,
+            AdmissionGrant,
+            shape=ResponseShape.DIRECT,
+            idempotency_key=key,
+        )
+
+    def admit_persistence(self, request: AdmissionRequest, key: str) -> AdmissionGrant:
+        # Purchases one replay-safe local execution admission.
+        return self._client.post(
+            PERSISTENCE_ADMISSION_PATH,
             request,
             AdmissionGrant,
             shape=ResponseShape.DIRECT,
