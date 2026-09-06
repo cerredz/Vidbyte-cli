@@ -17,6 +17,7 @@ from ....types.ensemble import (
     APPROACHES_PER_ROLE_MIN,
     ApproachCandidate,
     GeneratedRole,
+    RolePlan,
     SelectedApproach,
 )
 
@@ -41,20 +42,29 @@ class EnsemblePrompts:
         return self._render("planner_turn", task=task, roles=str(roles))
 
     def role_system_prompt(self, role: GeneratedRole) -> str:
-        # The planner wrote the four sections; the mandate and constraints are ours, always.
+        # The planner wrote the six sections; the mandate and constraints are ours, always.
         return self._render(
             "role_system",
             role_name=role.name,
             identity=role.identity,
             personality=role.personality,
+            expertise=role.expertise,
             knowledge=role.knowledge,
+            skills=role.skills,
             goal=role.goal,
             **self._band(),
         )
 
-    def role_turn_prompt(self, task: str) -> str:
-        # Every role sees the same task; their system prompts are what differentiates them.
-        return self._render("role_turn", task=task, **self._band())
+    def role_turn_prompt(self, task: str, plan: RolePlan) -> str:
+        # Planner context gives every role the shared reading without collapsing its lens.
+        return self._render(
+            "role_turn",
+            task=task,
+            task_analysis=plan.task_analysis,
+            roster_strategy=plan.roster_strategy,
+            coverage_summary=plan.coverage_summary,
+            **self._band(),
+        )
 
     def selector_system_prompt(self) -> str:
         # One selector agent spans every narrowing round, so this is authored once per run.
@@ -103,8 +113,16 @@ class EnsemblePrompts:
             title=approach.title,
             approach=approach.approach,
             rationale=verdict.rationale,
+            evidence=self._bullets(verdict.evidence),
+            uncertainties=self._bullets(verdict.uncertainties),
+            implementation_guidance=verdict.implementation_guidance,
             pros=self._bullets(verdict.pros),
             cons=self._bullets(verdict.cons + approach.risks),
+            assumptions=self._bullets(approach.assumptions),
+            tradeoffs=self._bullets(approach.tradeoffs),
+            validation_steps=self._bullets(approach.validation_steps),
+            round_summary=selected.round_summary,
+            comparison_basis=self._bullets(selected.comparison_basis),
             files=self._bullets(approach.files),
             candidates=str(candidates),
             roles=str(roles),
@@ -129,8 +147,23 @@ class EnsemblePrompts:
         return self._cache[name]
 
     def _render_candidates(self, candidates: tuple[ApproachCandidate, ...]) -> str:
-        # One flat labeled block each: prose would bury the ids the selector must echo back.
-        return "\n\n".join(self._render_candidate(candidate) for candidate in candidates)
+        # Role context appears once even when one role contributed ten surviving approaches.
+        rendered: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate.role not in seen:
+                rendered.append(self._render_role_context(candidate))
+                seen.add(candidate.role)
+            rendered.append(self._render_candidate(candidate))
+        return "\n\n".join(rendered)
+
+    def _render_role_context(self, candidate: ApproachCandidate) -> str:
+        return (
+            f'<role-context name="{candidate.role}">\n'
+            f"task analysis: {candidate.task_analysis}\n"
+            f"role strategy: {candidate.role_strategy}\n"
+            "</role-context>"
+        )
 
     def _render_candidate(self, candidate: ApproachCandidate) -> str:
         # The id leads, because naming an id the selector was not given fails the round.
@@ -144,6 +177,9 @@ class EnsemblePrompts:
             f"cons:\n{self._bullets(approach.cons)}\n"
             f"risks:\n{self._bullets(approach.risks)}\n"
             f"files:\n{self._bullets(approach.files)}\n"
+            f"assumptions:\n{self._bullets(approach.assumptions)}\n"
+            f"tradeoffs:\n{self._bullets(approach.tradeoffs)}\n"
+            f"validation steps:\n{self._bullets(approach.validation_steps)}\n"
             "</candidate>"
         )
 

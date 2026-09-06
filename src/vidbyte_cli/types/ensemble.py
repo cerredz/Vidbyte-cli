@@ -63,13 +63,15 @@ class EnsembleInputs(BaseModel):
 
 
 class GeneratedRole(BaseModel):
-    """One role the planner invented, as the four sections its prompt is built from."""
+    """One role the planner invented, as the six sections its prompt is built from."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     name: str = Field(min_length=1, max_length=64)
     identity: str = Field(min_length=1, max_length=4_000)
     personality: str = Field(min_length=1, max_length=4_000)
+    expertise: str = Field(min_length=1, max_length=8_000)
     knowledge: str = Field(min_length=1, max_length=8_000)
+    skills: str = Field(min_length=1, max_length=8_000)
     goal: str = Field(min_length=1, max_length=4_000)
 
 
@@ -77,6 +79,9 @@ class RolePlan(BaseModel):
     """The planner turn's structured output: the ensemble's whole roster."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+    task_analysis: str = Field(min_length=1, max_length=8_000)
+    roster_strategy: str = Field(min_length=1, max_length=8_000)
+    coverage_summary: str = Field(min_length=1, max_length=8_000)
     roles: tuple[GeneratedRole, ...] = Field(min_length=1, max_length=ROLES_MAX)
 
 
@@ -91,6 +96,9 @@ class ProposedApproach(BaseModel):
     risks: tuple[str, ...] = Field(default=(), max_length=10)
     files: tuple[str, ...] = Field(default=(), max_length=50)
     confidence: EnsembleConfidence
+    assumptions: tuple[str, ...] = Field(min_length=1, max_length=20)
+    tradeoffs: tuple[str, ...] = Field(min_length=1, max_length=20)
+    validation_steps: tuple[str, ...] = Field(min_length=1, max_length=20)
 
 
 class RoleProposal(BaseModel):
@@ -98,6 +106,8 @@ class RoleProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     role: str = Field(min_length=1, max_length=64)
+    task_analysis: str = Field(min_length=1, max_length=8_000)
+    role_strategy: str = Field(min_length=1, max_length=8_000)
     approaches: tuple[ProposedApproach, ...] = Field(
         min_length=APPROACHES_PER_ROLE_MIN, max_length=APPROACHES_PER_ROLE_MAX
     )
@@ -112,12 +122,17 @@ class CandidateVerdict(BaseModel):
     cons: tuple[str, ...] = Field(min_length=1, max_length=10)
     score: int = Field(ge=1, le=100)
     rationale: str = Field(min_length=1, max_length=4_000)
+    evidence: tuple[str, ...] = Field(min_length=1, max_length=20)
+    uncertainties: tuple[str, ...] = Field(default=(), max_length=20)
+    implementation_guidance: str = Field(min_length=1, max_length=8_000)
 
 
 class SelectionRound(BaseModel):
     """One narrowing round's structured output: who survived it, and who did not."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+    round_summary: str = Field(min_length=1, max_length=8_000)
+    comparison_basis: tuple[str, ...] = Field(min_length=1, max_length=20)
     kept: tuple[CandidateVerdict, ...] = Field(min_length=1, max_length=1_000)
     eliminated: tuple[str, ...] = Field(default=(), max_length=1_000)
 
@@ -132,6 +147,8 @@ class ApproachCandidate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     candidate_id: str
     role: str
+    task_analysis: str
+    role_strategy: str
     approach: ProposedApproach
 
 
@@ -141,6 +158,8 @@ class SelectedApproach(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     candidate: ApproachCandidate
     verdict: CandidateVerdict
+    round_summary: str
+    comparison_basis: tuple[str, ...]
 
 
 class EnsembleRoleFailure(BaseModel):

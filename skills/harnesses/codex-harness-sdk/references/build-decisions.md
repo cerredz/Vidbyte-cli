@@ -86,7 +86,8 @@ into property descriptions, because no provider grammar enforces them. Say it in
 reaches the model only as a description, and a count violation costs a whole failed stage.
 
 **Rule:** a generated system prompt is specified as a schema, not as free text. The ensemble's
-`GeneratedRole` requires `identity`, `personality`, `knowledge`, and `goal`, so a planner that
+`GeneratedRole` requires `identity`, `personality`, `expertise`, `knowledge`, `skills`, and
+`goal`, so a planner that
 omits one fails validation instead of producing a thin prompt nobody notices.
 
 **Rule:** never let a generated prompt carry a safety constraint. Append those yourself, after

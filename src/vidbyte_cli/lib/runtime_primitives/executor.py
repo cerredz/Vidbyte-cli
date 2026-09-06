@@ -23,7 +23,11 @@ class RuntimeExecutor:
         # Requires a successful layered gate verdict before any agent could be spawned.
         from ...types.runtime import RuntimeAdmissionVerdict
 
-        if verdict is None or not isinstance(verdict, RuntimeAdmissionVerdict) or not verdict.admitted:
+        if (
+            verdict is None
+            or not isinstance(verdict, RuntimeAdmissionVerdict)
+            or not verdict.admitted
+        ):
             raise RuntimeAdmissionNotVerified()
         if verdict.capability_id != plan.capability_id or verdict.admission_id.strip() == "":
             raise RuntimeAdmissionNotVerified()

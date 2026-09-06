@@ -87,6 +87,8 @@ class RuntimeLaunchPlan(BaseModel):
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
+
+
 class RuntimeAdmissionVerdict(BaseModel):
     """Deterministic gate result that the executor requires before spawning."""
 

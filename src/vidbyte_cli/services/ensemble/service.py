@@ -64,7 +64,7 @@ class EnsembleService:
         root = self._stages.sdk.agent(self._stages.root())
         plan = await self._plan_roles(root)
         outcomes = await asyncio.gather(
-            *(self._propose(root, role) for role in plan.roles),
+            *(self._propose(root, role, plan) for role in plan.roles),
             return_exceptions=True,
         )
         proposals, failures = self._partition(plan.roles, list(outcomes))
@@ -108,10 +108,12 @@ class EnsembleService:
             raise EnsembleRolePlanInvalid(stages.inputs.roles)
         return plan
 
-    async def _propose(self, root: EnsembleAgent, role: GeneratedRole) -> RoleProposal:
+    async def _propose(
+        self, root: EnsembleAgent, role: GeneratedRole, plan: RolePlan
+    ) -> RoleProposal:
         # Bounded so one hung host cannot hold the fan-in open for every other role.
         stages = self._stages
-        prompt = stages.prompts.role_turn_prompt(stages.inputs.task)
+        prompt = stages.prompts.role_turn_prompt(stages.inputs.task, plan)
         async with asyncio.timeout(stages.inputs.role_timeout_seconds):
             agent = await root.afork(stages.proposal(role))
             reply = await agent.arun(stages.sdk.run_input(prompt))
@@ -139,7 +141,12 @@ class EnsembleService:
             alive = self._survivors(alive, outcome)
             if final:
                 # The winner is joined back to its full proposal, which no agent resends.
-                chosen = SelectedApproach(candidate=alive[0], verdict=outcome.kept[0])
+                chosen = SelectedApproach(
+                    candidate=alive[0],
+                    verdict=outcome.kept[0],
+                    round_summary=outcome.round_summary,
+                    comparison_basis=outcome.comparison_basis,
+                )
                 return tuple(rounds), chosen, agent.thread_id
 
     def _round_prompt(self, alive: Candidates, number: int, target: int) -> str:
@@ -181,6 +188,8 @@ class EnsembleService:
             ApproachCandidate(
                 candidate_id=f"{role_index}.{approach_index}",
                 role=proposal.role,
+                task_analysis=proposal.task_analysis,
+                role_strategy=proposal.role_strategy,
                 approach=approach,
             )
             for role_index, proposal in enumerate(proposals, 1)
