@@ -203,6 +203,31 @@ class RuntimeTaskInvalid(CliError):
         )
 
 
+class RuntimeAdmissionNotVerified(CliError):
+    """The layered admission gate did not admit the local runtime execution."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, reason: str | None = None) -> None:
+        # Reports only the safe reason category, never a grant token or raw key.
+        detail = f" Reason: {reason}." if reason else ""
+        super().__init__(
+            "Runtime admission is not verified.",
+            description=(
+                "The layered runtime gate validates a typed grant, a signed grant_token, and its "
+                f"expiry before any local agent is spawned.{detail} No agent ran and no additional "
+                "credits beyond the admission attempt were spent. Provide a valid grant for the "
+                "requested capability or retry admission with the same idempotency key if the "
+                "previous attempt succeeded."
+            ),
+            trace=(
+                "RuntimeAdmissionGate.verify was called with the launch plan and admission grant "
+                "before RuntimeExecutor could run, and at least one layer did not admit."
+            ),
+        )
+
+
 class RuntimeExecutionNotImplemented(CliError):
     """The command scaffold reached the deliberately absent runtime executor."""
 

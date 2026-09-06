@@ -58,6 +58,8 @@ class RuntimeAdmissionGrant(BaseModel):
     execution_location: Literal["local"]
     charged_cents: int = Field(ge=1)
     admitted_at: datetime
+    expires_at: datetime | None = None
+    grant_token: str | None = Field(default=None, min_length=10, max_length=8192)
 
 
 class RuntimeHostStatus(BaseModel):
@@ -73,8 +75,18 @@ class RuntimeLaunchPlan(BaseModel):
     """Local-only handoff a future executor will turn into an agent topology."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
-    capability_id: Literal["runtime.review.adversarial-team@1"]
+    capability_id: Literal["runtime.review.adversarial-team@1", "runtime.same-host-ensemble@1"] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
+
+
+class RuntimeAdmissionVerdict(BaseModel):
+    """Deterministic gate result that the executor requires before spawning."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    admitted: bool
+    admission_id: str = Field(min_length=1, max_length=128)
+    capability_id: str = Field(min_length=1, max_length=160)
+    reason: str | None = None
