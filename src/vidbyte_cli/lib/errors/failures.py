@@ -14,6 +14,26 @@ from .cli_error import CliError
 from .codes import CliErrorCode, ExitCode
 
 
+class PersistenceHostFailed(CliError):
+    """The local Codex process did not complete a valid turn."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can contain secrets or task text, so this message is static.
+        super().__init__(
+            "Codex did not complete the persistence turn.",
+            description=(
+                "The local process failed, timed out, or returned an invalid event stream. "
+                "Continuation stopped immediately. The admission may already have been charged "
+                "and completed local work remains in the working directory."
+            ),
+            trace="PersistentCodexSession checked the process exit and JSONL turn completion.",
+            hint="Inspect local Codex session history and configuration before retrying.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 

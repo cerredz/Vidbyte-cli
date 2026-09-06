@@ -14,13 +14,14 @@ from ....types.runtime import (
 )
 from ....types.runtime import (
     RuntimeCapabilityCatalog,
+    RuntimeGrantVerificationRequest,
 )
 from ..client import ApiClient
 from ..response import ResponseShape
 
 RUNTIME_CATALOG_PATH = "/api/x402/runtime"
 ADVERSARIAL_TEAM_ADMISSION_PATH = "/api/x402/runtime/adversarial-team/admissions"
-PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/admissions"
+PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/activate"
 
 
 class RuntimeEndpoints:
@@ -29,6 +30,12 @@ class RuntimeEndpoints:
     def __init__(self, client: ApiClient) -> None:
         # Retains the invocation-owned client without opening a connection.
         self._client = client
+
+    def verify_grant(self, request: RuntimeGrantVerificationRequest) -> AdmissionGrant:
+        # Authenticates the proof at the server without exposing its HMAC signing secret.
+        return self._client.post(
+            "/api/x402/runtime/grants/verify", request, AdmissionGrant, shape=ResponseShape.DIRECT
+        )
 
     def list_capabilities(self) -> RuntimeCapabilityCatalog:
         # Reads the direct runtime-only catalog document.

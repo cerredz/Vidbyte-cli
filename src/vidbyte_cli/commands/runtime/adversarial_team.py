@@ -36,6 +36,6 @@ class AdversarialTeamCommand:
         # Builds a local plan first; the executor then fails before payment or process launch.
         requested = None if host == "auto" else RuntimeHost(host)
         plan = context.runtime_launch_planner().build(
-            task, requested, Path.cwd(), "runtime.review.adversarial-team@1"
+            task, requested, Path.cwd(), "runtime.adversarial-team@1"
         )
         context.runtime_executor().execute_adversarial_team(plan)

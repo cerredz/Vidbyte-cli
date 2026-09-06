@@ -1,72 +1,101 @@
-"""Deterministic hierarchical gate that must admit before any local agent runs."""
+"""Deterministic receipt policy shared by offline and authenticated online verification."""
 
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from ...types.runtime import RuntimeAdmissionGrant, RuntimeAdmissionVerdict, RuntimeLaunchPlan
+from ...types.runtime import RuntimeAdmissionGrant as Grant
+from ...types.runtime import RuntimeAdmissionVerdict as Verdict
+from ...types.runtime import RuntimeLaunchPlan as Plan
 from .verification import RuntimeGrantVerifier
 
-_ALLOWED_PRICES: dict[str, int] = {"runtime.review.adversarial-team@1": 25, "runtime.same-host-ensemble@1": 2}
+_ALLOWED_PRICES = {
+    "runtime.review.adversarial-team@1": 25,
+    "runtime.adversarial-team@1": 25,
+    "runtime.same-host-ensemble@1": 2,
+    "runtime.persistence@1": 2,
+}
+_MAX_TTL_SECONDS = 3600
+Key = str | None
 
 
 class RuntimeAdmissionGate:
-    """Three-layer deterministic gate whose only caller is the command layer."""
+    """Checks local policy after a cryptographic verification boundary."""
 
     def __init__(self, verifier: RuntimeGrantVerifier | None = None) -> None:
-        # Uses the shared verifier so signature checks are identical everywhere.
+        # Shares the strict payload decoder with offline verification.
         self._verifier = verifier or RuntimeGrantVerifier()
 
-    def verify(self, plan: RuntimeLaunchPlan, grant: RuntimeAdmissionGrant | None, now: datetime | None, verification_key: str | None, allow_list: tuple[str, ...] | None = None) -> RuntimeAdmissionVerdict:
-        # Runs Layer 1 then Layer 2 then optional Layer 3, failing closed at the first rejection.
-        current = now or datetime.now(timezone.utc)
-        allowed = allow_list or tuple(_ALLOWED_PRICES.keys())
-        layer1 = self.verify_layer1_typed_grant(plan, grant, allowed)
-        if not layer1.admitted:
-            return layer1
-        layer2 = self.verify_layer2_signature(grant, current, verification_key)
-        if not layer2.admitted:
-            return layer2
-        return RuntimeAdmissionVerdict(admitted=True, admission_id=grant.admission_id, capability_id=grant.capability_id, reason=None)
+    def verify(self, plan: Plan, grant: Grant | None, now: datetime | None, key: Key) -> Verdict:
+        # Offline callers must supply a key; CLI execution uses backend verification.
+        current = now or datetime.now(UTC)
+        reason = self._policy_reason(plan, grant, current)
+        if reason is None and grant is not None:
+            reason = self._signature_reason(grant, current, key)
+        return self._verdict(plan, grant, reason)
 
-    def verify_layer1_typed_grant(self, plan: RuntimeLaunchPlan, grant: RuntimeAdmissionGrant | None, allow_list: tuple[str, ...]) -> RuntimeAdmissionVerdict:
-        # Asserts exact field-by-field equality without trusting model or prompt strings.
+    def verify_online(self, plan: Plan, grant: Grant, verified: Grant) -> Verdict:
+        # The endpoint supplies the canonical receipt after checking signature and ownership.
+        reason = self._policy_reason(plan, grant, datetime.now(UTC))
+        if grant != verified:
+            reason = "grant_receipt_mismatch"
+        return self._verdict(plan, grant, reason)
+
+    def _policy_reason(self, plan: Plan, grant: Grant | None, now: datetime) -> str | None:
+        # Rejects unknown products, price drift and unbounded receipt lifetimes.
         if grant is None:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id="rta_missing", capability_id=plan.capability_id, reason="grant_missing")
+            return "grant_missing"
         if grant.capability_id != plan.capability_id:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_capability_mismatch")
-        if grant.capability_id not in allow_list:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_capability_not_allowed")
-        expected_price = _ALLOWED_PRICES.get(grant.capability_id)
-        if expected_price is not None and grant.charged_cents != expected_price:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_price_mismatch")
-        if grant.execution_location != "local":
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_location_invalid")
-        if grant.admitted_at.tzinfo is None:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_time_not_tz_aware")
-        return RuntimeAdmissionVerdict(admitted=True, admission_id=grant.admission_id, capability_id=grant.capability_id, reason=None)
+            return "grant_capability_mismatch"
+        if grant.charged_cents != _ALLOWED_PRICES.get(grant.capability_id):
+            return "grant_price_mismatch"
+        if not grant.admission_id.strip() or grant.execution_location != "local":
+            return "grant_location_or_id_invalid"
+        if not grant.grant_token:
+            return "grant_token_missing"
+        return self._time_reason(grant, now)
 
-    def verify_layer2_signature(self, grant: RuntimeAdmissionGrant | None, now: datetime, verification_key: str | None) -> RuntimeAdmissionVerdict:
-        # Verifies the backend's HMAC and bounded expiry without a network round trip.
-        if grant is None or grant.grant_token is None:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id if grant else "rta_missing", capability_id=grant.capability_id if grant else "unknown", reason="grant_token_missing")
-        if grant.expires_at is not None and grant.expires_at.tzinfo is None:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_expiry_not_tz_aware")
-        if grant.expires_at is not None and grant.expires_at <= now:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_expired")
-        if grant.expires_at is not None and grant.expires_at <= grant.admitted_at:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_expiry_before_admission")
-        if verification_key is None or not verification_key.strip():
-            # No key configured means the local HMAC check is intentionally skipped; Layer 1 already gates.
-            return RuntimeAdmissionVerdict(admitted=True, admission_id=grant.admission_id, capability_id=grant.capability_id, reason=None)
+    def _time_reason(self, grant: Grant, now: datetime) -> str | None:
+        # Both timestamps must be aware, current and bounded independently of token claims.
+        start, end = grant.admitted_at, grant.expires_at
+        if end is None or start.tzinfo is None or end.tzinfo is None or now.tzinfo is None:
+            return "grant_time_invalid"
+        if end <= now:
+            return "grant_expired"
+        if start > now or end <= start:
+            return "grant_time_invalid"
+        if (end - start).total_seconds() > _MAX_TTL_SECONDS:
+            return "grant_ttl_invalid"
+        return None
+
+    def _signature_reason(self, grant: Grant, now: datetime, key: str | None) -> str | None:
+        # A valid token must bind every public signed field to this receipt.
+        if not key or not key.strip():
+            return "grant_verification_key_missing"
         try:
-            self._verifier.verify(grant.grant_token, verification_key, now)
-        except Exception:
-            return RuntimeAdmissionVerdict(admitted=False, admission_id=grant.admission_id, capability_id=grant.capability_id, reason="grant_signature_invalid")
-        return RuntimeAdmissionVerdict(admitted=True, admission_id=grant.admission_id, capability_id=grant.capability_id, reason=None)
+            signed = self._verifier.verify(grant.grant_token or "", key, now)
+        except ValueError:
+            return "grant_signature_invalid"
+        matches = (
+            signed.admission_id == grant.admission_id,
+            f"{signed.capability_id}@{signed.version}" == grant.capability_id,
+            signed.charged_cents == grant.charged_cents,
+            signed.admitted_at == grant.admitted_at,
+            signed.expires_at == grant.expires_at,
+        )
+        return None if all(matches) else "grant_signed_claims_mismatch"
+
+    def _verdict(self, plan: Plan, grant: Grant | None, reason: str | None) -> Verdict:
+        # Exposes safe policy metadata without the token or caller identity.
+        return Verdict(
+            admitted=reason is None,
+            admission_id=grant.admission_id if grant else "rta_missing",
+            capability_id=plan.capability_id,
+            reason=reason,
+        )
 
     @staticmethod
     def hash_idempotency_key(key: str) -> str:
-        # Hashes the raw Idempotency-Key so it never appears in logs or tokens raw.
+        # Binds the invocation without transmitting its raw key to verification.
         return hashlib.sha256(key.encode("utf-8")).hexdigest()

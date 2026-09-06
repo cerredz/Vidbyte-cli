@@ -77,7 +77,10 @@ class RuntimeLaunchPlan(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
     capability_id: Literal[
-        "runtime.review.adversarial-team@1", "runtime.same-host-ensemble@1", "runtime.persistence@1"
+        "runtime.review.adversarial-team@1",
+        "runtime.adversarial-team@1",
+        "runtime.same-host-ensemble@1",
+        "runtime.persistence@1",
     ] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
@@ -97,7 +100,7 @@ class PersistenceStrength(IntEnum):
 
 
 _PERSISTENCE_REPEAT_COUNTS: Mapping[PersistenceStrength, int] = {
-    PersistenceStrength.TIER_1: 3,
+    PersistenceStrength.TIER_1: 6,
     PersistenceStrength.TIER_2: 8,
     PersistenceStrength.TIER_3: 20,
     PersistenceStrength.TIER_4: 40,
@@ -126,3 +129,20 @@ class RuntimeAdmissionVerdict(BaseModel):
     admission_id: str = Field(min_length=1, max_length=128)
     capability_id: str = Field(min_length=1, max_length=160)
     reason: str | None = None
+
+
+class RuntimeGrantVerificationRequest(BaseModel):
+    """Proof sent only to the authenticated backend, never to a model."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    grant_token: str = Field(min_length=10, max_length=8192)
+    idempotency_key_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class PersistenceResult(BaseModel):
+    """Final local output with deterministic completed-turn accounting."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    session_id: str
+    continuation_turns: int
+    text: str

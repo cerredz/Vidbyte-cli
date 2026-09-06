@@ -1,6 +1,6 @@
 # Design Doc: Persistent Codex execution and verified admission
 
-**Status:** Implementation
+**Status:** Implemented; local validation passed
 **Author:** Codex
 **Created:** 2026-09-06
 **Last Updated:** 2026-09-06
@@ -109,7 +109,16 @@ CLI capability literal adds persistence; settings minimum continuation count bec
 | MODIFY | `scripts/run_ci.py` | Execution and admission implementation / verification |
 | MODIFY | `scripts/test-layered-runtime-admission-gate.py` | Execution and admission implementation / verification |
 
+| MODIFY | `src/vidbyte_cli/commands/runtime/adversarial_team.py` | Align planned capability with backend catalog |
+| MODIFY | `src/vidbyte_cli/lib/runtime_primitives/__init__.py` | Satisfy formatter after main merge |
+| MODIFY | `docs/design/layered-runtime-admission-gate.md` | Format existing embedded Python examples |
+| MODIFY | `skills/runtime-admission/SKILL.md` | Document mandatory server-side verification |
+
 ## 10. Dependencies & External Services
+MODIFY src/vidbyte_cli/commands/runtime/adversarial_team.py to align its planned capability with the existing backend runtime.adversarial-team@1 catalog key. The adversarial executor remains a scaffold.
+
+Manifest refinement: MODIFY src/vidbyte_cli/lib/runtime_primitives/__init__.py and docs/design/layered-runtime-admission-gate.md for pre-existing formatter failures; MODIFY skills/runtime-admission/SKILL.md to document server-side verification. Existing test coverage is extended in its current script, without new test files. The Codex process uses the documented custom provider env_key/wire_api configuration and exec/resume JSONL protocol: https://developers.openai.com/codex/config-advanced and https://developers.openai.com/codex/noninteractive.
+
 No new Python dependency. Installed Codex CLI JSONL protocol, verified using local exec/resume help, is the process integration. Existing authenticated Vidbyte transport and OpenAI BYOK provider are reused. Markdown continuation asset must be included in built wheel. No backend model calls.
 
 ## 11. Rollout & Deployment
@@ -127,5 +136,15 @@ Rejected: loses prior conversation and violates persistence.
 Rejected: additional dependency and semantics unnecessary for the requested fixed loop.
 
 ## Refinement Checklist
-Pending implementation review.
+- [x] [Critical] **Exact task transport**
+  Expected: preserve the original task including whitespace and line endings. Initial text-mode stdin could translate newlines on Windows; binary UTF-8 stdin now preserves them, with an assertion in the existing admission script.
+- [x] [Critical] **Receipt authenticity and route binding**
+  Expected: the receipt proves payment for the selected route and authenticated caller. The inherited gate accepted absent keys and the service defaulted to ensemble pricing; strict server verification, explicit route capabilities and receipt policy now reject these cases.
+- [x] [Notable] **Packaged continuation asset**
+  Expected: installed wheels execute the same loop as source checkouts. The new Markdown asset needs explicit package data; configuration and a wheel-content assertion now protect it.
+- [x] [Notable] **Published route discovery**
+  Expected: every mounted runtime route satisfies the existing discovery contract. The inherited projections lacked rich metadata; all three runtime entries now supply it and the existing contract suite passes.
+- [x] [Minor] **Capability and manifest consistency**
+  Expected: catalog identifiers and the file manifest match the implementation. The CLI adversarial planner now uses the backend identifier; its executor remains an explicit scaffold, and audit-driven manifest additions are recorded above.
 
+Validation: complete CLI `scripts/run_ci.py` passed, including existing provider diagnostics, ten admission/process assertions, and installed-wheel checks. Complete backend `python lint/run.py` passed on both surfaces; the existing gatekeeper suite passed all 47 tests. The local Windows Codex launcher accepted the exec/resume argument layout using help only. No real paid model invocation, live wallet debit, production deployment or live provider credential probe was performed.

@@ -38,6 +38,9 @@ vidbyte-cli = "vidbyte_cli.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"vidbyte_cli.lib.runtime_primitives" = ["*.md"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

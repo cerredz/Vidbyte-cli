@@ -1,202 +1,240 @@
-#!/usr/bin/env python3
-"""Verification script for layered runtime admission gate (CLI)."""
+"""Offline adversarial contracts for paid runtime admission and Codex persistence."""
 
-import sys
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import io
+import json
+import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, "src")
-import hashlib, base64, hmac, json
+from pydantic import ValidationError
 
-from vidbyte_cli.types.runtime import RuntimeAdmissionGrant, RuntimeLaunchPlan, RuntimeHost
-from vidbyte_cli.lib.runtime_primitives.gate import RuntimeAdmissionGate
-from vidbyte_cli.lib.runtime_primitives.verification import RuntimeGrantVerifier
+from vidbyte_cli.lib.errors.failures import (
+    PersistenceHostFailed,
+    RuntimeAdmissionNotVerified,
+    RuntimeExecutionNotImplemented,
+)
 from vidbyte_cli.lib.runtime_primitives.executor import RuntimeExecutor
+from vidbyte_cli.lib.runtime_primitives.gate import RuntimeAdmissionGate
+from vidbyte_cli.lib.runtime_primitives.hosts import RuntimeHostRegistry
+from vidbyte_cli.lib.runtime_primitives.persistence import PersistentCodexSession
+from vidbyte_cli.lib.runtime_primitives.planner import RuntimeLaunchPlanner
+from vidbyte_cli.lib.runtime_primitives.verification import RuntimeGrantVerifier
+from vidbyte_cli.types.runtime import (
+    PersistenceSettings,
+    PersistenceStrength,
+    RuntimeAdmissionGrant,
+    RuntimeHost,
+    RuntimeLaunchPlan,
+)
 
-PASS = 0
-FAIL = 0
-def check(name, fn):
-    global PASS, FAIL
-    try:
-        fn()
-        print(f"PASS: {name}")
-        PASS += 1
-    except AssertionError as e:
-        print(f"FAIL: {name} - {e}")
-        FAIL += 1
-    except Exception as e:
-        print(f"FAIL: {name} - unexpected {type(e).__name__}: {e}")
-        FAIL += 1
+KEY = "test-runtime-signing-key-never-a-production-secret"
+SESSION = "11111111-1111-4111-8111-111111111111"
 
-KEY = "test-runtime-signing-key-32chars-long-secret!!"
 
-def make_grant(cap="runtime.review.adversarial-team@1", cents=25, host=RuntimeHost.CODEX, expired=False):
-    now = datetime.now(timezone.utc)
-    admitted = now
-    expires = now + timedelta(seconds=600) if not expired else now - timedelta(seconds=1)
-    # Build minimal grant_token with HMAC
-    payload = {
-        "admission_id": "rta_" + "a"*32,
-        "capability_id": cap.replace("@1",""),
-        "version": "1",
-        "user_id": "user_123",
-        "api_key_id": "key_123",
-        "charged_cents": cents,
-        "idempotency_key_hash": hashlib.sha256(b"idem").hexdigest(),
-        "admitted_at": admitted.isoformat(),
-        "expires_at": expires.isoformat(),
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",",":")).encode()
-    sig = hmac.new(KEY.encode(), canonical, hashlib.sha256).digest()
-    token = base64.urlsafe_b64encode(canonical).decode().rstrip("=") + "." + base64.urlsafe_b64encode(sig).decode().rstrip("=")
-    return RuntimeAdmissionGrant(
-        admission_id="rta_" + "a"*32,
-        capability_id=cap,
-        execution_location="local",
-        charged_cents=cents,
-        admitted_at=admitted,
-        expires_at=expires,
-        grant_token=token,
-    )
+class AdmissionContracts(unittest.TestCase):
+    """Protects signature binding, expiry and the final execution boundary."""
 
-def make_plan(cap="runtime.review.adversarial-team@1"):
-    return RuntimeLaunchPlan(capability_id=cap, host=RuntimeHost.CODEX, executable=Path("/usr/bin/codex"), working_directory=Path("/tmp"), task="do thing")
+    def setUp(self) -> None:
+        # Each test gets an independent current receipt and policy.
+        self.now = datetime.now(UTC)
+        self.gate = RuntimeAdmissionGate()
+        self.plan = RuntimeLaunchPlan(
+            capability_id="runtime.persistence@1",
+            host=RuntimeHost.CODEX,
+            executable=Path("codex"),
+            working_directory=Path.cwd(),
+            task="do thing",
+        )
+        self.grant = self._grant()
 
-# [Silent Failure] prefix match fails
-def test_prefix():
-    gate = RuntimeAdmissionGate()
-    plan = make_plan("runtime.same-host-ensemble@1")
-    grant = make_grant("runtime.same-host", 2)
-    v = gate.verify(plan, grant, datetime.now(timezone.utc), KEY)
-    assert not v.admitted and "capability" in v.reason
+    def _grant(self, **changes: object) -> RuntimeAdmissionGrant:
+        # Signs exactly the server wire fields with a test-only key.
+        start = self.now - timedelta(seconds=1)
+        end = start + timedelta(seconds=600)
+        payload = {
+            "admission_id": "rta_" + "a" * 32,
+            "capability_id": "runtime.persistence",
+            "version": "1",
+            "user_id": "user",
+            "api_key_id": "key",
+            "charged_cents": 2,
+            "idempotency_key_hash": hashlib.sha256(b"idem").hexdigest(),
+            "admitted_at": start.isoformat(),
+            "expires_at": end.isoformat(),
+            **changes,
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        signature = hmac.new(KEY.encode(), canonical, hashlib.sha256).digest()
+        token = ".".join(
+            base64.urlsafe_b64encode(p).decode().rstrip("=") for p in (canonical, signature)
+        )
+        return RuntimeAdmissionGrant(
+            admission_id="rta_" + "a" * 32,
+            capability_id="runtime.persistence@1",
+            execution_location="local",
+            charged_cents=2,
+            admitted_at=start,
+            expires_at=end,
+            grant_token=token,
+        )
 
-check("[Silent Failure] prefix match rejected", test_prefix)
+    def test_valid_signature_and_online_receipt(self) -> None:
+        # Both trusted verification modes accept the exact intended receipt.
+        self.assertTrue(self.gate.verify(self.plan, self.grant, self.now, KEY).admitted)
+        self.assertTrue(self.gate.verify_online(self.plan, self.grant, self.grant).admitted)
 
-# [Edge Case] empty token, missing dot, three segments
-def test_malformed():
-    gate = RuntimeAdmissionGate()
-    plan = make_plan()
-    for tok in ["", "nodot", "a.b.c"]:
-        try:
-            grant = RuntimeAdmissionGrant(admission_id="rta_"+"a"*32, capability_id="runtime.review.adversarial-team@1", execution_location="local", charged_cents=25, admitted_at=datetime.now(timezone.utc), expires_at=datetime.now(timezone.utc)+timedelta(seconds=600), grant_token=tok)
-        except Exception:
-            continue  # Pydantic already rejects short token
-        v = gate.verify(plan, grant, datetime.now(timezone.utc), KEY)
-        assert not v.admitted
+    def test_missing_key_and_tampered_signature(self) -> None:
+        # A missing secret must never turn off offline authentication.
+        for key in (None, "", "incorrect"):
+            self.assertFalse(self.gate.verify(self.plan, self.grant, self.now, key).admitted)
+        bad = self.grant.model_copy(update={"grant_token": self.grant.grant_token + ".x"})
+        self.assertFalse(self.gate.verify(self.plan, bad, self.now, KEY).admitted)
 
-check("[Edge Case] malformed tokens rejected", test_malformed)
+    def test_signed_claims_cannot_be_substituted(self) -> None:
+        # A genuine token for another receipt cannot authorize this receipt's public fields.
+        variants = (
+            {"charged_cents": 25},
+            {"capability_id": "runtime.same-host-ensemble"},
+            {"admission_id": "rta_other"},
+            {"version": "2"},
+        )
+        for fields in variants:
+            with self.subTest(fields=fields):
+                self.assertFalse(
+                    self.gate.verify(self.plan, self._grant(**fields), self.now, KEY).admitted
+                )
 
-# [Edge Case] over 4KiB
-def test_overlong():
-    verifier = RuntimeGrantVerifier()
-    huge_b64 = base64.urlsafe_b64encode(b"x"*5000).decode().rstrip("=")
-    sig_b64 = base64.urlsafe_b64encode(b"y"*32).decode().rstrip("=")
-    tok = f"{huge_b64}.{sig_b64}"
-    try:
-        verifier.verify(tok, KEY, datetime.now(timezone.utc))
-        assert False
-    except ValueError as e:
-        assert "too large" in str(e)
+    def test_policy_rejects_unbounded_future_and_expired_receipts(self) -> None:
+        # Rejects policy defects even when online verification returns the same object.
+        variants = (
+            {"expires_at": None},
+            {"expires_at": self.now},
+            {"expires_at": self.now + timedelta(days=1)},
+            {"admitted_at": self.now + timedelta(seconds=1)},
+            {"admitted_at": self.now.replace(tzinfo=None)},
+            {"capability_id": "runtime.persistence"},
+            {"charged_cents": 1},
+            {"grant_token": None},
+            {"admission_id": " "},
+        )
+        for fields in variants:
+            bad = self.grant.model_copy(update=fields)
+            with self.subTest(fields=fields):
+                self.assertFalse(self.gate.verify_online(self.plan, bad, bad).admitted)
+        self.assertFalse(self.gate.verify(self.plan, None, self.now, KEY).admitted)
 
-check("[Edge Case] over 4KiB rejected", test_overlong)
+    def test_online_must_return_identical_receipt(self) -> None:
+        # Signature validation cannot authorize a different response envelope.
+        other = self.grant.model_copy(update={"admission_id": "rta_other"})
+        self.assertFalse(self.gate.verify_online(self.plan, self.grant, other).admitted)
 
-# [Silent Failure] price mismatch
-def test_price():
-    gate = RuntimeAdmissionGate()
-    plan = make_plan()
-    grant = make_grant(cents=1)
-    v = gate.verify(plan, grant, datetime.now(timezone.utc), KEY)
-    assert not v.admitted and "price" in v.reason
+    def test_decoder_rejects_malformed_and_oversized_tokens(self) -> None:
+        # The strict decoder rejects oversized inputs and ignored whitespace.
+        verifier = RuntimeGrantVerifier()
+        for token in ("a.b.c", "x" * 9000, "!" * 10 + ".AAA", "AAA .AAA"):
+            with self.subTest(token=token[:20]), self.assertRaises(ValueError):
+                verifier.verify(token, KEY, self.now)
+        data = self.grant.model_dump()
+        data["extra"] = True
+        with self.assertRaises(ValidationError):
+            RuntimeAdmissionGrant.model_validate(data)
 
-check("[Silent Failure] price mismatch rejected", test_price)
+    def test_executor_denial_prevents_all_turns(self) -> None:
+        # A negative or mismatched verdict must leave the session untouched.
+        executor, session = RuntimeExecutor(), MagicMock(spec=PersistentCodexSession)
+        settings = PersistenceSettings(strength=PersistenceStrength.TIER_1)
+        verdict = self.gate.verify(self.plan, None, self.now, KEY)
+        with self.assertRaises(RuntimeAdmissionNotVerified):
+            executor.execute_persistence(self.plan, settings, session, verdict)
+        session.run.assert_not_called()
+        with self.assertRaises(RuntimeAdmissionNotVerified):
+            executor.execute_adversarial_team(self.plan)
+        valid = self.gate.verify(self.plan, self.grant, self.now, KEY)
+        with self.assertRaises(RuntimeExecutionNotImplemented):
+            executor.execute_adversarial_team(self.plan, valid)
 
-# [Hidden Failure] compare_digest case
-def test_signature_tamper():
-    gate = RuntimeAdmissionGate()
-    plan = make_plan()
-    grant = make_grant()
-    # Tamper payload byte
-    tampered = grant.grant_token[:-2] + ("AA" if grant.grant_token[-2:] != "AA" else "BB")
-    grant2 = grant.model_copy(update={"grant_token": tampered})
-    v = gate.verify(plan, grant2, datetime.now(timezone.utc), KEY)
-    assert not v.admitted and "signature" in v.reason
 
-check("[Hidden Failure] tampered signature rejected", test_signature_tamper)
+class RecordingSession(PersistentCodexSession):
+    """Uses real prompt assembly and event parsing with a deterministic host boundary."""
 
-# [Edge Case] expires_at == now is rejected
-def test_expiry_now():
-    gate = RuntimeAdmissionGate()
-    plan = make_plan()
-    now = datetime.now(timezone.utc)
-    grant = make_grant()
-    # make expires == now
-    grant2 = grant.model_copy(update={"expires_at": now})
-    # need fresh token with expires == now
-    payload = {
-        "admission_id": "rta_"+"a"*32, "capability_id":"runtime.review.adversarial-team","version":"1","user_id":"user_123","api_key_id":"key_123","charged_cents":25,"idempotency_key_hash":hashlib.sha256(b"idem").hexdigest(),"admitted_at": now.isoformat(), "expires_at": now.isoformat()
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",",":")).encode()
-    sig = hmac.new(KEY.encode(), canonical, hashlib.sha256).digest()
-    tok = base64.urlsafe_b64encode(canonical).decode().rstrip("=")+"."+base64.urlsafe_b64encode(sig).decode().rstrip("=")
-    grant3 = grant.model_copy(update={"expires_at": now, "grant_token": tok})
-    v = gate.verify(plan, grant3, now, KEY)
-    assert not v.admitted
+    def __init__(self) -> None:
+        # Holds only the inputs needed to assert actual turn and resume behavior.
+        super().__init__({"OPENAI_API_KEY": "fake"}, lambda _: None)
+        self.calls = []
 
-check("[Edge Case] expires_at == now rejected", test_expiry_now)
+    def _execute(self, arguments, cwd, prompt, events) -> None:
+        # Emits the documented protocol without contacting Codex or any provider.
+        self.calls.append((arguments, cwd, prompt))
+        for event in (
+            {"type": "thread.started", "thread_id": SESSION},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "done"}},
+            {"type": "turn.completed"},
+        ):
+            events.write(json.dumps(event) + "\n")
 
-# [Hidden Assumption] clock injection
-def test_clock_injection():
-    gate = RuntimeAdmissionGate()
-    plan = make_plan()
-    grant = make_grant()
-    future = datetime.now(timezone.utc) + timedelta(seconds=1000)
-    v = gate.verify(plan, grant, future, KEY)
-    assert not v.admitted and "expired" in v.reason
 
-check("[Hidden Assumption] future clock detects expiry", test_clock_injection)
+class PersistenceContracts(unittest.TestCase):
+    """Proves exact task preservation and bounded same-session continuation."""
 
-# [Silent Failure] extra field in grant
-def test_extra_field():
-    try:
-        RuntimeAdmissionGrant(admission_id="rta_a", capability_id="runtime.review.adversarial-team@1", execution_location="local", charged_cents=25, admitted_at=datetime.now(timezone.utc), expires_at=datetime.now(timezone.utc)+timedelta(seconds=600), grant_token="a.b", extra="field")
-        assert False
-    except Exception:
-        pass
+    def test_process_stdin_is_exact_utf8_and_failure_stops(self) -> None:
+        # Binary stdin avoids newline conversion on Windows and keeps task text off argv.
+        session = PersistentCodexSession({"OPENAI_API_KEY": "fake"}, lambda _: None)
+        process = MagicMock()
+        process.returncode = 0
+        factory = MagicMock()
+        factory.return_value.__enter__.return_value = process
+        original = "  exact\nline\r\nUnicode café  "
+        with patch("vidbyte_cli.lib.runtime_primitives.persistence.subprocess.Popen", factory):
+            session._execute(["codex", "exec", "-"], Path.cwd(), original, io.StringIO())
+            self.assertEqual(process.communicate.call_args.args[0], original.encode("utf-8"))
+            self.assertNotIn(original, factory.call_args.args[0])
+            process.returncode = 1
+            with self.assertRaises(PersistenceHostFailed):
+                session._execute(["codex", "exec", "-"], Path.cwd(), original, io.StringIO())
 
-check("[Silent Failure] extra field rejected", test_extra_field)
+    def test_all_strengths_keep_exact_task_and_session(self) -> None:
+        # Covers boundary tiers and every intermediate mapping through the actual run loop.
+        original = "  Original {task}\nUnicode: café. $(not-a-shell-command)  "
+        planner = RuntimeLaunchPlanner(RuntimeHostRegistry(lambda _: "codex"))
+        plan = planner.build(original, RuntimeHost.CODEX, Path.cwd(), "runtime.persistence@1")
+        self.assertEqual(plan.task, original)
+        for tier, expected in enumerate((6, 8, 20, 40, 70, 100), 1):
+            session = RecordingSession()
+            result = session.run(plan, PersistenceSettings(strength=PersistenceStrength(tier)))
+            self.assertEqual(len(session.calls), expected + 1)
+            self.assertEqual(session.calls[0][2], original)
+            self.assertEqual(result.continuation_turns, expected)
+            self.assertEqual(result.session_id, SESSION)
+            for args, _, prompt in session.calls[1:]:
+                self.assertIn("resume", args)
+                self.assertIn(SESSION, args)
+                self.assertNotIn(original, args)
+                self.assertTrue(prompt.startswith("Very good job, keep working"))
+                self.assertIn("Here is the original task in case your forgot " + original, prompt)
 
-# [Hidden Assumption] executor requires verdict
-def test_executor_gate():
-    plan = make_plan()
-    ex = RuntimeExecutor()
-    try:
-        ex.execute_adversarial_team(plan)  # no verdict
-        assert False
-    except Exception as e:
-        assert "NotVerified" in type(e).__name__ or "not verified" in str(e).lower()
-    # valid verdict but then executor still raises NotImplemented after gate
-    gate = RuntimeAdmissionGate()
-    grant = make_grant()
-    v = gate.verify(plan, grant, datetime.now(timezone.utc), KEY)
-    assert v.admitted
-    try:
-        ex.execute_adversarial_team(plan, v)
-        assert False
-    except Exception as e:
-        # Should be NotImplemented, not NotVerified
-        assert "NotImplemented" in type(e).__name__
+    def test_incomplete_or_changed_session_fails(self) -> None:
+        # Nonzero exits are not the only failure signal: missing protocol state also fails.
+        session = RecordingSession()
+        streams = (
+            "",
+            "not json\n",
+            "[]\n",
+            '{"type":"turn.failed"}\n',
+            '{"type":"thread.started","thread_id":"not-a-session"}\n',
+            '{"type":"turn.completed"}\n',
+        )
+        for stream in streams:
+            with self.subTest(stream=stream), self.assertRaises(PersistenceHostFailed):
+                session._parse_events(io.StringIO(stream), None)
+        with self.assertRaises(PersistenceHostFailed):
+            session._session_id("22222222-2222-4222-8222-222222222222", SESSION)
 
-check("[Hidden Assumption] executor requires verdict", test_executor_gate)
 
-# [Hidden Failure] 402 swallows - simulate gate not swallowing but command would
-def test_help_no_side_effect():
-    # --help should not construct gate; we just ensure import doesn't trigger network
-    from vidbyte_cli.cli import main
-    import io
-    # help is tested via smoke, just check gate still there
-    assert RuntimeAdmissionGate is not None
-
-check("[Edge Case] help path no network", test_help_no_side_effect)
-
-print(f"\n{PASS}/{PASS+FAIL} tests passed")
-sys.exit(0 if FAIL==0 else 1)
+if __name__ == "__main__":
+    unittest.main()
