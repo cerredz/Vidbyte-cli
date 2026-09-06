@@ -77,7 +77,9 @@ class PersistentCodexSession:
 
     def _execute(self, arguments: list[str], cwd: Path, prompt: str, events: TextIO) -> None:
         # Cancels and reaps the entire child tree rather than leaving agents behind.
-        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        flags = 0
+        if sys.platform == "win32":
+            flags = subprocess.CREATE_NO_WINDOW
         with subprocess.Popen(
             arguments,
             cwd=cwd,

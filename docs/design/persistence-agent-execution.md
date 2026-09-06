@@ -136,6 +136,8 @@ Rejected: loses prior conversation and violates persistence.
 Rejected: additional dependency and semantics unnecessary for the requested fixed loop.
 
 ## Refinement Checklist
+- [x] [Notable] **Cross-platform process typing**
+  Expected: the process adapter passes every supported platform's type checks. Remote Linux/macOS checks found that the Windows-only subprocess flag needed an explicit sys.platform guard; the guard is now recognized by mypy without suppressions.
 - [x] [Critical] **Exact task transport**
   Expected: preserve the original task including whitespace and line endings. Initial text-mode stdin could translate newlines on Windows; binary UTF-8 stdin now preserves them, with an assertion in the existing admission script.
 - [x] [Critical] **Receipt authenticity and route binding**
