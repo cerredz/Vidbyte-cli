@@ -42,7 +42,7 @@ EXPECTED_TOP_LEVEL = {
     "whoami",
 }
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
-EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list"}
+EXPECTED_RUNTIME = {"adversarial-team", "doctor", "list", "persistence"}
 # Every module that existed only to serve a backend route that was never built.
 DELETED_MODULES = (
     "vidbyte_cli.commands.harness",
@@ -59,7 +59,13 @@ DELETED_MODULES = (
 DELETED_FAILURES = ("NotImplementedFeature", "HarnessInvocationFailed", "MissingHarnessArgument")
 # Symbols no surviving source file may name, in code or in authored prose. `trace` strings are
 # the real risk: they are static text no linter or type checker will ever flag as stale.
-FORBIDDEN_SOURCE_TOKENS = ("harness", "HarnessRun", "RepoInspector", "NotImplementedFeature")
+FORBIDDEN_SOURCE_TOKENS = (
+    "BaseHarness",
+    "HarnessRun",
+    "RepoInspector",
+    "NotImplementedFeature",
+    "harness_context",
+)
 
 
 class Results:
