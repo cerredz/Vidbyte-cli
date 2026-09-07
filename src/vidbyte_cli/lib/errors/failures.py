@@ -1263,7 +1263,7 @@ class ResearchIdempotencyKeyInvalid(CliError):
                 "submitted. Omit the option entirely to have one generated."
             ),
             trace=(
-                "The research command called IdempotencyKey.create with the explicit "
+                "The command called IdempotencyKey.create with the explicit "
                 "--idempotency-key value before any credential was resolved."
             ),
             hint="Pass a UUID, or omit --idempotency-key to generate one.",
@@ -1619,15 +1619,15 @@ class EnsembleInputsInvalid(CliError):
             "The ensemble options are outside their accepted bounds.",
             description=(
                 "One or more options failed validation before anything else ran. The task must "
-                "hold 1 to 20,000 characters, --roles must be 3 to 100, and --role-timeout "
-                "must be 1 to 3600 seconds. Nothing was submitted, no admission was requested, "
-                "and no agent started, so correcting the option and retrying is safe."
+                "hold 1 to 20,000 characters and --roles must be 3 to 100. Nothing was "
+                "submitted, no admission was requested, and no agent started, so correcting "
+                "the option and retrying is safe."
             ),
             trace=(
                 "SameHostEnsembleCommand built EnsembleInputs from the parsed options before "
                 "planning a launch."
             ),
-            hint="Check --roles (3-100) and --role-timeout (1-3600), then retry.",
+            hint="Check --roles (3-100), then retry.",
             cause=cause,
         )
 
@@ -1671,7 +1671,7 @@ class EnsembleSdkUnavailable(CliError):
                 "imports without the required symbols. This check runs before paid admission, "
                 "so nothing was charged. Install the extra and retry."
             ),
-            trace="EnsembleRunner.run called EnsembleSdk.load before requesting admission.",
+            trace="SameHostEnsembleCommand loaded the SDK before requesting admission.",
             hint="Install with: pip install 'vidbyte-cli[codex]'",
             cause=cause,
         )
@@ -1748,7 +1748,7 @@ class EnsembleAllRolesFailed(CliError):
                 "EnsembleService._orchestrate partitioned the gathered role outcomes and found "
                 "no surviving proposal."
             ),
-            hint="Raise --role-timeout, or check 'vidbyte-cli runtime doctor' for host health.",
+            hint="Retry, or check 'vidbyte-cli runtime doctor' for host health.",
         )
 
 

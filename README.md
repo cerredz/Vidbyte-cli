@@ -106,18 +106,21 @@ That last fork is the only agent in the topology permitted to modify your worksp
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--host` | `codex` | Native host. Codex is the only one with verified fork and sandbox support. |
-| `--roles` | `3` | How many roles the planner generates, 3 to 100. |
-| `--model` | provider default | Model override passed through to the host. |
-| `--reasoning-effort` | provider default | One of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. |
-| `--role-timeout` | `300` | Seconds one role may take before it is recorded as failed. |
+| `--host` | `codex` | Which installed coding agent hosts the ensemble. Codex is the only host with verified thread-fork and per-fork sandbox support, so it is the only accepted value. |
+| `--roles` | `3` | How many specialist roles the planner invents for this task (3-100). More roles widen the approach slate the selector narrows; every role runs concurrently in its own read-only fork against your subscription. |
+| `--model` | provider default | Model override forwarded to every Codex turn and fork in the run. Omit to use the provider default. |
+| `--reasoning-effort` | provider default | Reasoning effort forwarded to every Codex turn in the run (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`). Omit to use the provider default. |
+| `--idempotency-key` | generated | Reuse a key to retry a priced admission without being charged twice. Omit to generate one per invocation. |
 
-A role that times out or fails is reported in the result and the run continues, because a
-partial ensemble still beats a single agent. The run stops only when every role failed.
+A role that times out (after a fixed 300-second bound) or fails is reported in the result
+and the run continues, because a partial ensemble still beats a single agent. The run
+stops only when every role failed.
 
 Two costs are worth separating. Admission is two cents, charged once, after the CLI has
 confirmed your input, the SDK, and the host — so a missing Codex never costs you anything.
-The larger cost is your own provider usage: the SDK opens a fresh Codex app-server per turn
+The grant is then verified through the layered runtime gate before any agent starts; a
+rejected grant fails the run without starting a single fork. The larger cost is your own
+provider usage: the SDK opens a fresh Codex app-server per turn
 and per fork, so a three-role run is roughly a dozen of them against your subscription, and
 `--roles 100` is a thousand approaches for the selector to read. Raise it deliberately.
 
