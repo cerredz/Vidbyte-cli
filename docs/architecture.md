@@ -74,10 +74,19 @@ src/vidbyte_cli/types/             wire models mirroring backend DTOs
 
 The `runtime` command family is intentionally independent from hosted research. Host
 discovery identifies an installed Codex, Claude Code, or OpenCode executable; launch
-planning validates safe local prerequisites; and `RuntimeExecutor` is the only place a
-future algorithm may request paid admission and spawn the native-agent topology. This
-explicitly requested scaffold is the narrow exception to rule 6: its executor always raises
-before payment or process launch, and the exception should disappear with the first runtime.
+planning validates safe local prerequisites. The persistence command buys and verifies
+one admission before `RuntimeExecutor` permits any SDK turn. `adversarial-team` remains
+an explicitly requested scaffold that stops before payment or execution.
+`adversarial-team` and `persistence` share the executor boundary;
+`RuntimeLaunchPlan.capability_id` and
+`RuntimeLaunchPlanner.build()` carry an explicit capability id per primitive so a third can
+reuse the same host-discovery and launch-planning machinery without duplicating it. The
+`persistence` command additionally resolves a caller-facing `--strength` tier (1-6) into a
+fixed `PersistenceSettings.repeat_count`. It sends the exact task through the SDK's
+`CodexHarnessAgent`, then requests 6–100 continuation turns on the same thread.
+Shared enum constants live in `lib/constants/`; deterministic gate checks return a
+frozen dataclass containing an admission-reason enum. Progress uses stderr and only
+the final response is rendered to stdout.
 
 ## Output and failure contracts
 

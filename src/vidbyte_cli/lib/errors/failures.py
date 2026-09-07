@@ -14,6 +14,26 @@ from .cli_error import CliError
 from .codes import CliErrorCode, ExitCode
 
 
+class PersistenceHostFailed(CliError):
+    """The local Codex process did not complete a valid turn."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can contain secrets or task text, so this message is static.
+        super().__init__(
+            "Codex did not complete the persistence turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete or mismatched conversation. "
+                "Continuation stopped immediately. The admission may already have been charged "
+                "and completed local work remains in the working directory."
+            ),
+            trace="PersistentCodexSession checked the SDK turn status and conversation identity.",
+            hint="Inspect local Codex session history and configuration before retrying.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 
@@ -247,6 +267,31 @@ class RuntimeExecutionNotImplemented(CliError):
             trace=(
                 "AdversarialTeamCommand built a RuntimeLaunchPlan and reached the "
                 "intentionally inert RuntimeExecutor."
+            ),
+            hint="Use 'vidbyte-cli runtime list' for published capability metadata.",
+        )
+
+
+class PersistenceExecutionNotImplemented(CliError):
+    """The command scaffold reached the deliberately absent persistence executor."""
+
+    code = CliErrorCode.NOT_IMPLEMENTED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Makes the no-charge boundary explicit for human and agent callers.
+        super().__init__(
+            "The persistence runtime executor is not implemented yet.",
+            description=(
+                "The CLI validated the task, working directory, native host, and strength "
+                "tier, but this release contains only the runtime platform scaffold. It "
+                "stopped before requesting a paid Vidbyte admission and before launching any "
+                "local agent, so no credits were spent and no machine state changed. Retrying "
+                "cannot proceed until the executor ships."
+            ),
+            trace=(
+                "PersistenceCommand built a RuntimeLaunchPlan and PersistenceSettings, then "
+                "reached the intentionally inert RuntimeExecutor."
             ),
             hint="Use 'vidbyte-cli runtime list' for published capability metadata.",
         )

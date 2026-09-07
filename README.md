@@ -1,18 +1,16 @@
 # Vidbyte CLI
 
-Vidbyte runtime primitives are designed to execute through the user's installed coding
-agent, preserving its repository, tools, skills, permissions, and model subscription. The
-current runtime scaffold performs discovery and validation only; it does not charge or
-launch sub-agents yet.
+Vidbyte persistence runs one session through the installed Codex CLI, using an OpenAI
+BYOK key and the current working directory. It verifies a two-cent Vidbyte admission
+before starting the agent. Other runtime executors remain scaffolds.
 
 The Vidbyte CLI: authenticate, run Vidbyte research threads, and manage configuration.
 Research executes entirely on the Vidbyte backend — this CLI admits runs, reads their durable
 status, and lists the threads you own.
 
-> **Status:** every command listed below works against the live API today. The CLI ships a
-> command only once the backend route behind it is live, so nothing here can answer "not
-> implemented yet". Deep dives, artifact bodies, sources, and exports live on the website
-> only; they have no API-key route, so they have no command.
+> **Status:** persistence requires a backend deployment with persistence activation and
+> grant verification. Adversarial-team still has no executor. Deep dives, artifact bodies,
+> sources, and exports remain website-only.
 
 ## Install (development)
 
@@ -61,6 +59,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime list` | List local runtime primitives and admission prices |
 | `vidbyte-cli runtime doctor` | Detect supported native coding-agent hosts |
 | `vidbyte-cli runtime adversarial-team <task>` | Validate the first local primitive launch (executor not yet implemented) |
+| `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Run one Codex session with 6–100 additional improvement turns |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 
@@ -79,6 +78,44 @@ Starting, adding, and resuming are priced and idempotent. Each sends a generated
 whose outcome you did not see without paying for it twice. `research watch` polls every ten
 seconds and backs off from there: API keys are metered on a weighted per-minute budget, and
 polling harder can exhaust the budget you need to start the next run.
+
+### Persistent Codex agent
+
+```bash
+vidbyte-cli login
+vidbyte-cli provider login openai
+vidbyte-cli runtime persistence "Your exact task" --strength 1
+```
+
+Install Codex on PATH first. Persistence uses the Vidbyte SDK's `CodexHarnessAgent`;
+installation pins the SDK source revision with the required Codex integration and
+requires Git to fetch it. OpenAI credentials resolve from `OPENAI_API_KEY`, then the
+selected profile's keyring or approved file fallback. They are passed only to the Codex
+child, using its Responses API provider configuration; native Codex login is unchanged.
+The configured Codex model must be available to that OpenAI API key.
+
+Strength tiers 1–6 send **6, 8, 20, 40, 70, 100 additional turns**, after the exact original
+task. Every follow-up includes encouragement and the exact original task. All turns resume
+the same explicit session ID. `--host auto` selects Codex; other hosts are unsupported.
+Codex runs with workspace-write sandboxing, without a sandbox bypass.
+
+Each invocation costs two cents from the Vidbyte API wallet, plus your OpenAI usage.
+Grant verification is authenticated and checks signature, caller identity, request binding,
+capability, price and expiry. No signing secret is distributed to the CLI. Task text and
+provider credentials never enter Vidbyte admission requests.
+
+Use a caller-chosen `--idempotency-key` (8–128 allowed characters) to recover an uncertain
+admission request without another debit. Reusing it does not resume local work: a new CLI
+invocation starts a new Codex session, so do not rerun a completed task with a recovery key.
+Ctrl+C cancels the active SDK turn and closes its Codex connection.
+A failed or hour-long turn stops the loop;
+completed local work remains, and the flat admission fee is not automatically refunded.
+This is a foreground loop, not a daemon that survives terminal closure.
+
+Only the final response is written to stdout; progress goes to stderr. Updates explain
+preparation, admission, the initial task, and subsequent improvement phases without
+displaying loop indices. JSON output includes
+`session_id`, `continuation_turns`, and `text` in the standard result envelope.
 
 ## Configuration
 
@@ -103,15 +140,15 @@ leaves the originals in place.
 
 ## Architecture
 
-Local runtimes are separate from hosted harnesses. Vidbyte authenticates a launch and will
-charge a flat admission fee from the API-key wallet, while Codex, Claude Code, or OpenCode
-executes locally using the user's own account. x402 funds that wallet through the backend's
+Local runtimes are separate from hosted harnesses. Vidbyte authenticates a launch and
+charges a flat admission fee from the API-key wallet, while persistence executes in Codex
+using the caller's OpenAI API key. x402 funds that wallet through the backend's
 `POST /agent/topup` route; machine environment and repository contents are never uploaded
 for admission.
 
 Every command is static and known at release time. Runtime discovery adds one authenticated
-catalog route, while the paid admission operation is typed but deliberately unreachable from
-this scaffold. See
+catalog route. Persistence calls activation and authenticated grant verification before
+launching Codex. See
 [docs/architecture.md](docs/architecture.md) for the layering rules and the full
 [backend contract](docs/architecture.md#backend-contract).
 
