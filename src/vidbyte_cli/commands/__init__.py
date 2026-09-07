@@ -28,6 +28,7 @@ from .research.threads import ResearchThreadsCommand
 from .research.watch import ResearchWatchCommand
 from .runtime import (
     AdversarialTeamCommand,
+    PersistenceCommand,
     RuntimeDoctorCommand,
     RuntimeListCommand,
     SameHostEnsembleCommand,
@@ -57,6 +58,7 @@ def register_all_commands(program: click.Group) -> None:
     RuntimeListCommand().register(runtime)
     RuntimeDoctorCommand().register(runtime)
     AdversarialTeamCommand().register(runtime)
+    PersistenceCommand().register(runtime)
     SameHostEnsembleCommand().register(runtime)
     program.add_command(runtime)
 

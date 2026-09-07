@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import venv
+import zipfile
 from pathlib import Path
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +51,11 @@ class CiRunner:
             ("login key verification", (python, "scripts/test_login_key_verification.py")),
             # Offline: inspects the command tree and runs help/usage paths only.
             ("research-only surface", (python, "scripts/test_research_only_surface.py")),
+            (
+                "runtime admission and persistence",
+                (python, "scripts/test-layered-runtime-admission-gate.py"),
+            ),
+            ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):
@@ -89,6 +95,12 @@ class CiRunner:
         if len(wheels) != 1:
             sys.stderr.write(f"Expected one wheel, found {len(wheels)}.\n")
             return 1
+        with zipfile.ZipFile(wheels[0]) as archive:
+            for name in ("continuation.md", "persistence_system.md"):
+                prompt = f"vidbyte_cli/lib/runtime_primitives/{name}"
+                if prompt not in archive.namelist() or not archive.read(prompt):
+                    sys.stderr.write(f"The wheel is missing the persistence prompt {name}.\n")
+                    return 1
         environment = workspace / "installed"
         venv.EnvBuilder(with_pip=True).create(environment)
         python, console = self._environment_executables(environment)
@@ -96,6 +108,15 @@ class CiRunner:
             ("clean wheel install", (str(python), "-m", "pip", "install", str(wheels[0]))),
             ("installed module smoke", (str(python), "-m", "vidbyte_cli", "--version")),
             ("installed console smoke", (str(console), "--help")),
+            (
+                "installed SDK import",
+                (
+                    str(python),
+                    "-c",
+                    "from vidbyte.agents.codex import CodexHarnessAgent; "
+                    "from openai_codex import AsyncCodex; assert CodexHarnessAgent and AsyncCodex",
+                ),
+            ),
         )
         for label, arguments in gates:
             if status := self._run(label, arguments, cwd=workspace):

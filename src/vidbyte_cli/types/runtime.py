@@ -6,12 +6,16 @@ extra-forbid models make contract drift fail before a paid execution can begin.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ..lib.constants.runtime import AdmissionReason
 
 
 class RuntimeHost(StrEnum):
@@ -71,22 +75,64 @@ class RuntimeHostStatus(BaseModel):
     executable: str | None = None
 
 
-class RuntimeCapabilityId(StrEnum):
-    """Every local runtime primitive this CLI can build a launch plan for."""
-
-    ADVERSARIAL_TEAM = "runtime.review.adversarial-team@1"
-    SAME_HOST_ENSEMBLE = "runtime.same-host-ensemble@1"
-
-
 class RuntimeLaunchPlan(BaseModel):
     """Local-only handoff a future executor will turn into an agent topology."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid", frozen=True)
-    capability_id: RuntimeCapabilityId = RuntimeCapabilityId.ADVERSARIAL_TEAM
+    capability_id: Literal[
+        "runtime.review.adversarial-team@1",
+        "runtime.adversarial-team@1",
+        "runtime.same-host-ensemble@1",
+        "runtime.persistence@1",
+    ] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
+
+
+class PersistenceStrength(IntEnum):
+    """The six caller-facing persistence tiers, from lightest to most insistent."""
+
+    TIER_1 = 1
+    TIER_2 = 2
+    TIER_3 = 3
+    TIER_4 = 4
+    TIER_5 = 5
+    TIER_6 = 6
+
+
+_PERSISTENCE_REPEAT_COUNTS: Mapping[PersistenceStrength, int] = {
+    PersistenceStrength.TIER_1: 6,
+    PersistenceStrength.TIER_2: 8,
+    PersistenceStrength.TIER_3: 20,
+    PersistenceStrength.TIER_4: 40,
+    PersistenceStrength.TIER_5: 70,
+    PersistenceStrength.TIER_6: 100,
+}
+
+
+class PersistenceSettings(BaseModel):
+    """Bounded, frozen persistence-primitive settings for a future executor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    strength: PersistenceStrength
+
+    @property
+    def repeat_count(self) -> int:
+        # Resolves the caller-facing tier to its fixed continuation-turn count.
+        return _PERSISTENCE_REPEAT_COUNTS[self.strength]
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeAdmissionCheck:
+    """One deterministic check with a typed reason instead of string/None sentinels."""
+
+    reason: AdmissionReason
+
+    @property
+    def passed(self) -> bool:
+        return self.reason is AdmissionReason.PASSED
 
 
 class RuntimeAdmissionVerdict(BaseModel):
@@ -97,3 +143,20 @@ class RuntimeAdmissionVerdict(BaseModel):
     admission_id: str = Field(min_length=1, max_length=128)
     capability_id: str = Field(min_length=1, max_length=160)
     reason: str | None = None
+
+
+class RuntimeGrantVerificationRequest(BaseModel):
+    """Proof sent only to the authenticated backend, never to a model."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    grant_token: str = Field(min_length=10, max_length=8192)
+    idempotency_key_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class PersistenceResult(BaseModel):
+    """Final local output with deterministic completed-turn accounting."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    session_id: str
+    continuation_turns: int
+    text: str

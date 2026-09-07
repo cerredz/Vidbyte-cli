@@ -16,6 +16,8 @@ dependencies = [
     "keyring>=25.2,<26",
     "platformdirs>=4.4,<5",
     "pydantic>=2.6,<3",
+    # The published 0.1.0 predates the required Codex facade; use its verified source revision.
+    "vidbyte-sdk[codex] @ git+https://github.com/cerredz/Vidbyte-SDK.git@6f9f84a257036e65bab9595d3c34e8a98cdcd96e",
 ]
 
 [project.optional-dependencies]
@@ -43,10 +45,11 @@ vidbyte-cli = "vidbyte_cli.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# The ensemble's prompts are authored Markdown, not Python, so setuptools would leave them out
-# of the wheel by default and the primitive would fail at its first turn on an installed copy.
+# Authored Markdown is not Python, so setuptools would leave it out of the wheel by default
+# and the primitives that read it would fail at their first turn on an installed copy.
 [tool.setuptools.package-data]
 vidbyte_cli = ["services/ensemble/prompts/*.md"]
+"vidbyte_cli.lib.runtime_primitives" = ["*.md"]
 
 [tool.ruff]
 line-length = 100
@@ -61,6 +64,7 @@ max-complexity = 10
 [tool.mypy]
 python_version = "3.11"
 strict = true
+follow_untyped_imports = true
 packages = ["vidbyte_cli"]
 
 # The SDK's Codex integration is an optional extra that the published release does not ship,

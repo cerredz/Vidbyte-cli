@@ -34,7 +34,6 @@ from ...types.research import IdempotencyKey
 from ...types.runtime import (
     RuntimeAdmissionGrant,
     RuntimeAdmissionRequest,
-    RuntimeCapabilityId,
     RuntimeHost,
     RuntimeLaunchPlan,
 )
@@ -136,10 +135,10 @@ class SameHostEnsembleCommand:
         # layered gate verifies the grant before any agent is allowed to start.
         key = str(IdempotencyKey.create(explicit_key))
         plan = context.runtime_launch_planner().build(
-            RuntimeCapabilityId.SAME_HOST_ENSEMBLE,
             inputs.task,
             RuntimeHost(inputs.host.value),
             Path.cwd(),
+            "runtime.same-host-ensemble@1",
         )
         if plan.host is not RuntimeHost.CODEX:
             raise EnsembleHostUnsupported(plan.host.value)

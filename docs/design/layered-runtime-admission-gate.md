@@ -1,6 +1,6 @@
 # Design Doc: Layered Runtime Admission Gate (CLI)
 
-**Status:** Draft
+**Status:** Historical design; current mandatory online verification is documented in [Persistent Codex execution](persistence-agent-execution.md)
 **Author:** Codex
 **Created:** 2026-09-06
 **Last Updated:** 2026-09-06
@@ -107,12 +107,26 @@ Encodes the three-layer deterministic check as composable, testable methods so e
 
 ```python
 class RuntimeAdmissionGate:
-    def verify(self, plan: RuntimeLaunchPlan, grant: RuntimeAdmissionGrant, now: datetime, verification_key: str, allow_list: tuple[str,...]) -> RuntimeAdmissionVerdict: ...
-    def verify_layer1_typed_grant(self, plan: RuntimeLaunchPlan, grant: RuntimeAdmissionGrant, allow_list: tuple[str,...]) -> Layer1Verdict: ...
-    def verify_layer2_signature(self, grant: RuntimeAdmissionGrant, now: datetime, verification_key: str) -> Layer2Verdict: ...
-    def verify_layer3_online(self, grant: RuntimeAdmissionGrant) -> Layer3Verdict: ... # no-op when offline flag is off
+    def verify(
+        self,
+        plan: RuntimeLaunchPlan,
+        grant: RuntimeAdmissionGrant,
+        now: datetime,
+        verification_key: str,
+        allow_list: tuple[str, ...],
+    ) -> RuntimeAdmissionVerdict: ...
+    def verify_layer1_typed_grant(
+        self, plan: RuntimeLaunchPlan, grant: RuntimeAdmissionGrant, allow_list: tuple[str, ...]
+    ) -> Layer1Verdict: ...
+    def verify_layer2_signature(
+        self, grant: RuntimeAdmissionGrant, now: datetime, verification_key: str
+    ) -> Layer2Verdict: ...
+    def verify_layer3_online(
+        self, grant: RuntimeAdmissionGrant
+    ) -> Layer3Verdict: ...  # no-op when offline flag is off
 
-class RuntimeAdmissionVerdict(BaseModel): # frozen, extra="forbid"
+
+class RuntimeAdmissionVerdict(BaseModel):  # frozen, extra="forbid"
     admitted: bool
     admission_id: str
     capability_id: str
@@ -144,7 +158,9 @@ Makes payment proof a required argument to execution.
 
 ```python
 class RuntimeExecutor:
-    def execute_adversarial_team(self, plan: RuntimeLaunchPlan, verdict: RuntimeAdmissionVerdict) -> str: ...
+    def execute_adversarial_team(
+        self, plan: RuntimeLaunchPlan, verdict: RuntimeAdmissionVerdict
+    ) -> str: ...
 ```
 
 #### Logic / Algorithm
