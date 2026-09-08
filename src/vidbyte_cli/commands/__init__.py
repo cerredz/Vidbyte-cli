@@ -32,8 +32,8 @@ from .runtime import (
     RuntimeDoctorCommand,
     RuntimeListCommand,
     SameHostEnsembleCommand,
-    TaskBoardCommand,
     StagesCommand,
+    TaskBoardCommand,
 )
 from .setup.doctor import DoctorCommand
 

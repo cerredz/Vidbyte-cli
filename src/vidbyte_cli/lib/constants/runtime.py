@@ -116,6 +116,8 @@ class RuntimePaymentConfig:
     MAX_AUTHORIZATION_SECONDS = 3600
     MICROUNITS_PER_CENT = 10000
     PERSISTENCE_CENTS = 2
+
+
 class StagesLimit(IntEnum):
     """Execution bounds for the stages primitive."""
 
