@@ -57,6 +57,7 @@ class CiRunner:
                 "runtime admission and persistence",
                 (python, "scripts/test-layered-runtime-admission-gate.py"),
             ),
+            ("runtime payment methods", (python, "scripts/test-runtime-payment-methods.py")),
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
             # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
             ("task board", (python, "scripts/test-task-board.py")),
