@@ -116,3 +116,21 @@ class RuntimePaymentConfig:
     MAX_AUTHORIZATION_SECONDS = 3600
     MICROUNITS_PER_CENT = 10000
     PERSISTENCE_CENTS = 2
+class StagesLimit(IntEnum):
+    """Execution bounds for the stages primitive."""
+
+    MAX_STAGES = 10
+    TURN_TIMEOUT_SECONDS = 3600
+
+
+class StagesProgress(StrEnum):
+    """Product-facing milestones for staged local execution."""
+
+    PREPARING = "Preparing your task and checking that Codex can run in this working directory."
+    CREDENTIALS = "Loading your OpenAI credentials to run the stages with your own API account."
+    ADMISSION = "Requesting the one-cent Vidbyte admission for this stages run."
+    VERIFYING = "Verifying your admission receipt before starting the first stage."
+    ADMITTED = "Your admission is verified. Preparing a fresh Codex agent per stage."
+    STAGE_STARTING = "Starting the next stage with its own Codex agent."
+    STAGE_COMPLETE = "A stage returned its response. Continuing with the next stage."
+    COMPLETE = "Codex has completed every requested stage. Returning the final response."

@@ -9,6 +9,7 @@ from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
 from .task_board import TaskBoardCodexSession, TaskBoardSummarizer
+from .stages import StagesCodexSession, StagesFile
 from .verification import RuntimeGrantVerifier
 
 __all__ = [
@@ -19,4 +20,6 @@ __all__ = [
     "RuntimeLaunchPlanner",
     "TaskBoardCodexSession",
     "TaskBoardSummarizer",
+    "StagesCodexSession",
+    "StagesFile",
 ]

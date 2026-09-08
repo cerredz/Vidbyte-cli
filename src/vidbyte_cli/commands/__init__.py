@@ -33,6 +33,7 @@ from .runtime import (
     RuntimeListCommand,
     SameHostEnsembleCommand,
     TaskBoardCommand,
+    StagesCommand,
 )
 from .setup.doctor import DoctorCommand
 
@@ -62,6 +63,7 @@ def register_all_commands(program: click.Group) -> None:
     PersistenceCommand().register(runtime)
     SameHostEnsembleCommand().register(runtime)
     TaskBoardCommand().register(runtime)
+    StagesCommand().register(runtime)
     program.add_command(runtime)
 
     config = click.Group(name="config", help="Manage CLI configuration")
