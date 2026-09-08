@@ -17,6 +17,7 @@ _ALLOWED_PRICES = {
     "runtime.adversarial-team@1": 25,
     "runtime.same-host-ensemble@1": 2,
     "runtime.persistence@1": 2,
+    "runtime.task-board@1": 2,
 }
 _MAX_TTL_SECONDS = 3600
 Key = str | None

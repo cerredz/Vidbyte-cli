@@ -49,6 +49,7 @@ where = ["src"]
 # and the primitives that read it would fail at their first turn on an installed copy.
 [tool.setuptools.package-data]
 vidbyte_cli = ["services/ensemble/prompts/*.md", "services/persistence/prompts/*.md"]
+"vidbyte_cli.lib.runtime_primitives" = ["*.md"]
 
 [tool.ruff]
 line-length = 100

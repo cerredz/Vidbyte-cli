@@ -34,6 +34,70 @@ class PersistenceHostFailed(CliError):
         )
 
 
+class TaskBoardHostFailed(CliError):
+    """The local Codex process did not complete a valid board task turn."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can contain secrets or task text, so this message is static.
+        super().__init__(
+            "Codex did not complete the task-board turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete board task turn. "
+                "The board stopped or marked the task failed per its stop-on-error policy. "
+                "The admission may already have been charged and completed local work remains."
+            ),
+            trace="TaskBoardCodexSession checked the SDK turn status and thread identity.",
+            hint="Inspect local Codex session history and configuration before retrying.",
+        )
+
+
+class TaskBoardInputInvalid(CliError):
+    """The board was given neither exactly one task source nor a usable one."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the accepted shapes, never the submitted task text or file contents.
+        super().__init__(
+            "Supply either literal task arguments or one or more --task-file paths, not both.",
+            description=(
+                "A task board is built from exactly one kind of source: literal task strings "
+                "passed as arguments, or Markdown files where each whole file is one task. "
+                "Mixing the two, or supplying neither, leaves the board's order ambiguous, so "
+                "the invocation was rejected before credentials, payment, or host execution. "
+                "Re-run with only positional tasks, or only repeated --task-file paths."
+            ),
+            trace="TaskBoardCommand resolved the board source before building a launch plan.",
+            hint="Repeat --task-file once per task file; each file is one whole task.",
+        )
+
+
+class TaskBoardTaskFileInvalid(CliError):
+    """One supplied task file is not a readable, non-empty Markdown file."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # File contents are task text, so neither the path nor the body is echoed here.
+        super().__init__(
+            "Every --task-file must be a readable, non-empty .md file.",
+            description=(
+                "A task file carries one whole task, so it has to be a Markdown file with "
+                "content: a non-.md suffix, an unreadable file, or a file that is empty after "
+                "trimming cannot become a board entry. The board was rejected before "
+                "credentials, payment, or host execution, and no file path or body is repeated "
+                "in this error. Check the suffix and contents of each --task-file and retry."
+            ),
+            trace="TaskBoardCommand read each task file while resolving the board source.",
+            hint="One task per .md file; use positional arguments for short literal tasks.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 

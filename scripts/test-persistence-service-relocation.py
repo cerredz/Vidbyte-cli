@@ -91,12 +91,14 @@ class RelocationContracts(unittest.TestCase):
         with self.assertRaises(ModuleNotFoundError):
             importlib.import_module(_MOVED_MODULE)
 
-    def test_no_markdown_remains_in_the_old_package(self) -> None:
+    def test_no_persistence_markdown_remains_in_the_old_package(self) -> None:
         # An orphaned prompt still ships and still reads, so the file has to be gone.
-        self.assertEqual(list(_OLD_PACKAGE.glob("*.md")), [])
+        # `task_board_system.md` belongs to a primitive that has not moved, so it stays.
+        orphans = {path.name for path in _OLD_PACKAGE.glob("*.md")} - {"task_board_system.md"}
+        self.assertEqual(orphans, set())
 
     def test_shared_primitives_stayed_in_lib(self) -> None:
-        # The split is the point: these five are shared and must not have travelled.
+        # The split is the point: these are shared, or not yet moved, and must not travel.
         names = {path.name for path in _python_files(_OLD_PACKAGE)}
         self.assertEqual(
             names,
@@ -106,6 +108,7 @@ class RelocationContracts(unittest.TestCase):
                 "gate.py",
                 "hosts.py",
                 "planner.py",
+                "task_board.py",
                 "verification.py",
             },
         )
@@ -246,9 +249,12 @@ class PackagingContracts(unittest.TestCase):
         # Without this the wheel ships no prompt and fails on its first paid turn.
         self.assertIn("services/persistence/prompts/*.md", self.package_data["vidbyte_cli"])
 
-    def test_stale_key_is_removed(self) -> None:
-        # The old package still exists, so a stale key would never fail the build.
-        self.assertNotIn("vidbyte_cli.lib.runtime_primitives", self.package_data)
+    def test_the_old_key_no_longer_covers_a_persistence_prompt(self) -> None:
+        # The old package still exists, so a stale key would never fail the build. It is kept
+        # only for `task_board_system.md`; a persistence prompt reappearing under it is the bug.
+        covered = {path.name for path in _OLD_PACKAGE.glob("*.md")}
+        self.assertEqual(self.package_data["vidbyte_cli.lib.runtime_primitives"], ["*.md"])
+        self.assertEqual(covered, {"task_board_system.md"})
 
     def test_every_prompt_file_is_covered_by_the_glob(self) -> None:
         # A prompt added later under a name the glob misses would be dropped silently.
@@ -260,9 +266,9 @@ class PackagingContracts(unittest.TestCase):
     def test_run_ci_asserts_the_new_wheel_paths(self) -> None:
         # The gate must look where the prompts now are, or it proves nothing.
         gate = (_ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
-        self.assertIn("vidbyte_cli/services/persistence/prompts/{name}", gate)
-        self.assertIn('("persistence_system.md", "persistence_turn.md")', gate)
-        self.assertNotIn("vidbyte_cli/lib/runtime_primitives/{name}", gate)
+        for name in ("persistence_system.md", "persistence_turn.md"):
+            self.assertIn(f'"vidbyte_cli/services/persistence/prompts/{name}"', gate)
+        self.assertNotIn("vidbyte_cli/lib/runtime_primitives/persistence", gate)
 
 
 class RunnerContracts(unittest.TestCase):

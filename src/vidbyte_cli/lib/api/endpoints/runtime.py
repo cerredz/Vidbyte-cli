@@ -25,6 +25,7 @@ ADVERSARIAL_TEAM_ADMISSION_PATH = "/api/x402/runtime/adversarial-team/admissions
 # names these routes "activate" rather than "admissions".
 SAME_HOST_ENSEMBLE_ADMISSION_PATH = "/api/x402/runtime/same-host-ensemble/activate"
 PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/activate"
+TASK_BOARD_ADMISSION_PATH = "/api/x402/runtime/task-board/activate"
 
 
 class RuntimeEndpoints:
@@ -70,6 +71,16 @@ class RuntimeEndpoints:
         # Purchases one replay-safe local execution admission.
         return self._client.post(
             PERSISTENCE_ADMISSION_PATH,
+            request,
+            AdmissionGrant,
+            shape=ResponseShape.DIRECT,
+            idempotency_key=key,
+        )
+
+    def admit_task_board(self, request: AdmissionRequest, key: str) -> AdmissionGrant:
+        # Purchases one replay-safe local task-board admission.
+        return self._client.post(
+            TASK_BOARD_ADMISSION_PATH,
             request,
             AdmissionGrant,
             shape=ResponseShape.DIRECT,

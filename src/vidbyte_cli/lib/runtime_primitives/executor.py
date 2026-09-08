@@ -1,10 +1,10 @@
 """Execution boundary for admitted local runtime primitives, and the one verdict policy.
 
-Adversarial-team retains its explicit scaffold; every process-launching path requires a
-matching deterministic admission verdict, which `require_verdict` is the single source of.
-`persistence` and `same-host-ensemble` are deliberately absent: they run in
-`services/persistence/` and `services/ensemble/`, because a service may depend on `lib/`
-while nothing in `lib/` may depend on a service.
+Task-board has an implementation; adversarial-team retains its explicit scaffold. Every
+process-launching path requires a matching deterministic admission verdict, which
+`require_verdict` is the single source of. `persistence` and `same-host-ensemble` are
+deliberately absent: they run in `services/persistence/` and `services/ensemble/`, because
+a service may depend on `lib/` while nothing in `lib/` may depend on a service.
 """
 
 from __future__ import annotations
@@ -13,7 +13,10 @@ from typing import NoReturn
 
 from ...types.runtime import RuntimeAdmissionVerdict as Verdict
 from ...types.runtime import RuntimeLaunchPlan as Plan
+from ...types.runtime import TaskBoardResult as BoardResult
+from ...types.runtime import TaskBoardSettings as BoardSettings
 from ..errors.failures import RuntimeAdmissionNotVerified, RuntimeExecutionNotImplemented
+from .task_board import TaskBoardCodexSession as BoardSession
 
 
 class RuntimeExecutor:
@@ -23,6 +26,15 @@ class RuntimeExecutor:
         # Keeps the existing primitive inert after validating its admission.
         self.require_verdict(plan, verdict)
         raise RuntimeExecutionNotImplemented()
+
+    def execute_task_board(
+        self, plan: Plan, settings: BoardSettings, host: BoardSession, proof: Verdict
+    ) -> BoardResult:
+        # Runs the ordered board only after its exact admission is verified.
+        self.require_verdict(plan, proof)
+        if plan.capability_id != "runtime.task-board@1" or plan.host.value != "codex":
+            raise RuntimeAdmissionNotVerified("task_board_plan_invalid")
+        return host.run(plan, settings, proof.admission_id)
 
     def require_verdict(self, plan: Plan, verdict: Verdict | None) -> None:
         # Rejects absent, false, mismatched or empty receipts independently of command checks.
