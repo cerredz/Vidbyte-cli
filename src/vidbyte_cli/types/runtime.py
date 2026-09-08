@@ -53,6 +53,12 @@ class RuntimeAdmissionRequest(BaseModel):
     host: RuntimeHost
 
 
+class RuntimeX402AdmissionRequest(RuntimeAdmissionRequest):
+    """Explicit payment opt-in; ordinary wallet requests retain their original wire shape."""
+
+    with_x402_payment: Literal[True] = True
+
+
 class RuntimeAdmissionGrant(BaseModel):
     """Receipt returned after the backend durably charges admission."""
 

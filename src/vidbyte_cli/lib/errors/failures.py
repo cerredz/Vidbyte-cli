@@ -236,7 +236,8 @@ class RuntimeAdmissionNotVerified(CliError):
             "Runtime admission is not verified.",
             description=(
                 "The layered runtime gate validates a typed grant, a signed grant_token, and its "
-                f"expiry before any local agent is spawned.{detail} No agent ran and no additional "
+                f"expiry and database payment evidence before any local agent is spawned.{detail} "
+                "No agent ran and no additional "
                 "credits beyond the admission attempt were spent. Provide a valid grant for the "
                 "requested capability or retry admission with the same idempotency key if the "
                 "previous attempt succeeded."
@@ -1649,4 +1650,24 @@ class ResearchWatchTimedOut(CliError):
                 "--timeout bound without observing a terminal status."
             ),
             hint=f"Run 'vidbyte-cli research status {run_id}' to check on it.",
+        )
+
+
+class RuntimePaymentFailed(CliError):
+    """Explicit x402 admission could not be safely authorized or completed."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, reason: str) -> None:
+        # Exposes only a fixed reason category, never payer credentials or response bodies.
+        super().__init__(
+            "Runtime x402 payment could not be completed.",
+            description=(
+                "Set VIDBYTE_X402_PRIVATE_KEY and the supported VIDBYTE_X402_NETWORK for "
+                "explicit x402 payment. No local agent was launched. If payment was already "
+                "attempted, recover with the same idempotency key; do not authorize a new "
+                f"purchase to resolve an uncertain outcome. Reason: {reason}."
+            ),
+            trace="Runtime payment validation failed before the database-verified launch gate.",
         )

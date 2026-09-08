@@ -47,7 +47,8 @@ class PersistenceProgress(StrEnum):
     PREPARING = "Preparing your task and checking that Codex can run in this working directory."
     CREDENTIALS = "Loading your OpenAI credentials to run the task with your own API account."
     ADMISSION = "Requesting the two-cent Vidbyte admission for this persistence session."
-    VERIFYING = "Verifying your admission receipt before starting work on your task."
+    X402_ADMISSION = "Paying the two-cent admission through x402."
+    VERIFYING = "Verifying your admission payment in Vidbyte before starting work on your task."
     ADMITTED = "Your admission is verified. Preparing Codex to work on your task."
     STARTING = "Starting your original task in Codex, with your request preserved exactly."
     INITIAL_COMPLETE = (
@@ -63,3 +64,16 @@ class PersistenceProgress(StrEnum):
     LATE = "Giving Codex more time to refine its work while keeping your original request in view."
     FINAL = "Requesting the final improvement pass before returning the result to you."
     COMPLETE = "Codex has completed the requested persistence passes. Returning its final response."
+
+
+class RuntimePaymentConfig:
+    """Reviewed EVM payment bounds; cents remain separate from provider token usage."""
+
+    PRIVATE_KEY_ENV = "VIDBYTE_X402_PRIVATE_KEY"
+    NETWORK_ENV = "VIDBYTE_X402_NETWORK"
+    DEFAULT_NETWORK = "eip155:8453"
+    NETWORKS = ("eip155:8453", "eip155:84532")
+    MAX_CHALLENGE_CHARACTERS = 16384
+    MAX_AUTHORIZATION_SECONDS = 3600
+    MICROUNITS_PER_CENT = 10000
+    PERSISTENCE_CENTS = 2

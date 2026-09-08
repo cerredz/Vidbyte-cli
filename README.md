@@ -182,3 +182,24 @@ smoke check. GitHub Actions invokes the same script on Linux, Windows, and macOS
 - The console command is `vidbyte-cli` (not `vidbyte`) to avoid the bin/name collision with
   the `vidbyte-skills` package; confirm before publishing.
 - Confirm the production API host.
+
+
+### Runtime admission payments
+
+`vidbyte-cli runtime persistence "your task"` uses your authenticated Vidbyte API
+balance by default. The flat $0.02 admission is recorded as ordinary API usage.
+Local Codex model usage is still paid through your OpenAI credentials.
+
+To pay the admission directly with x402, set `VIDBYTE_X402_PRIVATE_KEY` in your
+shell and run `vidbyte-cli runtime persistence "your task" --with-x402-payment`.
+A Vidbyte API key with `runtime:write` is required for ownership in both modes.
+`VIDBYTE_X402_NETWORK` defaults to Base (`eip155:8453`); Base Sepolia
+(`eip155:84532`) is supported for testing. Keep private keys out of command arguments.
+The wallet must already hold the network's USDC; the CLI does not fund it.
+
+Both modes verify the signed receipt against Vidbyte's database before launching
+Codex. The API-balance path also verifies the exact usage-ledger debit. Payment
+credentials are not passed to Codex. The CLI never switches payment methods automatically.
+Recover a failed admission with the same `--idempotency-key`; a retry preserves the
+original grant and expiry. An uncertain payment outcome must be reconciled before
+starting another purchase. Verification does not refund a failed local execution.
