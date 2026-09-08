@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..runtime_payment import RuntimePayment as Payer
-
 from ....types.runtime import (
     RuntimeAdmissionGrant as AdmissionGrant,
 )
@@ -24,8 +21,14 @@ from ....types.runtime import (
 from ..client import ApiClient
 from ..response import ResponseDecoder, ResponseShape
 
+if TYPE_CHECKING:
+    from ..runtime_payment import RuntimePayment
+
 RUNTIME_CATALOG_PATH = "/api/x402/runtime"
 ADVERSARIAL_TEAM_ADMISSION_PATH = "/api/x402/runtime/adversarial-team/admissions"
+# Matches the capability declared in the backend x402 catalog (vidbyte PR #508), which
+# names these routes "activate" rather than "admissions".
+SAME_HOST_ENSEMBLE_ADMISSION_PATH = "/api/x402/runtime/same-host-ensemble/activate"
 PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/activate"
 
 
@@ -58,9 +61,23 @@ class RuntimeEndpoints:
             idempotency_key=key,
         )
 
-    def admit_persistence_x402(self, req: AdmissionRequest, key: str, pay: Payer) -> AdmissionGrant:
+    def admit_same_host_ensemble(self, request: AdmissionRequest, key: str) -> AdmissionGrant:
+        # Purchases one replay-safe local execution admission.
+        return self._client.post(
+            SAME_HOST_ENSEMBLE_ADMISSION_PATH,
+            request,
+            AdmissionGrant,
+            shape=ResponseShape.DIRECT,
+            idempotency_key=key,
+        )
+
+    def admit_persistence_x402(
+        self, request: AdmissionRequest, key: str, payer: RuntimePayment
+    ) -> AdmissionGrant:
         # The same receipt goes through database-backed online verification before launch.
-        response = self._client.post_runtime_payment(PERSISTENCE_ADMISSION_PATH, req, key, pay)
+        response = self._client.post_runtime_payment(
+            PERSISTENCE_ADMISSION_PATH, request, key, payer
+        )
         return ResponseDecoder().one(response, AdmissionGrant, ResponseShape.DIRECT)
 
     def admit_persistence(self, request: AdmissionRequest, key: str) -> AdmissionGrant:

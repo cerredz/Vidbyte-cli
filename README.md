@@ -59,6 +59,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime list` | List local runtime primitives and admission prices |
 | `vidbyte-cli runtime doctor` | Detect supported native coding-agent hosts |
 | `vidbyte-cli runtime adversarial-team <task>` | Validate the first local primitive launch (executor not yet implemented) |
+| `vidbyte-cli runtime same-host-ensemble <task>` | Run a role-differentiated agent ensemble on this machine |
 | `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Run one Codex session with 6–100 additional improvement turns |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
@@ -78,6 +79,49 @@ Starting, adding, and resuming are priced and idempotent. Each sends a generated
 whose outcome you did not see without paying for it twice. `research watch` polls every ten
 seconds and backs off from there: API keys are metered on a weighted per-minute budget, and
 polling harder can exhaust the budget you need to start the next run.
+
+### Local runtime primitives
+
+`runtime` commands execute on your machine, driving a native coding agent you already
+installed. Vidbyte charges a small flat admission fee for the orchestration; the model usage
+runs against your own provider subscription, not ours.
+
+Install the extra first — it is not part of the base package:
+
+```bash
+pip install "vidbyte-cli[codex]"
+```
+
+`runtime same-host-ensemble <task>` runs four stages on one machine. A planner agent reads
+your task and generates the ensemble's roles, writing each role's complete system prompt
+rather than picking from a fixed list, so the perspectives match the task. Each role then runs
+concurrently in its own read-only fork and returns 5 to 10 distinct approaches, each with its
+pros, cons, risks, and the files it would touch. A role cannot edit anything — the sandbox
+forbids it, not just the prompt. A selector fork then narrows every approach from every role
+down to one, in rounds: each round keeps a fifth of what it was given, weighs the pros and
+cons of every candidate it keeps, and records why the rest were dropped. Finally one
+write-enabled fork receives the selected approach and the selector's brief, and does the work.
+That last fork is the only agent in the topology permitted to modify your workspace.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--host` | `codex` | Which installed coding agent hosts the ensemble. Codex is the only host with verified thread-fork and per-fork sandbox support, so it is the only accepted value. |
+| `--roles` | `3` | How many specialist roles the planner invents for this task (3-100). More roles widen the approach slate the selector narrows; every role runs concurrently in its own read-only fork against your subscription. |
+| `--model` | provider default | Model override forwarded to every Codex turn and fork in the run. Omit to use the provider default. |
+| `--reasoning-effort` | provider default | Reasoning effort forwarded to every Codex turn in the run (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`). Omit to use the provider default. |
+| `--idempotency-key` | generated | Reuse a key to retry a priced admission without being charged twice. Omit to generate one per invocation. |
+
+A role that times out (after a fixed 300-second bound) or fails is reported in the result
+and the run continues, because a partial ensemble still beats a single agent. The run
+stops only when every role failed.
+
+Two costs are worth separating. Admission is two cents, charged once, after the CLI has
+confirmed your input, the SDK, and the host — so a missing Codex never costs you anything.
+The grant is then verified through the layered runtime gate before any agent starts; a
+rejected grant fails the run without starting a single fork. The larger cost is your own
+provider usage: the SDK opens a fresh Codex app-server per turn
+and per fork, so a three-role run is roughly a dozen of them against your subscription, and
+`--roles 100` is a thousand approaches for the selector to read. Raise it deliberately.
 
 ### Persistent Codex agent
 

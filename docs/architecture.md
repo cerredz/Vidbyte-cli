@@ -74,19 +74,29 @@ src/vidbyte_cli/types/             wire models mirroring backend DTOs
 
 The `runtime` command family is intentionally independent from hosted research. Host
 discovery identifies an installed Codex, Claude Code, or OpenCode executable; launch
-planning validates safe local prerequisites. The persistence command buys and verifies
-one admission before `RuntimeExecutor` permits any SDK turn. `adversarial-team` remains
-an explicitly requested scaffold that stops before payment or execution.
-`adversarial-team` and `persistence` share the executor boundary;
-`RuntimeLaunchPlan.capability_id` and
-`RuntimeLaunchPlanner.build()` carry an explicit capability id per primitive so a third can
-reuse the same host-discovery and launch-planning machinery without duplicating it. The
-`persistence` command additionally resolves a caller-facing `--strength` tier (1-6) into a
-fixed `PersistenceSettings.repeat_count`. It sends the exact task through the SDK's
-`CodexHarnessAgent`, then requests 6–100 continuation turns on the same thread.
-Shared enum constants live in `lib/constants/`; deterministic gate checks return a
-frozen dataclass containing an admission-reason enum. Progress uses stderr and only
-the final response is rendered to stdout.
+planning validates safe local prerequisites; and each primitive decides for itself where
+paid admission sits relative to execution.
+
+`same-host-ensemble` is implemented. It lives in `services/ensemble/` rather than in
+`RuntimeExecutor`, because a service may depend on `lib/` while nothing in `lib/` may depend on
+a service. It runs only on `codex`, the one host with a merged Vidbyte SDK adapter and verified
+native fork and sandbox control, and it resolves that SDK before requesting admission so an
+unmet local dependency costs the caller nothing.
+
+`persistence` is implemented inside `RuntimeExecutor`. The persistence command buys and
+verifies one admission before the executor permits any SDK turn. It resolves a caller-facing
+`--strength` tier (1-6) into a fixed `PersistenceSettings.repeat_count`, sends the exact task
+through the SDK's `CodexHarnessAgent`, then requests 6-100 continuation turns on the same
+thread.
+
+`adversarial-team` is still a scaffold, and it is now the sole exception to rule 6:
+`RuntimeExecutor` always raises before payment or process launch. The exception disappears when
+that primitive is built. `adversarial-team` and `persistence` share the executor boundary;
+`RuntimeLaunchPlan.capability_id` and `RuntimeLaunchPlanner.build()` carry an explicit
+capability id per primitive so a third can reuse the same host-discovery and launch-planning
+machinery without duplicating it. Shared enum constants live in `lib/constants/`; deterministic
+gate checks return a frozen dataclass containing an admission-reason enum. Progress uses stderr
+and only the final response is rendered to stdout.
 
 ## Output and failure contracts
 
