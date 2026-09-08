@@ -41,6 +41,40 @@ class PersistenceCodexConfig(StrEnum):
     WIRE_API = 'model_providers.vidbyte_openai.wire_api="responses"'
 
 
+class TaskBoardLimit(IntEnum):
+    """Execution bounds for one ordered task-board invocation."""
+
+    TURN_TIMEOUT_SECONDS = 3600
+    MAX_TASKS = 500
+    MAX_TASK_CHARS = 4000
+    MAX_WINDOW = 25
+
+
+class TaskBoardCodexConfig(StrEnum):
+    """Child-only provider configuration; no native login state is changed."""
+
+    PROVIDER = 'model_provider="vidbyte_openai"'
+    NAME = 'model_providers.vidbyte_openai.name="OpenAI"'
+    BASE_URL = 'model_providers.vidbyte_openai.base_url="https://api.openai.com/v1"'
+    ENV_KEY = 'model_providers.vidbyte_openai.env_key="OPENAI_API_KEY"'
+    WIRE_API = 'model_providers.vidbyte_openai.wire_api="responses"'
+
+
+class TaskBoardProgress(StrEnum):
+    """Product-facing milestones; task copy describes intent, not observed work."""
+
+    PREPARING = (
+        "Preparing your task board and checking that Codex can run in this working directory."
+    )
+    CREDENTIALS = "Loading your OpenAI credentials to run the board with your own API account."
+    ADMISSION = "Requesting the two-cent Vidbyte admission for this task-board run."
+    VERIFYING = "Verifying your admission receipt before starting work on your board."
+    ADMITTED = "Your admission is verified. Preparing Codex to work through your board."
+    TASK_STARTING = "Working through board tasks in order with Codex."
+    TASK_RETRYING = "Retrying the current board task with the same prior summaries."
+    COMPLETE = "Codex has worked through the requested board tasks. Returning the summaries."
+
+
 class PersistenceProgress(StrEnum):
     """Product-facing milestones; continuation copy describes intent, not observed work."""
 

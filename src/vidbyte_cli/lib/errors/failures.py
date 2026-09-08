@@ -34,6 +34,26 @@ class PersistenceHostFailed(CliError):
         )
 
 
+class TaskBoardHostFailed(CliError):
+    """The local Codex process did not complete a valid board task turn."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can contain secrets or task text, so this message is static.
+        super().__init__(
+            "Codex did not complete the task-board turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete board task turn. "
+                "The board stopped or marked the task failed per its stop-on-error policy. "
+                "The admission may already have been charged and completed local work remains."
+            ),
+            trace="TaskBoardCodexSession checked the SDK turn status and thread identity.",
+            hint="Inspect local Codex session history and configuration before retrying.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 

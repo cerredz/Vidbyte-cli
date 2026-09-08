@@ -19,7 +19,10 @@ from ..errors.failures import (
 from .hosts import RuntimeHostRegistry
 
 Product = Literal[
-    "runtime.review.adversarial-team@1", "runtime.adversarial-team@1", "runtime.persistence@1"
+    "runtime.review.adversarial-team@1",
+    "runtime.adversarial-team@1",
+    "runtime.persistence@1",
+    "runtime.task-board@1",
 ]
 
 
@@ -47,4 +50,26 @@ class RuntimeLaunchPlanner:
             executable=Path(selected.executable),
             working_directory=resolved_directory,
             task=task,
+        )
+
+    def build_task_board(self, tasks: tuple[str, ...], host: Host | None, cwd: Path) -> Plan:
+        # Validates board count and chars, then builds a label-only plan.
+        if not tasks or len(tasks) > 500:
+            raise RuntimeTaskInvalid()
+        for task in tasks:
+            if not task.strip() or len(task) > 4000:
+                raise RuntimeTaskInvalid()
+        resolved_directory = cwd.resolve()
+        if not resolved_directory.is_dir():
+            raise RuntimeWorkingDirectoryInvalid()
+        selected = self._hosts.resolve(host)
+        if selected.executable is None:
+            raise RuntimeHostUnavailable(selected.host.value)
+        label = tasks[0][:200] if len(tasks[0]) > 200 else tasks[0]
+        return Plan(
+            capability_id="runtime.task-board@1",
+            host=selected.host,
+            executable=Path(selected.executable),
+            working_directory=resolved_directory,
+            task=f"Task board with {len(tasks)} tasks starting with: {label}",
         )

@@ -84,11 +84,78 @@ class RuntimeLaunchPlan(BaseModel):
         "runtime.adversarial-team@1",
         "runtime.same-host-ensemble@1",
         "runtime.persistence@1",
+        "runtime.task-board@1",
     ] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
+
+
+class TaskBoardSummaryMode(StrEnum):
+    """How one prior task result is shrunk before the next agent reads it."""
+
+    TRUNCATE_TAIL = "truncate-tail"
+    HEAD_TAIL = "head-tail"
+
+
+class TaskBoardSettings(BaseModel):
+    """Bounded, frozen task-board settings for one admitted local invocation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    tasks: tuple[str, ...] = Field(
+        min_length=1,
+        max_length=500,
+        description=("Ordered board tasks; task N runs in its own agent after tasks 0..N-1."),
+    )
+    window: int = Field(
+        ge=0,
+        le=25,
+        default=10,
+        description=("How many prior summaries the next agent sees; 0 means only its task."),
+    )
+    summary_mode: TaskBoardSummaryMode = Field(
+        default=TaskBoardSummaryMode.TRUNCATE_TAIL,
+        description=("Summary shape per prior result: truncate-tail prefix or head-tail."),
+    )
+    summary_max_chars: int = Field(
+        ge=100,
+        le=8000,
+        default=1200,
+        description=("Max characters kept per prior summary before markers are added."),
+    )
+    stop_on_error: bool = Field(
+        default=True,
+        description=("Stop at the first failed task instead of marking failed and continuing."),
+    )
+    max_retries_per_task: int = Field(
+        ge=0,
+        le=3,
+        default=1,
+        description=("Retries per task before failure; retries reuse the windowed prompt."),
+    )
+
+
+class TaskBoardStepResult(BaseModel):
+    """One task outcome with its bounded summary for downstream agents."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    index: int = Field(ge=0)
+    task: str = Field(min_length=1, max_length=4000)
+    summary: str = Field(min_length=1, max_length=8000)
+    status: Literal["completed", "failed"]
+    thread_id: str = Field(min_length=1, max_length=128)
+
+
+class TaskBoardResult(BaseModel):
+    """Final local output with per-task summaries in board order."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    admission_id: str = Field(min_length=1, max_length=128)
+    completed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    steps: tuple[TaskBoardStepResult, ...]
+    text: str
 
 
 class PersistenceStrength(IntEnum):
