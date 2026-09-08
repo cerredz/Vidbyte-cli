@@ -25,7 +25,8 @@ src/vidbyte_cli/lib/auth/          scoped env/keyring/restricted-file credential
 src/vidbyte_cli/lib/config/        typed profiles, provenance, native paths, safe migration
 src/vidbyte_cli/lib/output/        versioned documents + the invocation's output manager
 src/vidbyte_cli/lib/errors/        stable codes, CliError metadata, one central handler
-src/vidbyte_cli/lib/runtime_primitives/ local host discovery, planning, executor seam
+src/vidbyte_cli/lib/runtime_primitives/ shared host discovery, planning, admission gate
+src/vidbyte_cli/services/<name>/   one primitive's algorithm: runner, session, prompts
 src/vidbyte_cli/types/             wire models mirroring backend DTOs
 ```
 

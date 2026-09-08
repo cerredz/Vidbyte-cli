@@ -14,7 +14,8 @@ from ...lib.errors.failures import RuntimeAdmissionNotVerified
 from ...lib.output import OutputDocument
 from ...lib.runtime.context import ApplicationContext as Context
 from ...lib.runtime_primitives.gate import RuntimeAdmissionGate
-from ...lib.runtime_primitives.persistence import PersistentCodexSession
+from ...services.persistence.runner import PersistenceRunner
+from ...services.persistence.session import PersistentCodexSession
 from ...types.provider import PROVIDER_ENV_VARS, Provider
 from ...types.runtime import (
     PersistenceSettings,
@@ -23,6 +24,19 @@ from ...types.runtime import (
     RuntimeGrantVerificationRequest,
     RuntimeHost,
     RuntimeX402AdmissionRequest,
+)
+
+_WITH_X402_PAYMENT_HELP = (
+    "Pay the two-cent admission charge with an x402 on-chain transfer instead of debiting "
+    "your Vidbyte API balance. The default is the API-balance path, because it needs no "
+    "wallet and additionally verifies the exact usage-ledger debit before Codex starts. "
+    "Pass this flag when the account holding the work has no Vidbyte balance, or when you "
+    "would rather settle admission from a funded wallet. It requires "
+    "VIDBYTE_X402_PRIVATE_KEY in the environment and a wallet already holding USDC on "
+    "VIDBYTE_X402_NETWORK, which defaults to Base; the CLI never funds the wallet and never "
+    "switches payment methods on its own. This changes only how admission is settled: a "
+    "Vidbyte API key with runtime:write still establishes ownership, and every model call "
+    "is still billed to your own OpenAI credentials."
 )
 
 
@@ -43,7 +57,7 @@ class PersistenceCommand:
         @click.option(
             "--with-x402-payment",
             is_flag=True,
-            help="Pay admission with x402 instead of API balance.",
+            help=_WITH_X402_PAYMENT_HELP,
         )
         @click.pass_obj
         def _run(
@@ -104,7 +118,7 @@ class PersistenceCommand:
         if not verdict.admitted:
             raise RuntimeAdmissionNotVerified(verdict.reason)
         progress(Progress.ADMITTED)
-        result = context.runtime_executor().execute_persistence(plan, settings, session, verdict)
+        result = PersistenceRunner().run(plan, settings, session, verdict)
         context.output().result(
             OutputDocument(kind="runtime.persistence", data=result.model_dump(mode="json")),
             result.text,

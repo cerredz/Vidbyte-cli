@@ -1,17 +1,16 @@
-"""Execution boundary for admitted local runtime primitives.
+"""Execution boundary for admitted local runtime primitives, and the one verdict policy.
 
-Persistence, task-board and stages have implementations; adversarial-team retains its
-scaffold. Every process-launching path requires a matching deterministic admission verdict.
-`same-host-ensemble` is deliberately absent: it runs in `services/ensemble/`, because a
-service may depend on `lib/` while nothing in `lib/` may depend on a service.
+Task-board and stages have implementations; adversarial-team retains its explicit scaffold.
+Every process-launching path requires a matching deterministic admission verdict, which
+`require_verdict` is the single source of. `persistence` and `same-host-ensemble` are
+deliberately absent: they run in `services/persistence/` and `services/ensemble/`, because
+a service may depend on `lib/` while nothing in `lib/` may depend on a service.
 """
 
 from __future__ import annotations
 
 from typing import NoReturn
 
-from ...types.runtime import PersistenceResult as Result
-from ...types.runtime import PersistenceSettings as Tier
 from ...types.runtime import RuntimeAdmissionVerdict as Verdict
 from ...types.runtime import RuntimeLaunchPlan as Plan
 from ...types.runtime import StagesResult as Outcome
@@ -19,7 +18,6 @@ from ...types.runtime import StagesSettings as Tune
 from ...types.runtime import TaskBoardResult as BoardResult
 from ...types.runtime import TaskBoardSettings as BoardSettings
 from ..errors.failures import RuntimeAdmissionNotVerified, RuntimeExecutionNotImplemented
-from .persistence import PersistentCodexSession as Session
 from .stages import StagesCodexSession as StageHost
 from .task_board import TaskBoardCodexSession as BoardSession
 
@@ -29,33 +27,26 @@ class RuntimeExecutor:
 
     def execute_adversarial_team(self, plan: Plan, verdict: Verdict | None = None) -> NoReturn:
         # Keeps the existing primitive inert after validating its admission.
-        self._require_verdict(plan, verdict)
+        self.require_verdict(plan, verdict)
         raise RuntimeExecutionNotImplemented()
-
-    def execute_persistence(self, plan: Plan, tune: Tier, host: Session, proof: Verdict) -> Result:
-        # The session cannot run until the exact requested capability has been admitted.
-        self._require_verdict(plan, proof)
-        if plan.capability_id != "runtime.persistence@1" or plan.host.value != "codex":
-            raise RuntimeAdmissionNotVerified("persistence_plan_invalid")
-        return host.run(plan, tune)
 
     def execute_task_board(
         self, plan: Plan, settings: BoardSettings, host: BoardSession, proof: Verdict
     ) -> BoardResult:
         # Runs the ordered board only after its exact admission is verified.
-        self._require_verdict(plan, proof)
+        self.require_verdict(plan, proof)
         if plan.capability_id != "runtime.task-board@1" or plan.host.value != "codex":
             raise RuntimeAdmissionNotVerified("task_board_plan_invalid")
         return host.run(plan, settings, proof.admission_id)
 
     def execute_stages(self, plan: Plan, tune: Tune, host: StageHost, proof: Verdict) -> Outcome:
         # The stages cannot run until the one-cent stages admission is verified.
-        self._require_verdict(plan, proof)
+        self.require_verdict(plan, proof)
         if plan.capability_id != "runtime.stages@1" or plan.host.value != "codex":
             raise RuntimeAdmissionNotVerified("stages_plan_invalid")
         return host.run(plan, tune)
 
-    def _require_verdict(self, plan: Plan, verdict: Verdict | None) -> None:
+    def require_verdict(self, plan: Plan, verdict: Verdict | None) -> None:
         # Rejects absent, false, mismatched or empty receipts independently of command checks.
         if verdict is None or not verdict.admitted:
             raise RuntimeAdmissionNotVerified()
