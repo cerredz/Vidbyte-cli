@@ -16,6 +16,7 @@ dependencies = [
     "keyring>=25.2,<26",
     "platformdirs>=4.4,<5",
     "pydantic>=2.6,<3",
+    "x402[evm]==2.8.0",
     # The published 0.1.0 predates the required Codex facade; use its verified source revision.
     "vidbyte-sdk[codex] @ git+https://github.com/cerredz/Vidbyte-SDK.git@6f9f84a257036e65bab9595d3c34e8a98cdcd96e",
 ]

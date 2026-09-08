@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     import httpx
 
     from .retry import RequestOutcome
+    from .runtime_payment import RuntimePayment
 
 # The backend reads this header first and accepts `Authorization: Bearer` only as a fallback,
 # so the key travels here and nowhere else. Sending both would be worse than sending one: the
@@ -111,6 +112,25 @@ class ApiClient:
         response = self._send(method, path, body, idempotency_key)
         return self._decoder.one(response, response_model, response_shape)
 
+    def post_runtime_payment(
+        self, path: str, body: BaseModel, key: str, payer: RuntimePayment
+    ) -> httpx.Response:
+        # Probe or recover first, then authorize at most one exact x402 payment.
+        import httpx
+
+        from ..errors.failures import RuntimePaymentFailed
+
+        url = self._url(path)
+        content = self._content(body)
+        headers = self._headers(key, True)
+        outcome = self._retry_request("POST", url, content, headers)
+        if isinstance(outcome, httpx.Response) and outcome.status_code == 402:
+            headers.update(payer.headers(outcome))
+            outcome = self._retry_request("POST", url, content, headers)
+            if isinstance(outcome, httpx.Response) and outcome.status_code == 402:
+                raise RuntimePaymentFailed("payment_rejected")
+        return self._settle(outcome)
+
     def close(self) -> None:
         # Releases the connection pool; safe to call when no request was ever made.
         if self._transport is not None:
@@ -127,18 +147,25 @@ class ApiClient:
         route_not_found: bool = False,
     ) -> httpx.Response:
         # Re-issues one identical request while the retry policy allows, then classifies.
-        from .retry import RequestMetadata
-
         url = self._url(path)
         content = self._content(body)
         headers = self._headers(idempotency_key, body is not None)
-        metadata = RequestMetadata(method.upper(), idempotency_key is not None)
+        outcome = self._retry_request(method, url, content, headers)
+        return self._settle(outcome, route_not_found=route_not_found)
+
+    def _retry_request(
+        self, method: str, url: str, data: bytes | None, headers: dict[str, str]
+    ) -> RequestOutcome:
+        # Reuse identical signed bytes and request identity throughout bounded retries.
+        from .retry import RequestMetadata
+
+        metadata = RequestMetadata(method.upper(), "Idempotency-Key" in headers)
         attempt = 1
         while True:
-            outcome = self._attempt(method, url, content, headers)
+            outcome = self._attempt(method, url, data, headers)
             decision = self._retry.decide(metadata, attempt, outcome)
             if not decision.retry:
-                return self._settle(outcome, route_not_found=route_not_found)
+                return outcome
             time.sleep(decision.delay_seconds)
             attempt += 1
 

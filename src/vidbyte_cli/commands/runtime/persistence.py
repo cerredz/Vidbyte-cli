@@ -9,6 +9,7 @@ from uuid import uuid4
 import click
 
 from ...lib.constants.runtime import PersistenceProgress as Progress
+from ...lib.constants.runtime import RuntimePaymentConfig as PaymentConfig
 from ...lib.errors.failures import RuntimeAdmissionNotVerified
 from ...lib.output import OutputDocument
 from ...lib.runtime.context import ApplicationContext as Context
@@ -22,6 +23,7 @@ from ...types.runtime import (
     RuntimeAdmissionRequest,
     RuntimeGrantVerificationRequest,
     RuntimeHost,
+    RuntimeX402AdmissionRequest,
 )
 
 
@@ -39,12 +41,30 @@ class PersistenceCommand:
         @click.option(
             "--idempotency-key", "key", default=None, help="Reuse only to recover admission."
         )
+        @click.option(
+            "--with-x402-payment",
+            is_flag=True,
+            help="Pay admission with x402 instead of API balance.",
+        )
         @click.pass_obj
-        def _run(ctx: Context, task: str, strength: int, key: str | None) -> None:
+        def _run(
+            context: Context,
+            task: str,
+            strength: int,
+            key: str | None,
+            with_x402_payment: bool,
+        ) -> None:
             # Delegates without normalizing or wrapping the original task.
-            self.execute(ctx, task, strength, key)
+            self.execute(context, task, strength, key, with_x402_payment)
 
-    def execute(self, context: Context, task: str, strength: int, key: str | None) -> None:
+    def execute(
+        self,
+        context: Context,
+        task: str,
+        strength: int,
+        key: str | None,
+        with_x402_payment: bool = False,
+    ) -> None:
         # Resolve local prerequisites before any wallet admission, then verify before execution.
         progress = context.output().diagnostic
         progress(Progress.PREPARING)
@@ -61,8 +81,17 @@ class PersistenceCommand:
         session = self._session(context)
         session.prepare(plan)
         endpoints = context.runtime_endpoints()
-        progress(Progress.ADMISSION)
-        grant = endpoints.admit_persistence(RuntimeAdmissionRequest(host=plan.host), key)
+        progress(f"Admission recovery key: {key}")
+        if with_x402_payment:
+            from ...lib.api.runtime_payment import RuntimePayment
+
+            payer = RuntimePayment(context.environment, PaymentConfig.PERSISTENCE_CENTS)
+            progress(Progress.X402_ADMISSION)
+            request = RuntimeX402AdmissionRequest(host=plan.host)
+            grant = endpoints.admit_persistence_x402(request, key, payer)
+        else:
+            progress(Progress.ADMISSION)
+            grant = endpoints.admit_persistence(RuntimeAdmissionRequest(host=plan.host), key)
         if grant.grant_token is None:
             raise RuntimeAdmissionNotVerified("grant_token_missing")
         progress(Progress.VERIFYING)
@@ -92,6 +121,7 @@ class PersistenceCommand:
             "VIDBYTE_API_KEY",
             "RUNTIME_ADMISSION_SIGNING_KEY",
             "CODEX_API_KEY",
+            PaymentConfig.PRIVATE_KEY_ENV,
         ):
             environment[name] = ""
         environment["OPENAI_API_KEY"] = credentials.secret_value()

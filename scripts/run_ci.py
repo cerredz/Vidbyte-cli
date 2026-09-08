@@ -70,6 +70,7 @@ class CiRunner:
                 "persistence service layering",
                 (python, "scripts/test-persistence-service-relocation.py"),
             ),
+            ("runtime payment methods", (python, "scripts/test-runtime-payment-methods.py")),
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
             # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
             ("task board", (python, "scripts/test-task-board.py")),

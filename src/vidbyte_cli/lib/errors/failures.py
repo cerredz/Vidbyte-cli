@@ -163,7 +163,7 @@ class OperationInterrupted(CliError):
             ),
             trace=(
                 "The interrupt reached the CliApplication.run boundary from wherever the "
-                "invocation was waiting — argument parsing, prompting, or command execution."
+                "invocation was waiting â€” argument parsing, prompting, or command execution."
             ),
         )
 
@@ -208,8 +208,8 @@ class AuthenticationRequired(CliError):
                 "the key is reused by every later invocation."
             ),
             trace=(
-                "A command requiring the Vidbyte API — a research command through "
-                "ApplicationContext.api_client, or WhoamiCommand.execute directly — reached "
+                "A command requiring the Vidbyte API â€” a research command through "
+                "ApplicationContext.api_client, or WhoamiCommand.execute directly â€” reached "
                 "CredentialResolver.resolve, which found no key in the environment, the "
                 "keyring, or the restricted file for this profile and host."
             ),
@@ -633,7 +633,7 @@ class InvalidConfigOverride(CliError):
                 "credentials. No command ran and no local state changed."
             ),
             trace=(
-                "ConfigResolver.resolve applied command → environment → profile precedence per "
+                "ConfigResolver.resolve applied command â†’ environment â†’ profile precedence per "
                 "field and constructed the ResolvedConfig from the winning values."
             ),
             hint="Check VIDBYTE_* settings and the selected CLI profile.",
@@ -676,7 +676,7 @@ class StateWriteFailed(CliError):
             "CLI state could not be saved.",
             description=(
                 "Creating, flushing, or replacing the state file failed at the filesystem "
-                "level — typically permissions, a read-only or full volume, or a parent "
+                "level â€” typically permissions, a read-only or full volume, or a parent "
                 "directory the CLI may not create. The temporary sibling was removed, so the "
                 "previous file is intact and the operation had no partial effect."
             ),
@@ -723,7 +723,7 @@ class CredentialStoreUnavailable(CliError):
             "The operating-system credential store is unavailable.",
             description=(
                 "No keyring backend reported itself usable, or the backend rejected the "
-                "operation — a locked keychain, a headless session with no agent, or a write "
+                "operation â€” a locked keychain, a headless session with no agent, or a write "
                 "that did not read back as written. The backend's own message is withheld "
                 "because it can quote account identifiers. No credential was stored or read."
             ),
@@ -1057,7 +1057,7 @@ class ApiUnreachable(CliError):
             "The Vidbyte API could not be reached.",
             description=(
                 "Connecting to the configured API host failed, or the connection was lost "
-                "before a reply arrived — typically no network route, DNS failure, a proxy, or "
+                "before a reply arrived â€” typically no network route, DNS failure, a proxy, or "
                 "a timeout. The transport error is withheld because it quotes the URL and may "
                 "quote proxy configuration. Safe requests were already retried, so the failure "
                 "persisted across every attempt."
@@ -1235,7 +1235,7 @@ class ApiRequestConflicted(CliError):
         super().__init__(
             "The run is not in a state that can be continued.",
             description=(
-                "Continuing a run is legal only after it has already settled badly — partial, "
+                "Continuing a run is legal only after it has already settled badly â€” partial, "
                 "failed, or out of credit. A run that is still admitting or running has not "
                 "finished, and a run that completed has nothing left to continue. Nothing was "
                 "admitted and no credits were spent. Read the run first and continue it only "
@@ -1413,7 +1413,7 @@ class ProviderStoreUnavailable(CliError):
             "The provider credential store is unavailable.",
             description=(
                 "No keyring backend reported itself usable, or the backend rejected the "
-                "operation — a locked keychain or a headless session with no agent. No "
+                "operation â€” a locked keychain or a headless session with no agent. No "
                 "provider credential was stored or read."
             ),
             trace=(
@@ -1935,4 +1935,24 @@ class EnsembleImplementerFailed(CliError):
             ),
             hint="Check 'git status' for partial edits before retrying.",
             cause=cause,
+        )
+
+
+class RuntimePaymentFailed(CliError):
+    """Explicit x402 admission could not be safely authorized or completed."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, reason: str) -> None:
+        # Exposes only a fixed reason category, never payer credentials or response bodies.
+        super().__init__(
+            "Runtime x402 payment could not be completed.",
+            description=(
+                "Set VIDBYTE_X402_PRIVATE_KEY and the supported VIDBYTE_X402_NETWORK for "
+                "explicit x402 payment. No local agent was launched. If payment was already "
+                "attempted, recover with the same idempotency key; do not authorize a new "
+                f"purchase to resolve an uncertain outcome. Reason: {reason}."
+            ),
+            trace="Runtime payment validation failed before the database-verified launch gate.",
         )
