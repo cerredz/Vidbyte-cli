@@ -98,6 +98,28 @@ class TaskBoardTaskFileInvalid(CliError):
         )
 
 
+class TaskBoardDependencyInvalid(CliError):
+    """One supplied dependency link is malformed or the link set is not a DAG."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the accepted grammar, never the submitted indices or task text.
+        super().__init__(
+            "Dependency links must be CHILD:PARENT pairs forming an acyclic graph.",
+            description=(
+                "A link names 0-based board positions as CHILD:PARENT with comma-separated "
+                "parents, so --depends-on 8:2 means task 8 reads task 2 and runs after it. "
+                "Links need --type dag, must stay inside the board, allow no self-links, "
+                "duplicates, or cycles, and are rejected before credentials, payment, or "
+                "host execution. The board order and task text are never repeated here."
+            ),
+            trace="TaskBoardCommand parsed dependency links before building a launch plan.",
+            hint="Repeat --depends-on once per link, e.g. --type dag --depends-on 8:2.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 
