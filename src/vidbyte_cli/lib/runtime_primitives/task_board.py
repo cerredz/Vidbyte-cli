@@ -130,7 +130,6 @@ class TaskBoardCodexSession:
         self, plan: Plan, settings: TaskBoardSettings, admission_id: str
     ) -> TaskBoardResult:
         # Runs each task once in topological order with dependency-only context.
-        _ = plan
         order = self._topological_order(len(settings.tasks), settings.dependencies)
         slots: list[str] = ["" for _ in settings.tasks]
         failed: set[int] = set()

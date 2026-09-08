@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,7 +19,6 @@ from vidbyte_cli.lib.errors.failures import TaskBoardDependencyInvalid  # noqa: 
 from vidbyte_cli.lib.runtime_primitives.executor import RuntimeExecutor  # noqa: E402
 from vidbyte_cli.lib.runtime_primitives.task_board import TaskBoardCodexSession  # noqa: E402
 from vidbyte_cli.types.runtime import (  # noqa: E402
-    RuntimeAdmissionGrant,
     RuntimeAdmissionVerdict,
     RuntimeHost,
     RuntimeLaunchPlan,
@@ -55,20 +53,6 @@ def make_verdict() -> RuntimeAdmissionVerdict:
     # Builds an admitted verdict matching the local plan for executor tests.
     return RuntimeAdmissionVerdict(
         admitted=True, admission_id="rta_test123", capability_id="runtime.task-board@1"
-    )
-
-
-def make_grant() -> RuntimeAdmissionGrant:
-    # Builds a time-valid grant; the runner must never touch it or the network.
-    now = datetime.now(UTC)
-    return RuntimeAdmissionGrant(
-        admission_id="rta_test123",
-        capability_id="runtime.task-board@1",
-        execution_location="local",
-        charged_cents=2,
-        admitted_at=now - timedelta(seconds=10),
-        expires_at=now + timedelta(seconds=300),
-        grant_token="tok_" + "x" * 20,
     )
 
 
@@ -182,8 +166,15 @@ def test_cycles_rejected() -> None:
             pass
     try:
         TaskBoardCommand()._settings(
-            ("a", "b"), 10, "windowed-summaries", "truncate-tail", 1200,
-            True, 1, "dag", ((0, 1), (1, 0)),
+            ("a", "b"),
+            10,
+            "windowed-summaries",
+            "truncate-tail",
+            1200,
+            True,
+            1,
+            "dag",
+            ((0, 1), (1, 0)),
         )
         ok = False
     except TaskBoardDependencyInvalid:
@@ -214,9 +205,7 @@ def test_single_task_dag() -> None:
     async def go() -> bool:
         prompts: list[str] = []
         session = _fake_session(prompts, _ScriptedTurns(["solo"]))
-        settings = TaskBoardSettings(
-            tasks=("only",), execution_type=TaskBoardExecutionType.DAG
-        )
+        settings = TaskBoardSettings(tasks=("only",), execution_type=TaskBoardExecutionType.DAG)
         result = await session._run(make_plan(), settings, "rta_dag_solo")
         return result.completed == 1 and "(no prior results)" in prompts[0]
 
@@ -273,8 +262,7 @@ def test_window_ignored_in_dag() -> None:
     slots = ["first-summary", ""]
     record(
         "window ignored in dag",
-        session._build_prompt("b", 1, slots, narrow)
-        == session._build_prompt("b", 1, slots, wide),
+        session._build_prompt("b", 1, slots, narrow) == session._build_prompt("b", 1, slots, wide),
     )
 
 
@@ -309,8 +297,7 @@ def test_dag_stop_on_error_halts() -> None:
         )
         result = await session._run(make_plan(), settings, "rta_dag_halt")
         return (
-            result.completed == 0 and len(result.steps) == 1
-            and result.steps[0].status == "failed"
+            result.completed == 0 and len(result.steps) == 1 and result.steps[0].status == "failed"
         )
 
     record("dag stop on error halts", asyncio.run(go()))
@@ -360,9 +347,7 @@ def test_retry_success_single_entry() -> None:
     # [Hidden Failure] A retry success yields exactly one completed step entry.
     async def go() -> bool:
         prompts: list[str] = []
-        session = _fake_session(
-            prompts, _ScriptedTurns([RuntimeError("boom"), "recovered"])
-        )
+        session = _fake_session(prompts, _ScriptedTurns([RuntimeError("boom"), "recovered"]))
         settings = TaskBoardSettings(
             tasks=("a",),
             execution_type=TaskBoardExecutionType.DAG,
@@ -370,7 +355,8 @@ def test_retry_success_single_entry() -> None:
         )
         result = await session._run(make_plan(), settings, "rta_dag_retry")
         return (
-            result.completed == 1 and len(result.steps) == 1
+            result.completed == 1
+            and len(result.steps) == 1
             and result.steps[0].status == "completed"
         )
 
@@ -435,8 +421,6 @@ def test_executor_runs_dag_without_network() -> None:
         execution_type=TaskBoardExecutionType.DAG,
         dependencies=((1, 0),),
     )
-    grant = make_grant()
-    _ = grant
     result = RuntimeExecutor().execute_task_board(make_plan(), settings, session, make_verdict())
     record(
         "executor runs dag without network",
