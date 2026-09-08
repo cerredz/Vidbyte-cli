@@ -11,6 +11,7 @@ from typing import Literal
 
 from ...types.runtime import RuntimeHost as Host
 from ...types.runtime import RuntimeLaunchPlan as Plan
+from ..constants.runtime import TaskBoardLimit
 from ..errors.failures import (
     RuntimeHostUnavailable,
     RuntimeTaskInvalid,
@@ -23,6 +24,7 @@ Product = Literal[
     "runtime.adversarial-team@1",
     "runtime.same-host-ensemble@1",
     "runtime.persistence@1",
+    "runtime.task-board@1",
 ]
 
 
@@ -50,4 +52,27 @@ class RuntimeLaunchPlanner:
             executable=Path(selected.executable),
             working_directory=resolved_directory,
             task=task,
+        )
+
+    def build_task_board(self, tasks: tuple[str, ...], host: Host | None, cwd: Path) -> Plan:
+        # Validates board count and chars against the shared bounds, then builds a label-only
+        # plan; the bounds live in TaskBoardLimit so the settings model cannot drift from here.
+        if not tasks or len(tasks) > TaskBoardLimit.MAX_TASKS:
+            raise RuntimeTaskInvalid()
+        for task in tasks:
+            if not task.strip() or len(task) > TaskBoardLimit.MAX_TASK_CHARS:
+                raise RuntimeTaskInvalid()
+        resolved_directory = cwd.resolve()
+        if not resolved_directory.is_dir():
+            raise RuntimeWorkingDirectoryInvalid()
+        selected = self._hosts.resolve(host)
+        if selected.executable is None:
+            raise RuntimeHostUnavailable(selected.host.value)
+        label = tasks[0][:200] if len(tasks[0]) > 200 else tasks[0]
+        return Plan(
+            capability_id="runtime.task-board@1",
+            host=selected.host,
+            executable=Path(selected.executable),
+            working_directory=resolved_directory,
+            task=f"Task board with {len(tasks)} tasks starting with: {label}",
         )

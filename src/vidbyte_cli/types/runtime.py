@@ -84,11 +84,144 @@ class RuntimeLaunchPlan(BaseModel):
         "runtime.adversarial-team@1",
         "runtime.same-host-ensemble@1",
         "runtime.persistence@1",
+        "runtime.task-board@1",
     ] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
     working_directory: Path
     task: str = Field(min_length=1, max_length=20_000)
+
+
+class TaskBoardSummaryMode(StrEnum):
+    """How one prior task result is shrunk before the next agent reads it."""
+
+    TRUNCATE_TAIL = "truncate-tail"
+    HEAD_TAIL = "head-tail"
+
+
+class TaskBoardContextMode(StrEnum):
+    """Whether a task agent reads prior task results at all."""
+
+    WINDOWED_SUMMARIES = "windowed-summaries"
+    ISOLATED = "isolated"
+
+
+class TaskBoardSettings(BaseModel):
+    """Bounded, frozen task-board settings for one admitted local invocation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    tasks: tuple[str, ...] = Field(
+        min_length=1,
+        max_length=500,
+        description=(
+            "The ordered board of work, where every entry is one complete task statement that "
+            "one Codex agent has to finish on its own. Position is meaningful: task N runs only "
+            "after tasks 0 through N-1 have been attempted, and its agent can be given the "
+            "results of the tasks immediately before it. Entries arrive either as literal task "
+            "strings or as the whole text of one Markdown task file each, and the board never "
+            "reorders, merges, or splits what it was given. A board holds between 1 and 500 "
+            "tasks, and no single task may exceed 20,000 characters."
+        ),
+    )
+    window: int = Field(
+        ge=0,
+        le=25,
+        default=10,
+        description=(
+            "How many immediately preceding task results the next agent is allowed to read, "
+            "counted backwards from the task about to run. With a window of 10, the agent for "
+            "task 90 receives summaries of tasks 80 through 89 and nothing earlier, which is "
+            "what keeps prompt size flat as the board grows. A window of 0 gives an agent only "
+            "its own task while still telling it that earlier tasks ran, and a window larger "
+            "than the number of finished tasks simply clamps to what exists. This setting is "
+            "ignored entirely when the context mode is isolated."
+        ),
+    )
+    context_mode: TaskBoardContextMode = Field(
+        default=TaskBoardContextMode.WINDOWED_SUMMARIES,
+        description=(
+            "Whether an agent is told anything about the tasks that ran before it. In "
+            "windowed-summaries mode each agent reads bounded summaries of the previous window "
+            "results, which suits a board whose tasks build on one another. In isolated mode no "
+            "prior result reaches any agent and the prompt carries no prior-results section at "
+            "all, which is the correct choice for a board of independently decomposed tasks "
+            "that must not inherit each other's assumptions. Isolated mode overrides the window "
+            "and summary settings rather than combining with them."
+        ),
+    )
+    summary_mode: TaskBoardSummaryMode = Field(
+        default=TaskBoardSummaryMode.TRUNCATE_TAIL,
+        description=(
+            "The shape of each prior-result summary once that result is longer than the "
+            "character budget. In truncate-tail mode the summary keeps the opening of the "
+            "result and names how many characters were dropped, which favors setup and "
+            "reasoning. In head-tail mode the budget is split evenly between the opening and "
+            "the closing of the result, which is what preserves a concluding answer or a final "
+            "file listing. Neither mode calls a model, so summarization stays deterministic "
+            "and free, and this setting does nothing in isolated context mode."
+        ),
+    )
+    summary_max_chars: int = Field(
+        ge=100,
+        le=8000,
+        default=1200,
+        description=(
+            "The character budget for one prior-result summary before the summary mode starts "
+            "dropping content. A result at or under this length is passed through untouched, "
+            "and anything longer is shortened and marked with the number of characters removed. "
+            "Multiply this budget by the window to predict the worst-case size of the "
+            "prior-results block a single agent will read. Accepted values run from 100 to "
+            "8000 characters, and this setting does nothing in isolated context mode."
+        ),
+    )
+    stop_on_error: bool = Field(
+        default=True,
+        description=(
+            "What the board does the first time a task exhausts its retries. When enabled the "
+            "board halts immediately, keeps every result completed before the failure, and "
+            "returns that prefix rather than running work that depends on a task that never "
+            "finished. When disabled the failed task is recorded with a failed status, a short "
+            "placeholder stands in for its summary so board indices stay aligned, and the next "
+            "task starts anyway. Leave it enabled for a dependent board and disable it for a "
+            "board of independent tasks where one failure should not cancel the rest."
+        ),
+    )
+    max_retries_per_task: int = Field(
+        ge=0,
+        le=3,
+        default=1,
+        description=(
+            "How many extra attempts one task receives after its first attempt fails, before "
+            "the board treats that task as failed. Every retry re-sends the identical prompt "
+            "to a brand-new agent, so a retry recovers from a crashed or timed-out host rather "
+            "than from a task the agent understood but could not do. Each attempt is charged "
+            "against the caller's own model account, so a high retry count on a large board "
+            "multiplies model cost. Accepted values run from 0 to 3, and a completed retry "
+            "produces exactly one result entry, never a duplicate."
+        ),
+    )
+
+
+class TaskBoardStepResult(BaseModel):
+    """One task outcome with its bounded summary for downstream agents."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    index: int = Field(ge=0)
+    task: str = Field(min_length=1, max_length=20_000)
+    summary: str = Field(min_length=1, max_length=8000)
+    status: Literal["completed", "failed"]
+    thread_id: str = Field(min_length=1, max_length=128)
+
+
+class TaskBoardResult(BaseModel):
+    """Final local output with per-task summaries in board order."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    admission_id: str = Field(min_length=1, max_length=128)
+    completed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    steps: tuple[TaskBoardStepResult, ...]
+    text: str
 
 
 class PersistenceStrength(IntEnum):
