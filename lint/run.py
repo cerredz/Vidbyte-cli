@@ -17,7 +17,7 @@ if __package__ in {None, ""}:
 from lint.core.baseline import BaselineContractError
 from lint.core.registry import RuleRegistry, RuleSelectionError
 from lint.core.report import RunReport
-from lint.core.runner import RuleRunner
+from lint.core.runner import RuleResult, RuleRunner
 
 
 class ArgumentParserFactory:
@@ -62,9 +62,9 @@ class LintApplication:
         print(report.render_json() if args.format == "json" else report.render_text())
         return report.exit_code()
 
-    def _update(self, runner: RuleRunner, results: tuple[object, ...]) -> int:
+    def _update(self, runner: RuleRunner, results: tuple[RuleResult, ...]) -> int:
         # Merges the selected rules' counts into the stored catalogue, leaving others alone.
-        counts = runner.counts(results)  # type: ignore[arg-type]
+        counts = runner.counts(results)
         stored = runner.store.load()
         stored.update(counts)
         runner.store.write(stored)
