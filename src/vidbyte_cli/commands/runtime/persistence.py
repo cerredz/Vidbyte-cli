@@ -13,7 +13,8 @@ from ...lib.errors.failures import RuntimeAdmissionNotVerified
 from ...lib.output import OutputDocument
 from ...lib.runtime.context import ApplicationContext as Context
 from ...lib.runtime_primitives.gate import RuntimeAdmissionGate
-from ...lib.runtime_primitives.persistence import PersistentCodexSession
+from ...services.persistence.runner import PersistenceRunner
+from ...services.persistence.session import PersistentCodexSession
 from ...types.provider import PROVIDER_ENV_VARS, Provider
 from ...types.runtime import (
     PersistenceSettings,
@@ -75,7 +76,7 @@ class PersistenceCommand:
         if not verdict.admitted:
             raise RuntimeAdmissionNotVerified(verdict.reason)
         progress(Progress.ADMITTED)
-        result = context.runtime_executor().execute_persistence(plan, settings, session, verdict)
+        result = PersistenceRunner().run(plan, settings, session, verdict)
         context.output().result(
             OutputDocument(kind="runtime.persistence", data=result.model_dump(mode="json")),
             result.text,

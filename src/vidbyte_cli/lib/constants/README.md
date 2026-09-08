@@ -1,8 +1,8 @@
 # Runtime constants
 
 Shared runtime policy and presentation values live here so commands and execution
-use the same vocabulary. Receipt models belong in `types/`; admission checks and
-agent orchestration belong in `lib/runtime_primitives/`.
+use the same vocabulary. Receipt models belong in `types/`; admission checks belong
+in `lib/runtime_primitives/`; agent orchestration belongs in `services/`.
 
 ## File index
 

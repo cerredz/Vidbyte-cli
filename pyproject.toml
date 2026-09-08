@@ -48,8 +48,7 @@ where = ["src"]
 # Authored Markdown is not Python, so setuptools would leave it out of the wheel by default
 # and the primitives that read it would fail at their first turn on an installed copy.
 [tool.setuptools.package-data]
-vidbyte_cli = ["services/ensemble/prompts/*.md"]
-"vidbyte_cli.lib.runtime_primitives" = ["*.md"]
+vidbyte_cli = ["services/ensemble/prompts/*.md", "services/persistence/prompts/*.md"]
 
 [tool.ruff]
 line-length = 100

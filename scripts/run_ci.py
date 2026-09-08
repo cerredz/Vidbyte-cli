@@ -55,6 +55,11 @@ class CiRunner:
                 "runtime admission and persistence",
                 (python, "scripts/test-layered-runtime-admission-gate.py"),
             ),
+            # Structural: the move is complete and the service/lib direction still holds.
+            (
+                "persistence service layering",
+                (python, "scripts/test-persistence-service-relocation.py"),
+            ),
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
         )
         for label, arguments in source_gates:
@@ -96,8 +101,8 @@ class CiRunner:
             sys.stderr.write(f"Expected one wheel, found {len(wheels)}.\n")
             return 1
         with zipfile.ZipFile(wheels[0]) as archive:
-            for name in ("continuation.md", "persistence_system.md"):
-                prompt = f"vidbyte_cli/lib/runtime_primitives/{name}"
+            for name in ("persistence_system.md", "persistence_turn.md"):
+                prompt = f"vidbyte_cli/services/persistence/prompts/{name}"
                 if prompt not in archive.namelist() or not archive.read(prompt):
                     sys.stderr.write(f"The wheel is missing the persistence prompt {name}.\n")
                     return 1

@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
-from importlib.resources import files
 from typing import TYPE_CHECKING
 
+from ...lib.constants.runtime import PersistenceCodexConfig, PersistenceLimit
+from ...lib.constants.runtime import PersistenceProgress as Progress
+from ...lib.errors.failures import PersistenceHostFailed
 from ...types.runtime import PersistenceResult, PersistenceSettings
 from ...types.runtime import RuntimeLaunchPlan as Plan
-from ..constants.runtime import PersistenceCodexConfig, PersistenceLimit
-from ..constants.runtime import PersistenceProgress as Progress
-from ..errors.failures import PersistenceHostFailed
+from .prompts.library import PersistencePrompts
 
 if TYPE_CHECKING:
     from vidbyte.agents.codex import CodexHarnessAgent
@@ -28,6 +28,7 @@ class PersistentCodexSession:
     def __init__(self, environment: Mapping[str, str], progress: Callable[[str], None]) -> None:
         self._environment = dict(environment)
         self._progress = progress
+        self._prompts = PersistencePrompts()
         self._agent: CodexHarnessAgent | None = None
 
     def prepare(self, plan: Plan) -> None:
@@ -50,7 +51,7 @@ class PersistentCodexSession:
         self._agent = CodexHarnessAgent(
             CodexHarnessAgentSettings(
                 name="persistence",
-                system_prompt=self._prompt("persistence_system.md"),
+                system_prompt=self._prompts.system_prompt(),
                 codex=CodexAgentSettings(
                     client=client,
                     thread=CodexThreadSettings(sandbox=CodexSandbox.WORKSPACE_WRITE),
@@ -70,7 +71,7 @@ class PersistentCodexSession:
             raise PersistenceHostFailed() from error
 
     async def _run(self, plan: Plan, settings: PersistenceSettings) -> PersistenceResult:
-        continuation = self._prompt("continuation.md").replace("{{original_task}}", plan.task)
+        continuation = self._prompts.turn_prompt(plan.task)
         self._progress(Progress.STARTING)
         reply = await self._turn(plan.task)
         session_id = self._session_id(reply, "")
@@ -112,6 +113,3 @@ class PersistentCodexSession:
         if index * 3 < count * 2:
             return Progress.MIDDLE
         return Progress.LATE
-
-    def _prompt(self, name: str) -> str:
-        return files(__package__).joinpath(name).read_text(encoding="utf-8")
