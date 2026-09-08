@@ -21,6 +21,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The ensemble primitive only. Kept out of `dependencies` because the published vidbyte-sdk
+# release predates its Codex integration, and `--help` must work without it installed.
+codex = [
+    "vidbyte-sdk[codex]>=0.1.0",
+]
 dev = [
     "build==1.5.0",
     "mypy==2.3.0",
@@ -40,7 +45,10 @@ vidbyte-cli = "vidbyte_cli.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Authored Markdown is not Python, so setuptools would leave it out of the wheel by default
+# and the primitives that read it would fail at their first turn on an installed copy.
 [tool.setuptools.package-data]
+vidbyte_cli = ["services/ensemble/prompts/*.md"]
 "vidbyte_cli.lib.runtime_primitives" = ["*.md"]
 
 [tool.ruff]
@@ -58,3 +66,10 @@ python_version = "3.11"
 strict = true
 follow_untyped_imports = true
 packages = ["vidbyte_cli"]
+
+# The SDK's Codex integration is an optional extra that the published release does not ship,
+# so it is genuinely absent at type-check time. services/ensemble/sdk.py declares its own
+# Protocol for the surface it drives, which is what mypy checks against instead.
+[[tool.mypy.overrides]]
+module = ["vidbyte.*"]
+ignore_missing_imports = true

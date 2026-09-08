@@ -21,6 +21,7 @@ from .hosts import RuntimeHostRegistry
 Product = Literal[
     "runtime.review.adversarial-team@1",
     "runtime.adversarial-team@1",
+    "runtime.same-host-ensemble@1",
     "runtime.persistence@1",
     "runtime.stages@1",
 ]

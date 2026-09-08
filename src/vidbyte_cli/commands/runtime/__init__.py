@@ -8,6 +8,7 @@ from .adversarial_team import AdversarialTeamCommand
 from .doctor import RuntimeDoctorCommand
 from .list import RuntimeListCommand
 from .persistence import PersistenceCommand
+from .same_host_ensemble import SameHostEnsembleCommand
 from .stages import StagesCommand
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "PersistenceCommand",
     "RuntimeDoctorCommand",
     "RuntimeListCommand",
+    "SameHostEnsembleCommand",
     "StagesCommand",
 ]

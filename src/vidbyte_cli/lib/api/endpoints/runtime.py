@@ -21,6 +21,9 @@ from ..response import ResponseShape
 
 RUNTIME_CATALOG_PATH = "/api/x402/runtime"
 ADVERSARIAL_TEAM_ADMISSION_PATH = "/api/x402/runtime/adversarial-team/admissions"
+# Matches the capability declared in the backend x402 catalog (vidbyte PR #508), which
+# names these routes "activate" rather than "admissions".
+SAME_HOST_ENSEMBLE_ADMISSION_PATH = "/api/x402/runtime/same-host-ensemble/activate"
 PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/activate"
 STAGES_ADMISSION_PATH = "/api/x402/runtime/stages/admissions"
 
@@ -48,6 +51,16 @@ class RuntimeEndpoints:
         # Purchases one replay-safe local execution admission.
         return self._client.post(
             ADVERSARIAL_TEAM_ADMISSION_PATH,
+            request,
+            AdmissionGrant,
+            shape=ResponseShape.DIRECT,
+            idempotency_key=key,
+        )
+
+    def admit_same_host_ensemble(self, request: AdmissionRequest, key: str) -> AdmissionGrant:
+        # Purchases one replay-safe local execution admission.
+        return self._client.post(
+            SAME_HOST_ENSEMBLE_ADMISSION_PATH,
             request,
             AdmissionGrant,
             shape=ResponseShape.DIRECT,

@@ -31,6 +31,7 @@ from .runtime import (
     PersistenceCommand,
     RuntimeDoctorCommand,
     RuntimeListCommand,
+    SameHostEnsembleCommand,
     StagesCommand,
 )
 from .setup.doctor import DoctorCommand
@@ -59,6 +60,7 @@ def register_all_commands(program: click.Group) -> None:
     RuntimeDoctorCommand().register(runtime)
     AdversarialTeamCommand().register(runtime)
     PersistenceCommand().register(runtime)
+    SameHostEnsembleCommand().register(runtime)
     StagesCommand().register(runtime)
     program.add_command(runtime)
 

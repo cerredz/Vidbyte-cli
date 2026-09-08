@@ -2,7 +2,9 @@
 
 Persistence and stages have implementations; adversarial-team retains its
 explicit scaffold. Every process-launching path requires a matching
-deterministic admission verdict.
+deterministic admission verdict. `same-host-ensemble` is deliberately
+absent: it runs in `services/ensemble/`, because a service may depend on
+`lib/` while nothing in `lib/` may depend on a service.
 """
 
 from __future__ import annotations
