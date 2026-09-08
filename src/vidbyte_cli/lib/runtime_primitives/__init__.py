@@ -1,7 +1,7 @@
 """Local planning boundaries for runtime primitives.
 
 Exports discovery, planning, admission verification, and the guarded executor.
-Persistence delegates native execution to the SDK after admission succeeds.
+Each primitive's own algorithm lives in `services/`; only what all of them share is here.
 """
 
 from .executor import RuntimeExecutor

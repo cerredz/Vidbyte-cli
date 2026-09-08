@@ -28,6 +28,14 @@ _BUILD_COPY_EXCLUDES = (
     ".coverage*", ".mypy_cache", ".nox", ".pytest_cache", ".ruff_cache", ".tox",
 )  # fmt: skip
 
+# Prompts are data files, not modules, so no import smoke can catch a packaging miss; they now
+# live under two roots, since persistence moved to a service while task-board stayed in `lib/`.
+_WHEEL_RUNTIME_PROMPTS = (
+    "vidbyte_cli/services/persistence/prompts/persistence_system.md",
+    "vidbyte_cli/services/persistence/prompts/persistence_turn.md",
+    "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
+)
+
 
 class CiRunner:
     """Runs every verification gate in order, stopping at the first failure."""
@@ -56,6 +64,11 @@ class CiRunner:
             (
                 "runtime admission and persistence",
                 (python, "scripts/test-layered-runtime-admission-gate.py"),
+            ),
+            # Structural: the move is complete and the service/lib direction still holds.
+            (
+                "persistence service layering",
+                (python, "scripts/test-persistence-service-relocation.py"),
             ),
             ("runtime payment methods", (python, "scripts/test-runtime-payment-methods.py")),
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
@@ -101,10 +114,9 @@ class CiRunner:
             sys.stderr.write(f"Expected one wheel, found {len(wheels)}.\n")
             return 1
         with zipfile.ZipFile(wheels[0]) as archive:
-            for name in ("continuation.md", "persistence_system.md", "task_board_system.md"):
-                prompt = f"vidbyte_cli/lib/runtime_primitives/{name}"
+            for prompt in _WHEEL_RUNTIME_PROMPTS:
                 if prompt not in archive.namelist() or not archive.read(prompt):
-                    sys.stderr.write(f"The wheel is missing the runtime prompt {name}.\n")
+                    sys.stderr.write(f"The wheel is missing the runtime prompt {prompt}.\n")
                     return 1
         environment = workspace / "installed"
         venv.EnvBuilder(with_pip=True).create(environment)

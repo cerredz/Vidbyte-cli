@@ -33,9 +33,10 @@ from vidbyte_cli.lib.runtime.context import ApplicationContext
 from vidbyte_cli.lib.runtime_primitives.executor import RuntimeExecutor
 from vidbyte_cli.lib.runtime_primitives.gate import RuntimeAdmissionGate
 from vidbyte_cli.lib.runtime_primitives.hosts import RuntimeHostRegistry
-from vidbyte_cli.lib.runtime_primitives.persistence import PersistentCodexSession
 from vidbyte_cli.lib.runtime_primitives.planner import RuntimeLaunchPlanner
 from vidbyte_cli.lib.runtime_primitives.verification import RuntimeGrantVerifier
+from vidbyte_cli.services.persistence.runner import PersistenceRunner
+from vidbyte_cli.services.persistence.session import PersistentCodexSession
 from vidbyte_cli.types.runtime import (
     PersistenceSettings,
     PersistenceStrength,
@@ -174,7 +175,7 @@ class AdmissionContracts(unittest.TestCase):
         settings = PersistenceSettings(strength=PersistenceStrength.TIER_1)
         verdict = self.gate.verify(self.plan, None, self.now, KEY)
         with self.assertRaises(RuntimeAdmissionNotVerified):
-            executor.execute_persistence(self.plan, settings, session, verdict)
+            PersistenceRunner(executor).run(self.plan, settings, session, verdict)
         session.run.assert_not_called()
         with self.assertRaises(RuntimeAdmissionNotVerified):
             executor.execute_adversarial_team(self.plan)
@@ -310,7 +311,7 @@ class PersistenceContracts(unittest.TestCase):
 
         self.transport.run = blocked
         limits = SimpleNamespace(TURN_TIMEOUT_SECONDS=0.01)
-        with patch("vidbyte_cli.lib.runtime_primitives.persistence.PersistenceLimit", limits):
+        with patch("vidbyte_cli.services.persistence.session.PersistenceLimit", limits):
             with self.assertRaises(PersistenceHostFailed):
                 self._run()
         self.assertEqual(cancelled, [True])
