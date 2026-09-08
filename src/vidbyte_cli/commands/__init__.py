@@ -31,6 +31,7 @@ from .runtime import (
     PersistenceCommand,
     RuntimeDoctorCommand,
     RuntimeListCommand,
+    StagesCommand,
 )
 from .setup.doctor import DoctorCommand
 
@@ -58,6 +59,7 @@ def register_all_commands(program: click.Group) -> None:
     RuntimeDoctorCommand().register(runtime)
     AdversarialTeamCommand().register(runtime)
     PersistenceCommand().register(runtime)
+    StagesCommand().register(runtime)
     program.add_command(runtime)
 
     config = click.Group(name="config", help="Manage CLI configuration")

@@ -1650,3 +1650,45 @@ class ResearchWatchTimedOut(CliError):
             ),
             hint=f"Run 'vidbyte-cli research status {run_id}' to check on it.",
         )
+
+
+class StagesHostFailed(CliError):
+    """A stages turn did not complete with a usable Codex reply."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can quote task text, so this message stays static.
+        super().__init__(
+            "Codex did not complete the stages turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete reply for one stage. "
+                "Execution stopped immediately and later stages never started. The admission "
+                "may already have been charged and completed local work remains in the "
+                "working directory."
+            ),
+            trace="StagesCodexSession checked the SDK turn status and reply identity.",
+            hint="Inspect local Codex configuration before retrying the stages run.",
+        )
+
+
+class StagesSettingsInvalid(CliError):
+    """The stages file did not validate against the stages contract."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the contract, never the submitted stage text.
+        super().__init__(
+            "The stages file must hold 1 to 10 valid stages.",
+            description=(
+                "The stages file was missing, was not JSON, or held a stage with a blank "
+                "name, prompt, or system prompt. It was rejected before credentials, "
+                "payment, or host execution, so no credits were spent. Fix the file and "
+                "retry."
+            ),
+            trace="StagesFile parsed the stages document before any launch plan was built.",
+            hint="Run 'vidbyte-cli runtime stages describe' for the expected shape.",
+        )

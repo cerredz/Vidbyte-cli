@@ -13,7 +13,7 @@ from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..lib.constants.runtime import AdmissionReason
 
@@ -84,6 +84,7 @@ class RuntimeLaunchPlan(BaseModel):
         "runtime.adversarial-team@1",
         "runtime.same-host-ensemble@1",
         "runtime.persistence@1",
+        "runtime.stages@1",
     ] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
@@ -159,4 +160,44 @@ class PersistenceResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     session_id: str
     continuation_turns: int
+    text: str
+
+
+class StageSpec(BaseModel):
+    """One caller-defined stage mapping to exactly one fresh Codex agent."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    name: str = Field(min_length=1, max_length=64)
+    prompt: str = Field(min_length=1, max_length=20_000)
+    system_prompt: str = Field(min_length=1, max_length=20_000)
+    model: str = Field(default="", max_length=128)
+    effort: str = Field(default="medium", max_length=32)
+    summary: str = Field(default="auto", max_length=32)
+    sandbox: str = Field(default="workspace-write", max_length=32)
+    approval: str = Field(default="auto_review", max_length=32)
+    personality: str = Field(default="none", max_length=32)
+    additional_context: str = Field(default="", max_length=20_000)
+
+    @field_validator("name", "prompt", "system_prompt")
+    @classmethod
+    def _reject_blank(cls, value: str) -> str:
+        # Whitespace-only stage text would burn a paid turn on nothing.
+        if not value.strip():
+            raise ValueError("must contain non-whitespace characters")
+        return value
+
+
+class StagesSettings(BaseModel):
+    """Bounded, frozen stages-primitive settings for the stages executor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    stages: tuple[StageSpec, ...] = Field(min_length=1, max_length=10)
+    parallel: bool = False
+
+
+class StagesResult(BaseModel):
+    """Ordered per-stage outputs with the final text last."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    stage_texts: tuple[str, ...]
     text: str

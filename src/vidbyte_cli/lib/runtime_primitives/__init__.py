@@ -8,6 +8,7 @@ from .executor import RuntimeExecutor
 from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
+from .stages import StagesCodexSession, StagesFile
 from .verification import RuntimeGrantVerifier
 
 __all__ = [
@@ -16,4 +17,6 @@ __all__ = [
     "RuntimeGrantVerifier",
     "RuntimeHostRegistry",
     "RuntimeLaunchPlanner",
+    "StagesCodexSession",
+    "StagesFile",
 ]

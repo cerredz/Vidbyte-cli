@@ -1,7 +1,8 @@
 """Execution boundary for admitted local runtime primitives.
 
-Persistence has an implementation; adversarial-team retains its explicit scaffold.
-Every process-launching path requires a matching deterministic admission verdict.
+Persistence and stages have implementations; adversarial-team retains its
+explicit scaffold. Every process-launching path requires a matching
+deterministic admission verdict.
 """
 
 from __future__ import annotations
@@ -12,8 +13,11 @@ from ...types.runtime import PersistenceResult as Result
 from ...types.runtime import PersistenceSettings as Tier
 from ...types.runtime import RuntimeAdmissionVerdict as Verdict
 from ...types.runtime import RuntimeLaunchPlan as Plan
+from ...types.runtime import StagesResult as Outcome
+from ...types.runtime import StagesSettings as Tune
 from ..errors.failures import RuntimeAdmissionNotVerified, RuntimeExecutionNotImplemented
 from .persistence import PersistentCodexSession as Session
+from .stages import StagesCodexSession as StageHost
 
 
 class RuntimeExecutor:
@@ -29,6 +33,13 @@ class RuntimeExecutor:
         self._require_verdict(plan, proof)
         if plan.capability_id != "runtime.persistence@1" or plan.host.value != "codex":
             raise RuntimeAdmissionNotVerified("persistence_plan_invalid")
+        return host.run(plan, tune)
+
+    def execute_stages(self, plan: Plan, tune: Tune, host: StageHost, proof: Verdict) -> Outcome:
+        # The stages cannot run until the one-cent stages admission is verified.
+        self._require_verdict(plan, proof)
+        if plan.capability_id != "runtime.stages@1" or plan.host.value != "codex":
+            raise RuntimeAdmissionNotVerified("stages_plan_invalid")
         return host.run(plan, tune)
 
     def _require_verdict(self, plan: Plan, verdict: Verdict | None) -> None:
