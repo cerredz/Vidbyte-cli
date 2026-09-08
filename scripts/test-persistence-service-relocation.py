@@ -9,6 +9,7 @@ a package with no `.md` files, or a `lib/` module reaching into `services/`.
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib
 import importlib.util
 import re
@@ -39,6 +40,14 @@ _PACKAGE = _ROOT / "src" / "vidbyte_cli"
 _OLD_PACKAGE = _PACKAGE / "lib" / "runtime_primitives"
 _NEW_PACKAGE = _PACKAGE / "services" / "persistence"
 _MOVED_MODULE = "vidbyte_cli.lib.runtime_primitives.persistence"
+
+# SHA-256 of each prompt as it stood in `lib/runtime_primitives/` before the move, over the
+# text the loader actually returns. Pinned rather than read from git so a shallow checkout
+# still proves the move copied bytes instead of rewriting prose.
+_PRE_MOVE_DIGESTS = {
+    "persistence_system": "5a22ea87899f05e28467c6b3f7105374e45468af897b350b4a1525621a59396b",
+    "persistence_turn": "372bbbdc250442a4f892379fc495221357320da62cd447bc6a34c765e7a42e24",
+}
 
 # A task deliberately built out of everything a naive renderer mishandles.
 _HOSTILE_TASK = "Fix {a} and %s and {{braces}}\r\nsecond line — café \\n literal  "
@@ -89,8 +98,17 @@ class RelocationContracts(unittest.TestCase):
     def test_shared_primitives_stayed_in_lib(self) -> None:
         # The split is the point: these five are shared and must not have travelled.
         names = {path.name for path in _python_files(_OLD_PACKAGE)}
-        expected = {"__init__.py", "executor.py", "gate.py", "hosts.py", "planner.py"}
-        self.assertEqual(names, expected | {"verification.py"})
+        self.assertEqual(
+            names,
+            {
+                "__init__.py",
+                "executor.py",
+                "gate.py",
+                "hosts.py",
+                "planner.py",
+                "verification.py",
+            },
+        )
 
     def test_no_source_or_script_names_the_old_module(self) -> None:
         # A patch target inside a string literal is invisible to imports and to mypy.
@@ -116,10 +134,13 @@ class LayeringContracts(unittest.TestCase):
                 parts = node.module.split(".")
                 if parts[0] == "vidbyte_cli" and len(parts) > 1:
                     roots.add(parts[1])
-            elif isinstance(node, ast.ImportFrom) and node.level:
-                # `...x` from a module `package_depth` levels below vidbyte_cli names `x`.
-                if node.level == package_depth and node.module:
+            elif isinstance(node, ast.ImportFrom) and node.level == package_depth:
+                # `...x` from a module `package_depth` levels below vidbyte_cli names `x`,
+                # and the bare `from ... import x` form names it in the aliases instead.
+                if node.module:
                     roots.add(node.module.split(".")[0])
+                else:
+                    roots.update(alias.name for alias in node.names)
         return roots
 
     def test_no_module_under_lib_imports_a_service(self) -> None:
@@ -148,8 +169,19 @@ class PromptContracts(unittest.TestCase):
         self.prompts = PersistencePrompts()
         self.directory = _NEW_PACKAGE / "prompts"
 
+    def test_both_prompts_still_match_their_pre_move_bytes(self) -> None:
+        # Comparing to the neighbouring file would pass even if the move rewrote the prose.
+        loaded = {
+            "persistence_system": self.prompts.system_prompt(),
+            "persistence_turn": self.prompts.turn_prompt("{{original_task}}"),
+        }
+        digests = {
+            name: hashlib.sha256(text.encode("utf-8")).hexdigest() for name, text in loaded.items()
+        }
+        self.assertEqual(digests, _PRE_MOVE_DIGESTS)
+
     def test_system_prompt_matches_the_file_on_disk(self) -> None:
-        # A whitespace change during the move would silently alter every paid run.
+        # The loader must read the package data, not carry a copy of its own.
         stored = (self.directory / "persistence_system.md").read_text(encoding="utf-8")
         self.assertEqual(self.prompts.system_prompt(), stored)
         self.assertIn("Preserve the user's intent and constraints", stored)

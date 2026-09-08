@@ -2,6 +2,7 @@
 
 The SDK owns transport and thread resumption. This adapter owns exact task input,
 turn limits, progress, and rejection of incomplete or changed-thread results.
+Every sentence a model reads comes from `prompts/`, never from a string literal here.
 """
 
 from __future__ import annotations
