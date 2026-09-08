@@ -26,6 +26,17 @@ Design documentation for the CLI. Every non-trivial change lands a design doc he
 
 One Markdown design doc per feature. The set traces the CLI's evolution — `harness-runtime-and-cli-scaffold.md` (the original scaffold), `python-cli-research-harness-program.md`, `live-api-host-and-key-header.md` (how the CLI addresses the live API and passes credentials), `login-key-verification.md`, `research-only-command-surface.md` and `research-production-api-surface.md` (the decision to ship only commands the API can actually answer). Start here before changing a command's shape.
 
+### `lint/`
+
+The repository's own agent-facing static analysis, modelled on `vidbyte/lint/` and
+`vidbyte-sdk/lint/`. It holds the contracts a generic linter cannot see — currently the
+depth of every command's and option's `--help` text — as independently selectable rules with
+a per-rule debt ratchet in `baseline.json`. `core/` owns discovery, the rule contract, the
+ratchet, execution, and reporting; `rules/` holds one module per rule; `README.md` is the
+authority on the rule catalogue and on how to add a rule. It never imports `vidbyte_cli` and
+never ships in the wheel. `scripts/run_ci.py` runs it as a source gate, so nothing here may
+be invoked from `.github/workflows/ci.yml` directly.
+
 ### `scripts/`
 
 Verification entry points, kept outside the package so they never ship in the wheel. `run_ci.py` is the canonical gate — the single command both a developer and GitHub Actions run, covering lint, type checks, tests, distribution build, and a clean-install smoke check of the built wheel. `smoke.py` and the targeted `test_login_key_verification.py` and `test_research_only_surface.py` scripts diagnose individual areas, but they never substitute for a full `run_ci.py` pass. If you change anything in `src/`, this is what has to go green.
@@ -73,6 +84,11 @@ This is the developer command reference for the repository's Python toolchain. I
 - `python -m mypy src`
   Runs strict mypy checks against the `vidbyte_cli` package configured in `pyproject.toml`.
   Params: `src` is the package root; keep this target aligned with the mypy configuration.
+- `python lint/run.py`
+  Runs the repository's own lint rules and ratchets each one against `lint/baseline.json`. It
+  exits non-zero only when a rule REGRESSED past its recorded allowance or ERRORED.
+  Params: `--rule <ID>` narrows to one rule while iterating, `--all` renders every known
+  finding instead of a summary line, `--format json` emits every finding for automation.
 - `python -m compileall -q src`
   Byte-compiles the source tree to catch syntax and import-compilation failures quickly.
   Params: `-q` suppresses successful-file output.
@@ -88,6 +104,10 @@ This is the developer command reference for the repository's Python toolchain. I
 - `python scripts/test_research_only_surface.py`
   Checks that the authored command surface matches the API-backed research scope and that removed commands are not still importable or documented.
   Params: none.
+- `python scripts/test-task-board.py`
+  Runs the task-board primitive's offline cases: window slicing, summary shapes, isolated
+  context, board input resolution, and the admission gate, with fakes only at the SDK turn.
+  Params: none; it does not call the live API or start a Codex process.
 - `python -m vidbyte_cli --help`
   Inspects the assembled command tree through the package entry point while debugging command registration or import-boundary changes.
   Params: add `--version` to check the package version path.

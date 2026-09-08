@@ -9,6 +9,7 @@ from .doctor import RuntimeDoctorCommand
 from .list import RuntimeListCommand
 from .persistence import PersistenceCommand
 from .same_host_ensemble import SameHostEnsembleCommand
+from .task_board import TaskBoardCommand
 
 __all__ = [
     "AdversarialTeamCommand",
@@ -16,4 +17,5 @@ __all__ = [
     "RuntimeDoctorCommand",
     "RuntimeListCommand",
     "SameHostEnsembleCommand",
+    "TaskBoardCommand",
 ]

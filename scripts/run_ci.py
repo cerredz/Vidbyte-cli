@@ -43,6 +43,8 @@ class CiRunner:
             ("ruff lint", (python, "-m", "ruff", "check", ".")),
             ("ruff format", (python, "-m", "ruff", "format", "--check", ".")),
             ("mypy strict", (python, "-m", "mypy", "src")),
+            # Repository-specific contracts a generic analyzer cannot see; see lint/README.md.
+            ("cli lint suite", (python, "lint/run.py")),
             ("byte compilation", (python, "-m", "compileall", "-q", "src")),
             ("offline smoke", (python, "scripts/smoke.py")),
             # CPU-only spec of retry, problem mapping, and config precedence.
@@ -56,6 +58,8 @@ class CiRunner:
                 (python, "scripts/test-layered-runtime-admission-gate.py"),
             ),
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
+            # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
+            ("task board", (python, "scripts/test-task-board.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):
@@ -96,10 +100,10 @@ class CiRunner:
             sys.stderr.write(f"Expected one wheel, found {len(wheels)}.\n")
             return 1
         with zipfile.ZipFile(wheels[0]) as archive:
-            for name in ("continuation.md", "persistence_system.md"):
+            for name in ("continuation.md", "persistence_system.md", "task_board_system.md"):
                 prompt = f"vidbyte_cli/lib/runtime_primitives/{name}"
                 if prompt not in archive.namelist() or not archive.read(prompt):
-                    sys.stderr.write(f"The wheel is missing the persistence prompt {name}.\n")
+                    sys.stderr.write(f"The wheel is missing the runtime prompt {name}.\n")
                     return 1
         environment = workspace / "installed"
         venv.EnvBuilder(with_pip=True).create(environment)
