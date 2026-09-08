@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..lib.constants.runtime import AdmissionReason
+from ..lib.constants.runtime import AdmissionReason, StagesLimit
 
 
 class RuntimeHost(StrEnum):
@@ -302,20 +302,167 @@ class PersistenceResult(BaseModel):
     text: str
 
 
+class StageSandbox(StrEnum):
+    """Filesystem and network reach one stage's agent runs under."""
+
+    READ_ONLY = "read-only"
+    WORKSPACE_WRITE = "workspace-write"
+    FULL_ACCESS = "full-access"
+
+
+class StageEffort(StrEnum):
+    """How much reasoning one stage's agent spends before it answers."""
+
+    NONE = "none"
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
+
+
+class StageSummary(StrEnum):
+    """How much of its reasoning one stage's agent reports back."""
+
+    NONE = "none"
+    AUTO = "auto"
+    CONCISE = "concise"
+    DETAILED = "detailed"
+
+
+class StageApproval(StrEnum):
+    """What one stage's agent does when an action needs approval."""
+
+    AUTO_REVIEW = "auto_review"
+    DENY_ALL = "deny_all"
+
+
+class StagePersonality(StrEnum):
+    """Response personality one stage's agent writes in."""
+
+    NONE = "none"
+    FRIENDLY = "friendly"
+    PRAGMATIC = "pragmatic"
+
+
 class StageSpec(BaseModel):
     """One caller-defined stage mapping to exactly one fresh Codex agent."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    name: str = Field(min_length=1, max_length=64)
-    prompt: str = Field(min_length=1, max_length=20_000)
-    system_prompt: str = Field(min_length=1, max_length=20_000)
-    model: str = Field(default="", max_length=128)
-    effort: str = Field(default="medium", max_length=32)
-    summary: str = Field(default="auto", max_length=32)
-    sandbox: str = Field(default="workspace-write", max_length=32)
-    approval: str = Field(default="auto_review", max_length=32)
-    personality: str = Field(default="none", max_length=32)
-    additional_context: str = Field(default="", max_length=20_000)
+    name: str = Field(
+        min_length=1,
+        max_length=64,
+        description=(
+            "A short label for this stage, used as the agent's name and in progress output. It "
+            "identifies the stage in results and in any failure, so make it say what the stage "
+            "does rather than where it sits in the order. Names are not required to be unique "
+            "and are never sent to the backend with the admission request. Position in the "
+            "stage list, not this name, is what decides when a stage runs."
+        ),
+    )
+    prompt: str = Field(
+        min_length=1,
+        max_length=20_000,
+        description=(
+            "The turn prompt this stage's agent is given, and the only instruction it receives "
+            "for the work itself. The token {{previous}} is replaced before the turn starts: in "
+            "sequential mode it becomes the previous stage's full output, and for the first "
+            "stage, or for every stage in parallel mode, it becomes the top-level task. Write "
+            "it as a complete instruction, because the agent has no thread history to fall back "
+            "on. A prompt that is empty or only whitespace is rejected before admission."
+        ),
+    )
+    system_prompt: str = Field(
+        min_length=1,
+        max_length=20_000,
+        description=(
+            "The system prompt that shapes this stage's agent for its single turn. Each stage "
+            "gets its own, which is the whole point of staging: an auditing stage and an "
+            "implementing stage need different standing instructions, and one shared prompt "
+            "serves neither well. It is applied when the agent is built, before the turn runs, "
+            "and never carries over to another stage. Like the turn prompt, it may not be empty "
+            "or whitespace only."
+        ),
+    )
+    model: str = Field(
+        default="",
+        max_length=128,
+        description=(
+            "The model id this stage's agent runs on, such as gpt-5.1-codex. Leave it empty to "
+            "accept whatever model the installed Codex is configured to use, which is the right "
+            "choice unless a stage genuinely needs a different one. This is the one stage "
+            "setting with an open value set, so an unrecognized id is not caught locally and "
+            "fails inside Codex after admission has already been charged. Set it per stage when "
+            "a cheap model can do the early stages and only the last stage needs a strong one."
+        ),
+    )
+    effort: StageEffort = Field(
+        default=StageEffort.MEDIUM,
+        description=(
+            "How much reasoning this stage's agent spends before it answers, from none through "
+            "xhigh. Higher effort costs more tokens on your own OpenAI account and takes longer, "
+            "and it is the setting that most changes what a stage is capable of. Analysis and "
+            "planning stages usually justify high; mechanical stages rarely do. The value is one "
+            "of the closed set the CLI accepts, so a misspelling fails at parse time rather than "
+            "silently falling back to a default."
+        ),
+    )
+    summary: StageSummary = Field(
+        default=StageSummary.AUTO,
+        description=(
+            "How much of its own reasoning this stage's agent reports alongside its answer. auto "
+            "lets Codex decide, none suppresses the summary entirely, and concise and detailed "
+            "ask for progressively more. This affects what you read, not what the agent does, so "
+            "it changes neither the result nor the price of the run. Choose detailed when the "
+            "point of a stage is to show its reasoning to a later stage. The value is drawn from "
+            "a closed set the CLI validates before anything is charged."
+        ),
+    )
+    sandbox: StageSandbox = Field(
+        default=StageSandbox.WORKSPACE_WRITE,
+        description=(
+            "How far this stage's agent may reach into the filesystem: read-only, "
+            "workspace-write, or full-access. Sandboxing is enforced by Codex itself rather than "
+            "by this CLI, so it is a real boundary and not a hint. Give read-only to stages that "
+            "only inspect or plan, and keep workspace-write for the stages that actually change "
+            "files. full-access exists for the rare stage that must reach outside the working "
+            "directory, and it is never the right default for an unattended run."
+        ),
+    )
+    approval: StageApproval = Field(
+        default=StageApproval.AUTO_REVIEW,
+        description=(
+            "What this stage's agent does when an action needs approval and no person is there "
+            "to give it. auto_review lets Codex review and proceed on its own, which is what "
+            "keeps an unattended staged run moving. deny_all refuses every such action instead, "
+            "which is the safe choice for a stage that should only ever read. Because a staged "
+            "run is not interactive, neither value ever prompts you. Both are validated against "
+            "a closed set before the wallet is touched."
+        ),
+    )
+    personality: StagePersonality = Field(
+        default=StagePersonality.NONE,
+        description=(
+            "The response personality this stage's agent writes in: none, friendly, or "
+            "pragmatic. It changes tone and framing only, never capability, tool use, or "
+            "sandboxing. It is worth setting when a stage's output is read by a person and worth "
+            "leaving at none when the output is consumed by the next stage. Like the other "
+            "closed-set settings, an unrecognized value is rejected at parse time. Each stage "
+            "carries its own, so stages need not agree."
+        ),
+    )
+    additional_context: str = Field(
+        default="",
+        max_length=20_000,
+        description=(
+            "Extra turn-scoped context handed to this stage's agent alongside its prompt, for "
+            "material that is reference rather than instruction. It is applied to this stage "
+            "only and never reaches another stage, so shared context has to be repeated on each "
+            "stage that needs it. Leave it empty when the prompt already says everything. It "
+            "counts against the same token budget the prompt does, billed to your own OpenAI "
+            "account."
+        ),
+    )
 
     @field_validator("name", "prompt", "system_prompt")
     @classmethod
@@ -330,8 +477,30 @@ class StagesSettings(BaseModel):
     """Bounded, frozen stages-primitive settings for the stages executor."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    stages: tuple[StageSpec, ...] = Field(min_length=1, max_length=10)
-    parallel: bool = False
+    stages: tuple[StageSpec, ...] = Field(
+        min_length=1,
+        max_length=StagesLimit.MAX_STAGES,
+        description=(
+            "The ordered stages of this run, where entry i is the complete configuration for "
+            "the agent that runs stage i. Every stage gets a brand-new agent that is discarded "
+            "when its turn ends, so no thread state, no tool state, and no history ever crosses "
+            "a stage boundary. Order is meaningful in sequential mode and ignored in parallel "
+            "mode. A run holds between 1 and 25 stages, and the one-cent admission covers all "
+            "of them however many there are."
+        ),
+    )
+    parallel: bool = Field(
+        default=False,
+        description=(
+            "Whether the stages run all at once instead of one after another. Sequential, the "
+            "default, awaits each stage before starting the next and substitutes the finished "
+            "output into the next stage's {{previous}} token, which is what lets stages build "
+            "on each other. Parallel starts every stage together with asyncio.gather and gives "
+            "each one the top-level task as {{previous}}, so stages must not depend on each "
+            "other's results. Parallel finishes sooner but runs every stage's model calls "
+            "concurrently against your own OpenAI account."
+        ),
+    )
 
 
 class StagesResult(BaseModel):

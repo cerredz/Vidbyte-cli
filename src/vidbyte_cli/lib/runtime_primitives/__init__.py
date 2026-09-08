@@ -8,7 +8,7 @@ from .executor import RuntimeExecutor
 from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
-from .stages import StagesCodexSession, StagesFile
+from .stages import StagesCodexSession
 from .task_board import TaskBoardCodexSession, TaskBoardSummarizer
 from .verification import RuntimeGrantVerifier
 
@@ -21,5 +21,4 @@ __all__ = [
     "TaskBoardCodexSession",
     "TaskBoardSummarizer",
     "StagesCodexSession",
-    "StagesFile",
 ]

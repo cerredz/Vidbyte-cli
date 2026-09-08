@@ -121,8 +121,21 @@ class RuntimePaymentConfig:
 class StagesLimit(IntEnum):
     """Execution bounds for the stages primitive."""
 
-    MAX_STAGES = 10
+    # Review of PR #36 raised this ceiling from 10 to 25: a staged skill such as a design-doc
+    # flow decomposes further than the original estimate, and every stage past the ceiling has
+    # to be split across two paid runs. The admission stays one cent however many stages run.
+    MAX_STAGES = 25
     TURN_TIMEOUT_SECONDS = 3600
+
+
+class StagesCodexConfig(StrEnum):
+    """Child-only provider configuration; no native login state is changed."""
+
+    PROVIDER = 'model_provider="vidbyte_openai"'
+    NAME = 'model_providers.vidbyte_openai.name="OpenAI"'
+    BASE_URL = 'model_providers.vidbyte_openai.base_url="https://api.openai.com/v1"'
+    ENV_KEY = 'model_providers.vidbyte_openai.env_key="OPENAI_API_KEY"'
+    WIRE_API = 'model_providers.vidbyte_openai.wire_api="responses"'
 
 
 class StagesProgress(StrEnum):

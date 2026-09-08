@@ -31,9 +31,9 @@ Runtime primitives are Vidbyte orchestration algorithms executed through the use
 
 ## 4. Requirements
 
-- `R1:` `vidbyte runtime stages run TASK --stages-file FILE [--parallel|--sequential] [--idempotency-key KEY]` plans capability `runtime.stages@1` on host `codex` and charges exactly 1 cent.
-- `R2:` Stages file entries validate: `name`/`system_prompt`/`prompt` non-empty; `model`, `effort`, `summary`, `sandbox`, `approval`, `personality` drawn from the SDK enums; at most 10 stages; prompts bounded like tasks (1–20,000 chars).
-- `R3:` `stages add/list/describe` are offline (no admission, no agent launch) and round-trip the same schema `run` consumes.
+- `R1:` `vidbyte runtime stages run TASK --stage-prompt P --stage-system-prompt S [...] [--parallel|--sequential] [--idempotency-key KEY]` plans capability `runtime.stages@1` on host `codex` and charges exactly 1 cent. Stages are described entirely on the command line; there is no stages file.
+- `R2:` Stage options validate: `system_prompt`/`prompt` non-empty; `effort`, `summary`, `sandbox`, `approval`, `personality` drawn from CLI-owned enums enforced by `click.Choice`; at most 25 stages; prompts bounded like tasks (1–20,000 chars). Every repeated `--stage-*` option is given once per stage or omitted entirely, and a partial list is a typed count mismatch.
+- `R3:` `stages describe` is offline (no admission, no agent launch) and names every `--stage-*` option `run` accepts with its legal values.
 - `R4:` The runner constructs N agents for N stages, enforces completed-status plus non-empty `final_response` per stage, enforces same-thread continuity **within** a stage's single turn, and never shares thread state **across** stages.
 - `R5:` Verification order is fixed: idempotency-key format, launch plan, host availability, SDK `prepare()` (free) → `admit_stages` → `verify_grant` → `verify_online` → executor (which re-checks the verdict).
 - `R6:` Failures are typed `CliError` subclasses with agent-native `description`/`trace`/`hint`; no module-level helper functions; no model-addressed prose inside `.py` files (stage text comes from the caller).
@@ -57,7 +57,7 @@ Vidbyte owns topology, admission, and result normalization. Codex owns each stag
 
 ## 6. Detailed Design
 
-**`types/runtime.py`:** add `"runtime.stages@1"` to the `RuntimeLaunchPlan.capability_id` literal; add frozen `StageEffort/Sandbox/...` string contracts or reuse plain validated strings; add `StageSpec` (name, prompt, system_prompt, model, effort, summary, sandbox, approval, personality, additional_context, inputs, subagents), `StagesSettings` (`stages: tuple[StageSpec,...]` min 1 max 10, `parallel: bool = False`), `StagesResult` (`stage_texts`, `text`).
+**`types/runtime.py`:** add `"runtime.stages@1"` to the `RuntimeLaunchPlan.capability_id` literal; add CLI-owned `StageSandbox/StageEffort/StageSummary/StageApproval/StagePersonality` `StrEnum`s that the command layer enforces with `click.Choice`, so the adapter converts by value instead of re-parsing free strings; add `StageSpec` (name, prompt, system_prompt, model, effort, summary, sandbox, approval, personality, additional_context, inputs, subagents), `StagesSettings` (`stages: tuple[StageSpec,...]` min 1 max `StagesLimit.MAX_STAGES`, `parallel: bool = False`), `StagesResult` (`stage_texts`, `text`).
 
 **`lib/runtime_primitives/planner.py`:** extend `Product` literal with `"runtime.stages@1"`. No logic change.
 
@@ -65,13 +65,13 @@ Vidbyte owns topology, admission, and result normalization. Codex owns each stag
 
 **`lib/api/endpoints/runtime.py`:** add `STAGES_ADMISSION_PATH = "/api/x402/runtime/stages/admissions"` and `admit_stages(request, key)`.
 
-**`lib/constants/runtime.py`:** add `StagesLimit` (`MAX_STAGES=10`, `TURN_TIMEOUT_SECONDS=3600`), `StagesProgress` (PREPARING, CREDENTIALS, ADMISSION one-cent copy, VERIFYING, ADMITTED, STAGE_STARTING, STAGE_COMPLETE, COMPLETE). No secrets or prompt prose here.
+**`lib/constants/runtime.py`:** add `StagesLimit` (`MAX_STAGES=25`, `TURN_TIMEOUT_SECONDS=3600`), `StagesCodexConfig`, `StagesProgress` (PREPARING, CREDENTIALS, ADMISSION one-cent copy, VERIFYING, ADMITTED, STAGE_STARTING, STAGE_COMPLETE, COMPLETE). No secrets or prompt prose here.
 
-**`lib/runtime_primitives/stages.py` (new):** class `StagesCodexSession(environment, progress)` with `prepare(plan, settings)` building `list[CodexHarnessAgent]`, `run(plan, settings)` dispatching to `_run_sequential` / `_run_parallel`, `_turn(agent, prompt)` with `asyncio.timeout`, `_require_completed(reply)` mirroring persistence's status/thread checks, `_to_settings(plan, spec)` translating one spec to `CodexHarnessAgentSettings` (client cwd/bin/env + provider overrides; thread/turn enums; subagents table). Class `StagesFile` with `load(path)` / `append(path, spec)` / `describe(spec)` for the offline subcommands.
+**`lib/runtime_primitives/stages.py` (new):** class `StagesCodexSession(environment, progress)` with `prepare(plan, settings)` building `list[CodexHarnessAgent]`, `run(plan, settings)` dispatching to `_run_sequential` / `_run_parallel`, `_turn(agent, prompt)` with `asyncio.timeout`, `_require_completed(reply)` mirroring persistence's status/thread checks, `_to_settings(plan, spec)` translating one spec to `CodexHarnessAgentSettings` (client cwd/bin/env + provider overrides; thread/turn enums; subagents table). No file loader: the command layer assembles `StagesSettings` from repeated options.
 
 **`lib/runtime_primitives/executor.py`:** add `execute_stages(plan, tune, host, proof)` that requires the verdict, checks `capability_id == "runtime.stages@1"` and `host == codex`, then delegates to `host.run`.
 
-**`commands/runtime/stages.py` (new):** class `StagesCommand` registering a `click.Group(name="stages")` with subcommands `run/add/list/describe`. `run` follows `PersistenceCommand.execute` step order exactly (key format `^[A-Za-z0-9._:-]{8,128}$`, plan, settings load, credentials sanitize with empty-override + `OPENAI_API_KEY` inject, prepare, admit, token check, verify, verdict check, execute, `OutputDocument(kind="runtime.stages")`). `add` appends one stage from flags; `list` prints index/name/model/effort/sandbox; `describe` prints every tunable with SDK mapping and legal values.
+**`commands/runtime/stages.py` (new):** class `StagesCommand` registering a `click.Group(name="stages")` with subcommands `run/describe`. `run` follows `PersistenceCommand.execute` step order exactly (key format `^[A-Za-z0-9._:-]{8,128}$`, plan, settings load, credentials sanitize with empty-override + `OPENAI_API_KEY` inject, prepare, admit, token check, verify, verdict check, execute, `OutputDocument(kind="runtime.stages")`). Stages are assembled by position from repeated `--stage-*` options, so occurrence i of every option configures stage i; `describe` prints every option with its legal values. `execute_run` carries a comment per ordered step, enforced by lint rule C002.
 
 **`lib/errors/failures.py`:** add `StagesHostFailed` and `StagesSettingsInvalid` as `CliError` subclasses (static prose only).
 
@@ -91,8 +91,8 @@ One new client method: `RuntimeEndpoints.admit_stages` → `POST /api/x402/runti
 
 ## 10. Testing Plan
 
-- [Edge Case] Empty stages file (0 stages) is rejected before planning with usage error.
-- [Edge Case] 11 stages rejected at `max_length=10`; 10 stages accepted.
+- [Edge Case] A run with no `--stage-prompt` (0 stages) is rejected before planning with a usage error.
+- [Edge Case] 26 stages rejected at `max_length=25`; 25 stages accepted.
 - [Edge Case] Blank stage prompt and blank system_prompt each rejected without admission.
 - [Edge Case] `{{previous}}` in stage 0 resolves to the top-level task, not empty.
 - [Hidden Failure] Backend grant for `runtime.persistence@1` presented to a stages plan yields `CAPABILITY_MISMATCH` and no agent runs.
@@ -122,5 +122,5 @@ Land backend PR first, then CLI PR. CLI rollout is additive: no existing command
 ## 14. Alternatives Considered
 
 - **One agent with fork per stage:** rejected — forks inherit thread history, which reintroduces the context pollution stages exists to avoid, and `output_schema` is agent-scoped so mixed shapes need separate agents anyway.
-- **Single `--stages-file` flag without subcommands:** rejected — the request explicitly asks for discoverable subcommands so agents see every tunable in `--help`.
+- **A `--stages-file` JSON document:** shipped in the first revision and rejected in review of PR #36 — an agent driving this CLI has to be able to build a whole staged run from argv without first writing a file to disk, and per-option `--help` text documents the surface better than a schema does.
 - **Backend-executed stages:** rejected — runtime primitives execute caller-locally under caller credentials by design; the backend only admits and verifies.

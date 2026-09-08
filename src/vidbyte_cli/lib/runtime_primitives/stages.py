@@ -1,21 +1,21 @@
 """Runs caller-defined stages with one fresh Codex agent per stage.
 
-The SDK owns transport and thread identity. This adapter owns stage fan-out,
-sequential handoff through the previous reply, and rejection of incomplete
-or cross-stage-reused results.
+The SDK owns transport and thread identity. This adapter owns stage fan-out, sequential
+handoff through the previous reply, and rejection of incomplete or cross-stage-reused
+results. Every stage setting arrives here already validated as a CLI enum, so this module
+converts rather than parses: the closed value sets are enforced at the command layer where
+Click can reject a bad word before the wallet is ever touched.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Callable, Mapping
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...types.runtime import RuntimeLaunchPlan as Plan
 from ...types.runtime import StageSpec, StagesResult, StagesSettings
-from ..constants.runtime import PersistenceCodexConfig as CodexConfig
+from ..constants.runtime import StagesCodexConfig as CodexConfig
 from ..constants.runtime import StagesLimit, StagesProgress
 from ..errors.failures import StagesHostFailed, StagesSettingsInvalid
 
@@ -23,46 +23,6 @@ if TYPE_CHECKING:
     from vidbyte.agents.codex import CodexHarnessAgent
     from vidbyte.agents.types import AgentMessage
     from vidbyte.lib.dataclasses.codex import CodexHarnessAgentSettings
-    from vidbyte.lib.enums.codex import (
-        CodexApprovalMode,
-        CodexPersonality,
-        CodexReasoningEffort,
-        CodexReasoningSummary,
-        CodexSandbox,
-    )
-
-
-class StagesFile:
-    """Loads and describes the offline stages document consumed by run."""
-
-    def load(self, path: str) -> StagesSettings:
-        # Parses JSON and validates it as frozen stages settings.
-        try:
-            raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise StagesSettingsInvalid() from error
-        try:
-            return StagesSettings.model_validate(raw)
-        except ValueError as error:
-            raise StagesSettingsInvalid() from error
-
-    def build_settings(self, specs: list[StageSpec], parallel: bool) -> StagesSettings:
-        # Validates caller-built specs through the same frozen contract.
-        try:
-            return StagesSettings(stages=tuple(specs), parallel=parallel)
-        except ValueError as error:
-            raise StagesSettingsInvalid() from error
-
-    def describe(self) -> str:
-        # Returns agent-facing help naming every tunable and its mapping.
-        return (
-            "Each stages[] entry maps to one fresh CodexHarnessAgent: "
-            "name/system_prompt/prompt (required text), model/effort/"
-            "summary/sandbox/approval/personality (native Codex controls), "
-            "additional_context (turn-scoped context). "
-            "parallel=false runs in order with {{previous}} as prior output; "
-            "parallel=true runs all stages at once with asyncio.gather."
-        )
 
 
 class StagesCodexSession:
@@ -138,10 +98,15 @@ class StagesCodexSession:
             raise StagesHostFailed()
         if not data.thread_id.strip():
             raise StagesHostFailed()
-        return reply.content
+        return str(reply.content)
 
     def _to_settings(self, plan: Plan, spec: StageSpec) -> CodexHarnessAgentSettings:
-        # Translates one stage spec to validated harness agent settings.
+        # Translates one stage spec to validated harness agent settings. Every closed-set value
+        # is already a CLI enum whose members are a subset of the SDK's, so each one converts by
+        # value with no lookup table and no alias handling: review of PR #36 asked for the legal
+        # words to be defined and enforced as enums in the command layer rather than re-parsed
+        # from free strings here. A ValueError can still surface if the pinned SDK drops a
+        # member, and it is reported as invalid settings rather than as a host failure.
         from vidbyte.lib.dataclasses.codex import (
             CodexAgentSettings,
             CodexClientSettings,
@@ -149,28 +114,38 @@ class StagesCodexSession:
             CodexThreadSettings,
             CodexTurnSettings,
         )
+        from vidbyte.lib.enums.codex import (
+            CodexApprovalMode,
+            CodexPersonality,
+            CodexReasoningEffort,
+            CodexReasoningSummary,
+            CodexSandbox,
+        )
 
-        client = CodexClientSettings(
-            codex_bin=str(plan.executable),
-            cwd=str(plan.working_directory),
-            env=self._environment,
-            config_overrides=tuple(s.value for s in CodexConfig),
-        )
-        thread = CodexThreadSettings(
-            model=spec.model,
-            sandbox=self._sandbox(spec.sandbox),
-            approval_mode=self._approval(spec.approval),
-            personality=self._personality(spec.personality),
-        )
-        turn = CodexTurnSettings(
-            model=spec.model,
-            effort=self._effort(spec.effort),
-            summary=self._summary(spec.summary),
-            sandbox=self._sandbox(spec.sandbox),
-            approval_mode=self._approval(spec.approval),
-            personality=self._personality(spec.personality),
-        )
         try:
+            sandbox = CodexSandbox(spec.sandbox.value)
+            approval = CodexApprovalMode(spec.approval.value)
+            personality = CodexPersonality(spec.personality.value)
+            client = CodexClientSettings(
+                codex_bin=str(plan.executable),
+                cwd=str(plan.working_directory),
+                env=self._environment,
+                config_overrides=tuple(setting.value for setting in CodexConfig),
+            )
+            thread = CodexThreadSettings(
+                model=spec.model,
+                sandbox=sandbox,
+                approval_mode=approval,
+                personality=personality,
+            )
+            turn = CodexTurnSettings(
+                model=spec.model,
+                effort=CodexReasoningEffort(spec.effort.value),
+                summary=CodexReasoningSummary(spec.summary.value),
+                sandbox=sandbox,
+                approval_mode=approval,
+                personality=personality,
+            )
             return CodexHarnessAgentSettings(
                 name=spec.name,
                 system_prompt=spec.system_prompt,
@@ -178,77 +153,4 @@ class StagesCodexSession:
                 codex=CodexAgentSettings(client=client, thread=thread, turn=turn),
             )
         except ValueError as error:
-            raise StagesSettingsInvalid() from error
-
-    def _sandbox(self, value: str) -> CodexSandbox:
-        # Maps CLI sandbox words to the SDK enum without accepting aliases.
-        from vidbyte.lib.enums.codex import CodexSandbox
-
-        mapping: dict[str, CodexSandbox] = {
-            "read-only": CodexSandbox.READ_ONLY,
-            "workspace-write": CodexSandbox.WORKSPACE_WRITE,
-            "full-access": CodexSandbox.FULL_ACCESS,
-        }
-        try:
-            return mapping[value.strip().lower()]
-        except KeyError as error:
-            raise StagesSettingsInvalid() from error
-
-    def _effort(self, value: str) -> CodexReasoningEffort:
-        # Maps CLI effort words to the SDK reasoning-effort enum.
-        from vidbyte.lib.enums.codex import CodexReasoningEffort
-
-        mapping: dict[str, CodexReasoningEffort] = {
-            "none": CodexReasoningEffort.NONE,
-            "minimal": CodexReasoningEffort.MINIMAL,
-            "low": CodexReasoningEffort.LOW,
-            "medium": CodexReasoningEffort.MEDIUM,
-            "high": CodexReasoningEffort.HIGH,
-            "xhigh": CodexReasoningEffort.XHIGH,
-        }
-        try:
-            return mapping[value.strip().lower()]
-        except KeyError as error:
-            raise StagesSettingsInvalid() from error
-
-    def _summary(self, value: str) -> CodexReasoningSummary:
-        # Maps CLI summary words to the SDK reasoning-summary enum.
-        from vidbyte.lib.enums.codex import CodexReasoningSummary
-
-        mapping: dict[str, CodexReasoningSummary] = {
-            "none": CodexReasoningSummary.NONE,
-            "auto": CodexReasoningSummary.AUTO,
-            "concise": CodexReasoningSummary.CONCISE,
-            "detailed": CodexReasoningSummary.DETAILED,
-        }
-        try:
-            return mapping[value.strip().lower()]
-        except KeyError as error:
-            raise StagesSettingsInvalid() from error
-
-    def _approval(self, value: str) -> CodexApprovalMode:
-        # Maps CLI approval words to the SDK approval-mode enum.
-        from vidbyte.lib.enums.codex import CodexApprovalMode
-
-        mapping: dict[str, CodexApprovalMode] = {
-            "auto_review": CodexApprovalMode.AUTO_REVIEW,
-            "deny_all": CodexApprovalMode.DENY_ALL,
-        }
-        try:
-            return mapping[value.strip().lower()]
-        except KeyError as error:
-            raise StagesSettingsInvalid() from error
-
-    def _personality(self, value: str) -> CodexPersonality:
-        # Maps CLI personality words to the SDK personality enum.
-        from vidbyte.lib.enums.codex import CodexPersonality
-
-        mapping: dict[str, CodexPersonality] = {
-            "none": CodexPersonality.NONE,
-            "friendly": CodexPersonality.FRIENDLY,
-            "pragmatic": CodexPersonality.PRAGMATIC,
-        }
-        try:
-            return mapping[value.strip().lower()]
-        except KeyError as error:
             raise StagesSettingsInvalid() from error

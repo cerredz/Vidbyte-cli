@@ -1738,7 +1738,7 @@ class StagesHostFailed(CliError):
 
 
 class StagesSettingsInvalid(CliError):
-    """The stages file did not validate against the stages contract."""
+    """The supplied stage options did not validate against the stages contract."""
 
     code = CliErrorCode.INVALID_ARGUMENT
     exit_status = ExitCode.USAGE
@@ -1746,15 +1746,39 @@ class StagesSettingsInvalid(CliError):
     def __init__(self) -> None:
         # Reports only the contract, never the submitted stage text.
         super().__init__(
-            "The stages file must hold 1 to 10 valid stages.",
+            "The run must describe 1 to 25 valid stages.",
             description=(
-                "The stages file was missing, was not JSON, or held a stage with a blank "
+                "No stage was given, more than 25 were given, or a stage carried a blank "
                 "name, prompt, or system prompt. It was rejected before credentials, "
-                "payment, or host execution, so no credits were spent. Fix the file and "
-                "retry."
+                "payment, or host execution, so no credits were spent. Give each stage at "
+                "least a --stage-prompt and a --stage-system-prompt and retry."
             ),
-            trace="StagesFile parsed the stages document before any launch plan was built.",
-            hint="Run 'vidbyte-cli runtime stages describe' for the expected shape.",
+            trace="StagesOptions validated the stage options before any launch plan was built.",
+            hint="Run 'vidbyte-cli runtime stages describe' for every accepted stage option.",
+        )
+
+
+class StagesOptionCountMismatch(CliError):
+    """Per-stage options were repeated a different number of times than the stages."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Names the alignment contract without quoting any submitted stage text.
+        super().__init__(
+            "Every repeated --stage-* option must be given once per stage, or not at all.",
+            description=(
+                "Stages are assembled by position: the first --stage-prompt, the first "
+                "--stage-system-prompt, and the first occurrence of every other --stage-* "
+                "option describe stage 1, the second occurrences describe stage 2, and so "
+                "on. One option repeated a different number of times than --stage-prompt "
+                "leaves the run ambiguous, so it is rejected before payment rather than "
+                "guessed at. An option omitted entirely is not a mismatch: every stage then "
+                "takes that setting's default."
+            ),
+            trace="StagesOptions compared each repeated option list against the prompt count.",
+            hint="Repeat each --stage-* option exactly as many times as --stage-prompt.",
         )
 
 

@@ -6,18 +6,24 @@ PASS/FAIL and the script exits non-zero when any case fails.
 
 from __future__ import annotations
 
-import json
 import sys
-import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from vidbyte_cli.commands.runtime.stages import StagesCommand
+from vidbyte_cli.lib.errors.failures import StagesOptionCountMismatch, StagesSettingsInvalid
 from vidbyte_cli.lib.runtime_primitives.gate import RuntimeAdmissionGate
-from vidbyte_cli.lib.runtime_primitives.stages import StagesCodexSession, StagesFile
-from vidbyte_cli.types.runtime import RuntimeHost, StageSpec, StagesSettings
+from vidbyte_cli.lib.runtime_primitives.stages import StagesCodexSession
+from vidbyte_cli.types.runtime import (
+    RuntimeHost,
+    StageEffort,
+    StageSandbox,
+    StageSpec,
+    StagesSettings,
+)
 
 
 class CaseRunner:
@@ -78,24 +84,28 @@ def spec(i: int) -> StageSpec:
 
 
 class EdgeCases:
-    """Boundary inputs around stage counts, blanks, and files."""
+    """Boundary inputs around stage counts, blanks, and CLI option alignment."""
 
     def __init__(self, runner: CaseRunner) -> None:
         # Keeps one shared runner across all edge cases.
         self._runner = runner
+        self._command = StagesCommand()
 
     def run_all(self) -> None:
         # Runs every edge case in file order.
         self._empty_rejected()
-        self._eleven_rejected()
-        self._ten_accepted()
+        self._twenty_six_rejected()
+        self._twenty_five_accepted()
         self._blank_prompt_rejected()
         self._blank_system_rejected()
         self._previous_resolves()
-        self._missing_file_rejected()
-        self._malformed_json_rejected()
-        self._blank_in_file_rejected()
-        self._parallel_round_trip()
+        self._no_prompt_rejected()
+        self._missing_system_rejected()
+        self._count_mismatch_rejected()
+        self._omitted_options_default()
+        self._options_align_by_position()
+        self._unknown_effort_rejected()
+        self._parallel_flag_carried()
 
     def _empty_rejected(self) -> None:
         # Zero stages must fail validation.
@@ -105,21 +115,21 @@ class EdgeCases:
         except ValueError:
             self._runner.check("[Edge Case] empty stages rejected", True)
 
-    def _eleven_rejected(self) -> None:
-        # Eleven stages exceed the max of ten.
+    def _twenty_six_rejected(self) -> None:
+        # Twenty-six stages exceed the reviewed ceiling of twenty-five.
         try:
-            StagesSettings(stages=tuple(spec(i) for i in range(11)), parallel=False)
-            self._runner.check("[Edge Case] 11 stages rejected", False)
+            StagesSettings(stages=tuple(spec(i) for i in range(26)), parallel=False)
+            self._runner.check("[Edge Case] 26 stages rejected", False)
         except ValueError:
-            self._runner.check("[Edge Case] 11 stages rejected", True)
+            self._runner.check("[Edge Case] 26 stages rejected", True)
 
-    def _ten_accepted(self) -> None:
-        # Ten stages exactly fill the allowed range.
+    def _twenty_five_accepted(self) -> None:
+        # Twenty-five stages exactly fill the allowed range.
         try:
-            StagesSettings(stages=tuple(spec(i) for i in range(10)), parallel=False)
-            self._runner.check("[Edge Case] 10 stages accepted", True)
+            StagesSettings(stages=tuple(spec(i) for i in range(25)), parallel=False)
+            self._runner.check("[Edge Case] 25 stages accepted", True)
         except ValueError:
-            self._runner.check("[Edge Case] 10 stages accepted", False)
+            self._runner.check("[Edge Case] 25 stages accepted", False)
 
     def _blank_prompt_rejected(self) -> None:
         # Whitespace-only prompts would burn a paid turn.
@@ -142,51 +152,90 @@ class EdgeCases:
         replaced = "Write it. Input: {{previous}}".replace("{{previous}}", "task")
         self._runner.check("[Edge Case] previous resolves", replaced == "Write it. Input: task")
 
-    def _missing_file_rejected(self) -> None:
-        # A missing path must fail before any planning.
-        with tempfile.TemporaryDirectory() as tmp:
-            try:
-                StagesFile().load(str(Path(tmp) / "nope.json"))
-                self._runner.check("[Edge Case] missing file rejected", False)
-            except Exception:
-                self._runner.check("[Edge Case] missing file rejected", True)
+    def _no_prompt_rejected(self) -> None:
+        # A run with no --stage-prompt at all describes no stage.
+        try:
+            self._command._settings({}, False)  # noqa: SLF001
+            self._runner.check("[Edge Case] missing stage prompt rejected", False)
+        except StagesSettingsInvalid:
+            self._runner.check("[Edge Case] missing stage prompt rejected", True)
 
-    def _malformed_json_rejected(self) -> None:
-        # Unparseable JSON must fail before any planning.
-        with tempfile.TemporaryDirectory() as tmp:
-            bad = Path(tmp) / "bad.json"
-            bad.write_text("{not json", encoding="utf-8")
-            try:
-                StagesFile().load(str(bad))
-                self._runner.check("[Edge Case] bad JSON rejected", False)
-            except Exception:
-                self._runner.check("[Edge Case] bad JSON rejected", True)
+    def _missing_system_rejected(self) -> None:
+        # A prompt without its system prompt would leave the stage roleless.
+        options = {"prompts": ("p",)}
+        try:
+            self._command._settings(options, False)  # noqa: SLF001
+            self._runner.check("[Edge Case] missing system prompt rejected", False)
+        except StagesSettingsInvalid:
+            self._runner.check("[Edge Case] missing system prompt rejected", True)
 
-    def _blank_in_file_rejected(self) -> None:
-        # Blank stage text inside a file must fail validation.
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "blank.json"
-            doc = {"stages": [{"name": "a", "prompt": "   ", "system_prompt": "s"}]}
-            path.write_text(json.dumps(doc), encoding="utf-8")
-            try:
-                StagesFile().load(str(path))
-                self._runner.check("[Edge Case] blank in file rejected", False)
-            except Exception:
-                self._runner.check("[Edge Case] blank in file rejected", True)
+    def _count_mismatch_rejected(self) -> None:
+        # One option repeated a different number of times leaves the run ambiguous.
+        options = {
+            "prompts": ("p1", "p2"),
+            "systems": ("s1", "s2"),
+            "sandboxes": (StageSandbox.READ_ONLY.value,),
+        }
+        try:
+            self._command._settings(options, False)  # noqa: SLF001
+            self._runner.check("[Hidden Failure] option count mismatch rejected", False)
+        except StagesOptionCountMismatch:
+            self._runner.check("[Hidden Failure] option count mismatch rejected", True)
 
-    def _parallel_round_trip(self) -> None:
-        # The parallel flag must survive a file round-trip.
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "ok.json"
-            doc = {"stages": [{"name": "a", "prompt": "p", "system_prompt": "s"}]}
-            doc["parallel"] = True
-            path.write_text(json.dumps(doc), encoding="utf-8")
-            try:
-                loaded = StagesFile().load(str(path))
-                ok = loaded.parallel is True and len(loaded.stages) == 1
-                self._runner.check("[Hidden Assumption] parallel round-trip", ok)
-            except Exception:
-                self._runner.check("[Hidden Assumption] parallel round-trip", False)
+    def _omitted_options_default(self) -> None:
+        # An omitted optional option gives every stage that setting's default.
+        options = {"prompts": ("p1", "p2"), "systems": ("s1", "s2")}
+        settings = self._command._settings(options, False)  # noqa: SLF001
+        first, second = settings.stages
+        ok = (
+            first.name == "stage-1"
+            and second.name == "stage-2"
+            and first.effort is StageEffort.MEDIUM
+            and first.sandbox is StageSandbox.WORKSPACE_WRITE
+            and second.model == ""
+        )
+        self._runner.check("[Hidden Assumption] omitted options default", ok)
+
+    def _options_align_by_position(self) -> None:
+        # Occurrence i of every option must land on stage i, never off by one.
+        options = {
+            "prompts": ("p1", "p2", "p3"),
+            "systems": ("s1", "s2", "s3"),
+            "names": ("audit", "design", "build"),
+            "sandboxes": (
+                StageSandbox.READ_ONLY.value,
+                StageSandbox.READ_ONLY.value,
+                StageSandbox.WORKSPACE_WRITE.value,
+            ),
+            "efforts": (
+                StageEffort.HIGH.value,
+                StageEffort.LOW.value,
+                StageEffort.XHIGH.value,
+            ),
+        }
+        settings = self._command._settings(options, False)  # noqa: SLF001
+        ok = (
+            [stage.name for stage in settings.stages] == ["audit", "design", "build"]
+            and [stage.prompt for stage in settings.stages] == ["p1", "p2", "p3"]
+            and settings.stages[2].sandbox is StageSandbox.WORKSPACE_WRITE
+            and settings.stages[1].effort is StageEffort.LOW
+        )
+        self._runner.check("[Silent Failure] options align by position", ok)
+
+    def _unknown_effort_rejected(self) -> None:
+        # A word outside the closed enum must never reach the SDK as a default.
+        options = {"prompts": ("p",), "systems": ("s",), "efforts": ("very-high",)}
+        try:
+            self._command._settings(options, False)  # noqa: SLF001
+            self._runner.check("[Hidden Failure] unknown effort rejected", False)
+        except StagesSettingsInvalid:
+            self._runner.check("[Hidden Failure] unknown effort rejected", True)
+
+    def _parallel_flag_carried(self) -> None:
+        # The topology flag must reach the frozen settings unchanged.
+        options = {"prompts": ("p",), "systems": ("s",)}
+        settings = self._command._settings(options, True)  # noqa: SLF001
+        self._runner.check("[Hidden Assumption] parallel flag carried", settings.parallel is True)
 
 
 class GateCases:
