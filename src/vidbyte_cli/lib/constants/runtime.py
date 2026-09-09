@@ -53,6 +53,8 @@ class TaskBoardLimit(IntEnum):
     # 20,000-character contract every other local runtime task already uses.
     MAX_TASK_CHARS = 20_000
     MAX_WINDOW = 25
+    MIN_SUBTASKS = 2
+    MAX_SUBTASKS = 10
 
 
 class TaskBoardCodexConfig(StrEnum):
