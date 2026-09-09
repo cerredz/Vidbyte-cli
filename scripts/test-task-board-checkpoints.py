@@ -570,9 +570,30 @@ def test_retry_failed_only_reruns_just_the_failures() -> None:
                 and checkpointer.read_step(1).status == "completed"
                 and checkpointer.read_step(0).summary == "r0"
                 and result.completed == 3
+                # A repaired index appears once, and the board no longer reports a failure.
+                and [step.index for step in result.steps] == [0, 1, 2]
+                and result.failed == 0
             )
 
     record("retry failed only reruns just the failures", asyncio.run(go()))
+
+
+def test_budget_counts_only_this_invocation() -> None:
+    # [Hidden Failure] A resumed board is not halted by the spend its earlier runs made.
+    async def go() -> bool:
+        with tempfile.TemporaryDirectory() as directory:
+            first = _session_with_fakes([], ["r0", "r1"], tokens=400)
+            _armed(first, Path(directory), "b-carry", stop_after=2)
+            settings = _settings(("a", "b", "c"))
+            await first._run(make_plan(), settings, "rta_carry")
+            seen: list[str] = []
+            second = _session_with_fakes(seen, ["r2"], tokens=400)
+            _armed(second, Path(directory), "b-carry", start_from=2, max_tokens=500)
+            result = await second._run(make_plan(), settings, "rta_carry2")
+            # The stored prefix already spent 800, which must not pre-empt this invocation.
+            return len(seen) == 1 and result.stopped_reason is None and result.total_tokens == 1200
+
+    record("budget counts only this invocation", asyncio.run(go()))
 
 
 def test_stop_after_slices_and_returns_resume() -> None:
@@ -841,6 +862,7 @@ def main() -> int:
         test_fork_past_a_gap_fails,
         test_retry_failed_only_reruns_just_the_failures,
         test_stop_after_slices_and_returns_resume,
+        test_budget_counts_only_this_invocation,
         test_budget_guard_halts_between_steps,
         test_failed_board_resumes_into_repair,
         test_report_file_written_from_stored_chain,

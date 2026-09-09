@@ -29,6 +29,7 @@ from ...types.runtime import (
 )
 from ..constants.runtime import TaskBoardCodexConfig, TaskBoardLimit
 from ..constants.runtime import TaskBoardProgress as Progress
+from ..errors.cli_error import CliError
 from ..errors.failures import TaskBoardCheckpointMismatch, TaskBoardHostFailed
 from .task_board_checkpoints import TaskBoardCheckpointer
 
@@ -160,13 +161,18 @@ class TaskBoardCodexSession:
         steps: list[TaskBoardStepResult] = []
         self._progress(Progress.TASK_STARTING)
         prefix = self._load_prefix(entries, steps, settings)
-        completed, failed, tokens, started = prefix.completed, prefix.failed, prefix.total_tokens, 0
+        completed, failed = prefix.completed, prefix.failed
+        # `spent` is this invocation's usage and is what the budget guard reads, because a
+        # resumed board would otherwise halt on the spend its earlier invocations already
+        # made. `tokens` stays board-cumulative, since that is what the result reports.
+        tokens, spent, started = prefix.total_tokens, 0, 0
         stopped: str | None = None
         for index in self._indices(prefix, settings):
-            if stopped := self._halt_reason(started, tokens):
+            if stopped := self._halt_reason(started, spent):
                 break
             started += 1
             turn = await self._run_task(settings.tasks[index], index, entries, settings)
+            spent += 0 if turn is None else (turn.total_tokens or 0)
             tokens += 0 if turn is None else (turn.total_tokens or 0)
             step = self._step_of(settings.tasks[index], index, turn)
             self._record(step, turn, entries, settings, admission_id, tokens)
@@ -236,16 +242,18 @@ class TaskBoardCodexSession:
         # failures costs three turns rather than paying again for work that already landed.
         checkpointer = self._require_checkpointer()
         stored = checkpointer.load_stored(len(settings.tasks))
-        self._seed(entries, steps, stored, settings)
         failures = tuple(
             record.index
             for record in stored
             if record.status == "failed" and record.index >= self._controls.start_from
         )
+        # A failure about to be re-run seeds its window entry but contributes no step record
+        # and no failed count, because the loop is about to produce both for that same index.
+        self._seed(entries, steps, stored, settings, skip=frozenset(failures))
         return TaskBoardPrefix(
             start_index=self._controls.start_from,
             completed=sum(1 for record in stored if record.status == "completed"),
-            failed=len(failures),
+            failed=sum(1 for record in stored if record.status == "failed") - len(failures),
             total_tokens=sum(record.total_tokens or 0 for record in stored),
             replay_indices=failures,
         )
@@ -269,6 +277,7 @@ class TaskBoardCodexSession:
         steps: list[TaskBoardStepResult],
         stored: tuple[TaskBoardCheckpoint, ...],
         settings: TaskBoardSettings,
+        skip: frozenset[int] = frozenset(),
     ) -> None:
         # Replays stored records into this run's context, rebuilding each handoff entry from
         # the stored task and result so a resumed prompt matches what a fresh run would build.
@@ -276,6 +285,8 @@ class TaskBoardCodexSession:
             entries[record.index] = self._summarizer.handoff(
                 settings, record.task, record.summary, record.result_text
             )
+            if record.index in skip:
+                continue
             steps.append(
                 TaskBoardStepResult(
                     index=record.index,
@@ -547,11 +558,16 @@ class TaskBoardCodexSession:
     def _write_report(self, checkpointer: TaskBoardCheckpointer | None) -> str | None:
         # The report is written last, from the same stored chain `status` reads, so the file
         # a human opens and the record an agent queries can never describe different runs.
+        # Reading that chain can itself fail when the manifest write failed earlier, and a
+        # report is never worth failing a board whose paid work already finished.
         if checkpointer is None or not self._controls.report_file:
             return None
         try:
             report = Path(self._controls.report_file)
             return str(checkpointer.write_report(checkpointer.chain(), report))
+        except CliError:
+            self._progress("Checkpoint report could not read the board; continuing.")
+            return None
         except OSError:
             self._progress("Checkpoint report write failed; continuing.")
             return None
