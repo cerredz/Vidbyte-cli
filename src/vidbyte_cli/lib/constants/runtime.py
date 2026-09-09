@@ -77,6 +77,17 @@ class TaskBoardProgress(StrEnum):
     ADMITTED = "Your admission is verified. Preparing Codex to work through your board."
     TASK_STARTING = "Working through board tasks in order with Codex."
     TASK_RETRYING = "Retrying the current board task with the same prior summaries."
+    DAG_PLAN_READY = (
+        "Board dependencies checked. Running each task after the tasks it depends on with Codex."
+    )
+    TASK_SKIPPED = (
+        "Skipping a board task whose dependency did not complete. "
+        "Continuing with tasks that can still run."
+    )
+    TASK_FAILED = (
+        "A board task did not complete after retries. "
+        "Recording what happened and continuing with the remaining tasks."
+    )
     COMPLETE = "Codex has worked through the requested board tasks. Returning the summaries."
 
 

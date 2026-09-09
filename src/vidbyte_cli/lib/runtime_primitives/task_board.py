@@ -129,7 +129,9 @@ class TaskBoardCodexSession:
     async def _run_dag(
         self, plan: Plan, settings: TaskBoardSettings, admission_id: str
     ) -> TaskBoardResult:
-        # Runs each task once in topological order with dependency-only context.
+        # Runs each task once in topological order with dependency-only context. Slots stay
+        # board-indexed so a DAG prompt can read any parent summary by position, while steps
+        # are appended in execution order with each step carrying its board index.
         order = self._topological_order(len(settings.tasks), settings.dependencies)
         slots: list[str] = ["" for _ in settings.tasks]
         failed: set[int] = set()
@@ -137,29 +139,38 @@ class TaskBoardCodexSession:
         completed = 0
         uncompleted = 0
         self._progress(Progress.TASK_STARTING)
+        # The parent map is built once up front so every iteration reads the same edges.
         parents = self._dag_parents(settings)
+        self._progress(Progress.DAG_PLAN_READY)
         for index in order:
             task = settings.tasks[index]
-            if any(parent in failed for parent in parents[index]):
+            # A task whose dependency failed never spawns an agent: it is recorded failed
+            # with the blocking parents named so the result explains the skip on its own.
+            blockers = sorted(parent for parent in parents[index] if parent in failed)
+            if blockers:
                 failed.add(index)
                 uncompleted += 1
-                steps.append(self._failed_step(task, index))
+                steps.append(self._failed_dag_step(task, index, self._skip_detail(blockers)))
                 slots[index] = f"Task {index} failed."
+                self._progress(Progress.TASK_SKIPPED)
                 if settings.stop_on_error:
                     break
                 continue
-            summary = await self._run_task(task, index, slots, settings)
-            if summary is None:
+            # One fresh agent per attempted task, exactly like the linear loop; retries reuse
+            # the same dependency-scoped prompt so recovery never re-decides the context.
+            outcome, failure_note = await self._run_task_detailed(task, index, slots, settings)
+            if outcome is None:
                 failed.add(index)
                 uncompleted += 1
-                steps.append(self._failed_step(task, index))
+                steps.append(self._failed_dag_step(task, index, failure_note))
                 slots[index] = f"Task {index} failed."
+                self._progress(Progress.TASK_FAILED)
                 if settings.stop_on_error:
                     break
                 continue
             completed += 1
-            slots[index] = summary[0]
-            steps.append(self._completed_step(task, index, summary[0], summary[1]))
+            slots[index] = outcome[0]
+            steps.append(self._completed_step(task, index, outcome[0], outcome[1]))
         self._progress(Progress.COMPLETE)
         return self._result(admission_id, completed, uncompleted, steps)
 
@@ -196,9 +207,21 @@ class TaskBoardCodexSession:
     ) -> tuple[str, str] | None:
         # One task start to finish. Every attempt builds its own agent and renders the same
         # prompt, so a retry recovers from a dead host rather than re-deciding the context.
-        for attempt in range(settings.max_retries_per_task + 1):
+        outcome, _note = await self._run_task_detailed(task, index, summaries, settings)
+        return outcome
+
+    async def _run_task_detailed(
+        self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
+    ) -> tuple[tuple[str, str] | None, str]:
+        # Same retry loop as _run_task, but also returns the failure note the DAG loop
+        # records when every attempt is exhausted. The note carries only observed facts —
+        # attempt count, failure kind, and any partial agent text — never task content.
+        attempts = settings.max_retries_per_task + 1
+        last_note = ""
+        for attempt in range(attempts):
             if attempt > 0:
                 self._progress(Progress.TASK_RETRYING)
+            reply: AgentMessage | None = None
             try:
                 prompt = self._build_prompt(task, index, summaries, settings)
                 reply = await self._turn(self._build_agent(index), prompt)
@@ -208,11 +231,53 @@ class TaskBoardCodexSession:
                     settings.summary_mode.value,
                     settings.summary_max_chars,
                 )
-                return (summary, thread)
-            except Exception:
-                # Attempt failures stay local: stop-on-error is the caller's policy.
+                return ((summary, thread), "")
+            except Exception as error:
+                # Attempt failures stay local: stop-on-error is the caller's policy, and
+                # only the final note survives so earlier attempts never leak stale causes.
+                last_note = self._attempt_note(error, reply, settings, attempt, attempts)
                 continue
-        return None
+        return (None, f"Ran {attempts} attempt(s), all exhausted. {last_note}")
+
+    def _attempt_note(
+        self,
+        error: Exception,
+        reply: AgentMessage | None,
+        settings: TaskBoardSettings,
+        attempt: int,
+        attempts: int,
+    ) -> str:
+        # Names what ended one attempt so the recorded failure explains itself: timeouts
+        # are told apart from dead hosts, and an incomplete turn keeps the partial text
+        # its agent left behind, bounded by the same summarizer prompts already use.
+        if isinstance(error.__cause__, TimeoutError):
+            kind = "the Codex turn timed out before returning"
+        elif reply is not None and self._partial_text(reply):
+            partial = self._summarizer.summarize(
+                self._partial_text(reply),
+                settings.summary_mode.value,
+                settings.summary_max_chars,
+            )
+            kind = f"the agent returned an incomplete turn, leaving: {partial}"
+        else:
+            kind = "the Codex host failed before returning a completed turn"
+        return f"Attempt {attempt + 1} of {attempts}: {kind}."
+
+    def _partial_text(self, reply: AgentMessage) -> str:
+        # Reads whatever text an incomplete turn left behind without validating it, so a
+        # failure note can carry the agent's own words even when the turn never completed.
+        try:
+            return str(reply.content or "").strip()
+        except Exception:
+            return ""
+
+    def _skip_detail(self, blockers: list[int]) -> str:
+        # Names the failed dependencies so a skip is actionable without re-reading the graph.
+        names = ", ".join(f"task {parent}" for parent in blockers)
+        return (
+            f"No agent was started because {names} did not complete. "
+            "Fix or re-run the failed dependencies, then re-run this task."
+        )
 
     def _build_prompt(
         self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
@@ -304,6 +369,18 @@ class TaskBoardCodexSession:
             index=index,
             task=task,
             summary=f"Task {index} failed.",
+            status="failed",
+            thread_id=f"task-board-{index}-failed",
+        )
+
+    def _failed_dag_step(self, task: str, index: int, detail: str) -> TaskBoardStepResult:
+        # Records one failed DAG step with the reason inline: skipped tasks name the failed
+        # parents, exhausted tasks carry the final attempt note. The linear placeholder is
+        # left untouched so windowed linear prompts keep their exact marker.
+        return TaskBoardStepResult(
+            index=index,
+            task=task,
+            summary=f"Task {index} failed. {detail}",
             status="failed",
             thread_id=f"task-board-{index}-failed",
         )

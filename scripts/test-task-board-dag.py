@@ -15,7 +15,11 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vidbyte_cli.commands.runtime.task_board import TaskBoardCommand  # noqa: E402
-from vidbyte_cli.lib.errors.failures import TaskBoardDependencyInvalid  # noqa: E402
+from vidbyte_cli.lib.constants.runtime import TaskBoardProgress  # noqa: E402
+from vidbyte_cli.lib.errors.failures import (  # noqa: E402
+    TaskBoardDependencyInvalid,
+    TaskBoardHostFailed,
+)
 from vidbyte_cli.lib.runtime_primitives.executor import RuntimeExecutor  # noqa: E402
 from vidbyte_cli.lib.runtime_primitives.task_board import TaskBoardCodexSession  # noqa: E402
 from vidbyte_cli.types.runtime import (  # noqa: E402
@@ -428,6 +432,136 @@ def test_executor_runs_dag_without_network() -> None:
     )
 
 
+def test_dag_failed_summary_carries_attempt_context() -> None:
+    # [Review] An exhausted dag task records attempts and cause, not just a placeholder.
+    async def go() -> bool:
+        prompts: list[str] = []
+        session = _fake_session(prompts, _ScriptedTurns([RuntimeError("boom")]))
+        settings = TaskBoardSettings(
+            tasks=("a",),
+            execution_type=TaskBoardExecutionType.DAG,
+            max_retries_per_task=0,
+        )
+        result = await session._run(make_plan(), settings, "rta_dag_failctx")
+        summary = result.steps[0].summary
+        return (
+            result.steps[0].status == "failed"
+            and summary.startswith("Task 0 failed.")
+            and "Attempt 1 of 1" in summary
+            and "Codex host failed" in summary
+        )
+
+    record("dag failed summary carries attempt context", asyncio.run(go()))
+
+
+def test_dag_skip_summary_names_failed_parent() -> None:
+    # [Review] A dependency-skipped task names the failed parent and says no agent started.
+    async def go() -> bool:
+        prompts: list[str] = []
+        session = _fake_session(prompts, _ScriptedTurns([RuntimeError("boom"), "fine"]))
+        settings = TaskBoardSettings(
+            tasks=("a", "b", "c"),
+            execution_type=TaskBoardExecutionType.DAG,
+            dependencies=((2, 0),),
+            stop_on_error=False,
+            max_retries_per_task=0,
+        )
+        result = await session._run(make_plan(), settings, "rta_dag_skipctx")
+        by_index = {step.index: step for step in result.steps}
+        return (
+            by_index[2].status == "failed"
+            and "task 0" in by_index[2].summary
+            and "No agent was started" in by_index[2].summary
+        )
+
+    record("dag skip summary names failed parent", asyncio.run(go()))
+
+
+def test_dag_failure_keeps_partial_agent_text() -> None:
+    # [Review] An incomplete turn keeps the agent's own partial words in the failure note.
+    async def go() -> bool:
+        session = TaskBoardCodexSession({}, lambda _msg: None)
+        session.prepare(make_plan())
+        session._build_agent = lambda _i: object()
+
+        async def incomplete_turn(agent: object, prompt: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                content="partial diagnosis: missing config file",
+                codex=SimpleNamespace(status="failed", final_response="", thread_id=""),
+            )
+
+        session._turn = incomplete_turn
+        settings = TaskBoardSettings(
+            tasks=("a",),
+            execution_type=TaskBoardExecutionType.DAG,
+            max_retries_per_task=0,
+        )
+        result = await session._run(make_plan(), settings, "rta_dag_partial")
+        return "partial diagnosis: missing config file" in result.steps[0].summary
+
+    record("dag failure keeps partial agent text", asyncio.run(go()))
+
+
+def test_dag_timeout_names_timeout_kind() -> None:
+    # [Review] A timed-out turn is recorded as a timeout, not a generic host failure.
+    async def go() -> bool:
+        session = TaskBoardCodexSession({}, lambda _msg: None)
+        session.prepare(make_plan())
+        session._build_agent = lambda _i: object()
+
+        async def slow_turn(agent: object, prompt: str) -> SimpleNamespace:
+            # Mirrors _turn: the transport timeout surfaces as a chained host failure.
+            try:
+                raise TimeoutError("timed out")
+            except TimeoutError as error:
+                raise TaskBoardHostFailed() from error
+
+        session._turn = slow_turn  # type: ignore[method-assign]
+        settings = TaskBoardSettings(
+            tasks=("a",),
+            execution_type=TaskBoardExecutionType.DAG,
+            max_retries_per_task=0,
+        )
+        result = await session._run(make_plan(), settings, "rta_dag_timeout")
+        return "timed out" in result.steps[0].summary
+
+    record("dag timeout names timeout kind", asyncio.run(go()))
+
+
+def test_dag_progress_milestones_are_product_facing() -> None:
+    # [Review] The dag loop narrates plan, failure, and skip milestones without indices.
+    async def go() -> bool:
+        seen: list[str] = []
+        session = TaskBoardCodexSession({}, seen.append)
+        session.prepare(make_plan())
+        session._build_agent = lambda _i: object()
+        calls = {"turns": 0}
+
+        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+            calls["turns"] += 1
+            if prompt.startswith("Task 0:"):
+                raise RuntimeError("boom")
+            return _fake_reply("fine", f"thread-{calls['turns']}")
+
+        session._turn = fake_turn
+        settings = TaskBoardSettings(
+            tasks=("a", "b", "c"),
+            execution_type=TaskBoardExecutionType.DAG,
+            dependencies=((2, 0),),
+            stop_on_error=False,
+            max_retries_per_task=0,
+        )
+        await session._run(make_plan(), settings, "rta_dag_progress")
+        return (
+            TaskBoardProgress.DAG_PLAN_READY in seen
+            and TaskBoardProgress.TASK_FAILED in seen
+            and TaskBoardProgress.TASK_SKIPPED in seen
+            and TaskBoardProgress.COMPLETE in seen
+        )
+
+    record("dag progress milestones are product facing", asyncio.run(go()))
+
+
 def main() -> int:
     # Runs every design-doc Section 10 dag case and reports the tally.
     test_linear_default_preserved()
@@ -450,6 +584,11 @@ def main() -> int:
     test_braces_not_interpolated_in_dag()
     test_isolated_dag_omits_section()
     test_executor_runs_dag_without_network()
+    test_dag_failed_summary_carries_attempt_context()
+    test_dag_skip_summary_names_failed_parent()
+    test_dag_failure_keeps_partial_agent_text()
+    test_dag_timeout_names_timeout_kind()
+    test_dag_progress_milestones_are_product_facing()
     passed = sum(1 for status, _, _ in RESULTS if status == PASS)
     print(f"{passed}/{len(RESULTS)} tests passed")
     return 0 if passed == len(RESULTS) else 1

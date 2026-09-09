@@ -89,11 +89,13 @@ local planning, not research logic, so it belongs in `lib/runtime_primitives/`.
 - R8: `--window` is ignored for context selection in `dag` mode (documented in help); windowed
   vs isolated `context_mode` still applies. `--summary-mode` / `--summary-max-chars` still
   shape each per-dependency summary in both types.
-- R9: Failure policy in `dag`: a task that exhausts retries is recorded `failed` with the
-  existing placeholder summary. With `stop_on_error=true` the board halts at the first failure.
-  With `false`, any not-yet-run task that transitively depends on a failed task is marked
-  `failed` without spawning an agent (dependency-skip), preserving index alignment; independent
-  tasks still run.
+- R9: Failure policy in `dag`: a task that exhausts retries is recorded `failed` with a
+  reason-carrying summary (attempt count, failure kind, and any partial agent text the last
+  turn left behind), still prefixed `Task {index} failed.`. With `stop_on_error=true` the
+  board halts at the first failure. With `false`, any not-yet-run task that transitively
+  depends on a failed task is marked `failed` without spawning an agent (dependency-skip),
+  its summary naming the failed parents; independent tasks still run. Linear `failed`
+  summaries keep the exact placeholder so windowed prompts are unchanged.
 - R10: Result shape unchanged: `TaskBoardResult` with per-step `index`, `task`, `summary`,
   `status`, `thread_id`. In `dag` mode `steps` are ordered by execution (topological) order;
   each step carries its board `index` so callers can re-sort.
@@ -182,26 +184,27 @@ No new classes (per single-use-helper restraint); three private methods on
 - `_topological_order(count, edges)` — Kahn's algorithm with a sorted ready list
   (smallest index first); raises `TaskBoardDependencyInvalid` if output is short (cycle).
   Pure over ints, no SDK import, directly unit-testable.
-- `_run_dag(plan, settings, admission_id)` — sizes `summaries: list[str | None]` to N and a
-  `by_index: dict[int, TaskBoardStepResult]`; iterates `_topological_order`; for each index:
-  checks direct parents via an adjacency map; if any parent summary is the failure placeholder
-  path (tracked in a `failed: set[int]` including transitive skips), records a dependency-skip
-  failed step with no agent call, applies `stop_on_error`, continues; else calls existing
-  `_run_task` with a DAG-scoped summaries view (see below), records completed/failed, applies
-  `stop_on_error` on agent failure. Emits the same `TASK_STARTING` / `TASK_RETRYING` /
-  `COMPLETE` progress. Returns steps in execution order via `_result`.
+- `_run_dag(plan, settings, admission_id)` — sizes `slots` to N board-indexed summary
+  strings and a `failed: set[int]`; iterates `_topological_order`; for each index: looks up
+  direct parents via `_dag_parents`; if any parent failed, records a dependency-skip failed
+  step naming the blocking parents with no agent call, emits `TASK_SKIPPED`, applies
+  `stop_on_error`, continues; else calls `_run_task_detailed` with the board-indexed slots,
+  records completed/failed, emits `TASK_FAILED` with a reason-carrying summary on agent
+  failure, applies `stop_on_error`. Emits `TASK_STARTING`, then `DAG_PLAN_READY` once the
+  parent map is built, then `COMPLETE`. Returns steps in execution order via `_result`.
 - `_build_prompt` gains the DAG branch: looks up `parents(c)` sorted, collects
   `(p, summaries[p])` for completed parents (all present by topological invariant), renders via
   existing `render_context` / `render_prompt`. Isolated mode still returns the `None`-context
   prompt. Window is not consulted in DAG mode.
 
-`_run_task` is reused unchanged except that in DAG mode the `summaries` argument passed is a
-dense prefix-compatible view: implementation passes the full `summaries` list plus the task
-index, and `_build_prompt` ignores positional slicing for DAG and uses the parent map instead,
-so retry prompts stay identical across attempts.
+`_run_task` keeps its signature and delegates to `_run_task_detailed`, which returns the
+same result plus a failure note (attempt count, timeout vs host kind, bounded partial agent
+text from an incomplete turn). The DAG loop records the note via `_failed_dag_step`; the
+linear loop ignores it, so linear summaries, prompts, and progress are byte-identical.
 
-Thread identity, timeout, summarization markers, and placeholder text
-(`f"Task {index} failed."`) are unchanged.
+Thread identity, timeout, summarization markers, and the linear placeholder text
+(`f"Task {index} failed."`) are unchanged; DAG `failed` summaries extend that prefix with
+the skip or attempt detail.
 
 ### 6.4 Errors (`src/vidbyte_cli/lib/errors/failures.py`)
 
