@@ -478,10 +478,13 @@ def test_export_mode_appends_one_line_per_step() -> None:
             result = await session._run(make_plan(), _settings(("a", "b")), "rta_export")
             lines = target.read_text(encoding="utf-8").strip().splitlines()
             parsed = [json.loads(line) for line in lines]
+            # Compared resolved: the CLI reports an absolute, symlink-free path, which on
+            # macOS (/var -> /private/var) and Windows CI (8.3 short names) is not the
+            # spelling the temporary directory handed us.
             return (
                 len(parsed) == 2
                 and [item["index"] for item in parsed] == [0, 1]
-                and result.export_file == str(target)
+                and result.export_file == str(target.resolve())
             )
 
     record("export mode appends one line per step", asyncio.run(go()))
@@ -671,7 +674,7 @@ def test_report_file_written_from_stored_chain() -> None:
             result = await session._run(make_plan(), _settings(("a", "b")), "rta_report")
             body = report.read_text(encoding="utf-8")
             return (
-                result.report_file == str(report)
+                result.report_file == str(report.resolve())
                 and "# Task board b-report" in body
                 and "## Step 0 — completed" in body
                 and "## Step 1 — completed" in body
