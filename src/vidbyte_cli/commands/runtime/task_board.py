@@ -1,9 +1,8 @@
-"""Validates and admits one sequential task-board run over separate Codex agents.
+"""Validates and admits one task-board run over separate Codex agents.
 
-Each task runs in its own agent, optionally reading bounded summaries of the tasks just
-before it. The command validates locally, buys admission, verifies the grant, then runs
-offline. A board is built from literal task arguments or from whole Markdown files, never
-from both.
+Each task runs in its own agent, optionally reading bounded summaries of related tasks. The
+command validates locally, buys admission, verifies the grant, then runs offline. A board is
+built from literal task arguments or from whole Markdown files, never from both.
 """
 
 from __future__ import annotations
@@ -13,10 +12,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import click
+from pydantic import ValidationError
 
 from ...lib.constants.runtime import TaskBoardProgress as Progress
 from ...lib.errors.failures import (
     RuntimeAdmissionNotVerified,
+    TaskBoardDependencyInvalid,
     TaskBoardInputInvalid,
     TaskBoardTaskFileInvalid,
 )
@@ -30,6 +31,7 @@ from ...types.runtime import (
     RuntimeGrantVerificationRequest,
     RuntimeHost,
     TaskBoardContextMode,
+    TaskBoardExecutionType,
     TaskBoardSettings,
     TaskBoardSummaryMode,
 )
@@ -42,8 +44,31 @@ _COMMAND_HELP = (
     "ambiguous. Tasks always run strictly in the order given, one at a time, and each agent "
     "is thrown away when its task ends so no thread is ever reused. By default an agent also "
     "reads bounded summaries of the few tasks immediately before it, which you can narrow "
-    "with --window or switch off entirely with --context-mode isolated. Vidbyte charges two "
-    "cents to admit the whole run and every model call is billed to your own OpenAI account."
+    "with --window or switch off entirely with --context-mode isolated. Pass --type dag with "
+    "repeatable --depends-on links when tasks have explicit dependencies, so each agent reads "
+    "only its own dependencies and runs after them instead of after every earlier task. "
+    "Vidbyte charges two cents to admit the whole run and every model call is billed to your "
+    "own OpenAI account."
+)
+_TYPE_HELP = (
+    "Which loop structure the board run follows. In linear mode, the default, tasks run "
+    "strictly in the order given and each agent reads bounded summaries of the immediately "
+    "preceding --window tasks, which preserves the original board behavior exactly. In dag "
+    "mode tasks run once each in deterministic topological order and each agent reads only "
+    "its direct dependencies' summaries, so a task that needs only task 2 never pays for "
+    "tasks 0, 1, or 3 through 7. Execution stays sequential in both modes with one fresh "
+    "agent per task, and dag mode ignores --window when selecting context while keeping "
+    "--summary-mode and --summary-max-chars for each dependency summary."
+)
+_DEPENDS_ON_HELP = (
+    "One dependency link of the form CHILD:PARENT[,PARENT...], using 0-based board positions "
+    "where the board order is the order of TASKS arguments or --task-file paths. Repeat the "
+    "option once per link, so --depends-on 8:2 --depends-on 5:2,3 means task 8 reads task 2 "
+    "and task 5 reads tasks 2 and 3; repeating a child across flags accumulates its parents. "
+    "Every child and parent must sit inside the board, self-links and duplicate links are "
+    "rejected, and the full link set must be acyclic. Links require --type dag and are "
+    "rejected with --type linear, and every link is validated before credentials, payment, "
+    "or host execution."
 )
 _TASK_FILE_HELP = (
     "Path to one Markdown file whose entire contents are a single board task. Repeat the "
@@ -185,6 +210,21 @@ class TaskBoardCommand:
             show_default=True,
             help=_RETRIES_PER_TASK_HELP,
         )
+        @click.option(
+            "--type",
+            "execution_type",
+            type=click.Choice(("linear", "dag")),
+            default="linear",
+            show_default=True,
+            help=_TYPE_HELP,
+        )
+        @click.option(
+            "--depends-on",
+            "depends_on",
+            multiple=True,
+            default=(),
+            help=_DEPENDS_ON_HELP,
+        )
         @click.option("--idempotency-key", "key", default=None, help=_IDEMPOTENCY_KEY_HELP)
         @click.pass_obj
         def _run(
@@ -198,6 +238,8 @@ class TaskBoardCommand:
             summary_max_chars: int,
             stop_on_error: bool,
             retries_per_task: int,
+            execution_type: str,
+            depends_on: tuple[str, ...],
             key: str | None,
         ) -> None:
             # Delegates parsed values to the class-owned execution method.
@@ -212,6 +254,8 @@ class TaskBoardCommand:
                 summary_max_chars,
                 stop_on_error,
                 retries_per_task,
+                execution_type,
+                depends_on,
                 key,
             )
 
@@ -227,6 +271,8 @@ class TaskBoardCommand:
         summary_max_chars: int,
         stop_on_error: bool,
         retries_per_task: int,
+        execution_type: str,
+        depends_on: tuple[str, ...],
         key: str | None,
     ) -> None:
         # Everything before ADMISSION is free, so every rejection a caller can cause happens
@@ -239,6 +285,8 @@ class TaskBoardCommand:
         # Resolving the board is the one step that reads caller files; it fails closed on a
         # mixed, empty, non-Markdown, or unreadable source.
         board = self._board_tasks(tasks, task_files)
+        # Links are parsed against the resolved board size so dangling indices fail early.
+        links = self._parse_dependencies(depends_on, execution_type, len(board))
         requested = None if host == "auto" else RuntimeHost(host)
         # The plan carries only a board label, never the task text: task content is local and
         # must not travel to the backend with the admission request.
@@ -251,6 +299,8 @@ class TaskBoardCommand:
             summary_max_chars,
             stop_on_error,
             retries_per_task,
+            execution_type,
+            links,
         )
         progress(Progress.CREDENTIALS)
         # Building the session imports the SDK and filters the child environment, so a missing
@@ -317,6 +367,8 @@ class TaskBoardCommand:
         summary_max_chars: int,
         stop_on_error: bool,
         retries_per_task: int,
+        execution_type: str,
+        links: tuple[tuple[int, int], ...],
     ) -> TaskBoardSettings:
         # Constructs frozen board settings with validated context and summary behavior.
         mode = (
@@ -329,15 +381,58 @@ class TaskBoardCommand:
             if context_mode == "isolated"
             else TaskBoardContextMode.WINDOWED_SUMMARIES
         )
-        return TaskBoardSettings(
-            tasks=board,
-            window=window,
-            context_mode=sharing,
-            summary_mode=mode,
-            summary_max_chars=summary_max_chars,
-            stop_on_error=stop_on_error,
-            max_retries_per_task=retries_per_task,
+        running = (
+            TaskBoardExecutionType.DAG if execution_type == "dag" else TaskBoardExecutionType.LINEAR
         )
+        try:
+            return TaskBoardSettings(
+                tasks=board,
+                window=window,
+                context_mode=sharing,
+                summary_mode=mode,
+                summary_max_chars=summary_max_chars,
+                stop_on_error=stop_on_error,
+                max_retries_per_task=retries_per_task,
+                execution_type=running,
+                dependencies=links,
+            )
+        except ValidationError as error:
+            raise TaskBoardDependencyInvalid() from error
+
+    def _parse_dependencies(
+        self, raw: tuple[str, ...], execution_type: str, task_count: int
+    ) -> tuple[tuple[int, int], ...]:
+        # Normalizes every link flag into sorted unique child-parent pairs.
+        if execution_type != "dag" and raw:
+            raise TaskBoardDependencyInvalid()
+        pairs: list[tuple[int, int]] = []
+        for spec in raw:
+            pairs.extend(self._parse_single_link(spec, task_count))
+        if len(set(pairs)) != len(pairs):
+            raise TaskBoardDependencyInvalid()
+        return tuple(sorted(pairs))
+
+    def _parse_single_link(self, spec: str, task_count: int) -> tuple[tuple[int, int], ...]:
+        # Parses one CHILD:PARENT[,PARENT...] flag into its child-parent pairs.
+        halves = spec.split(":")
+        if len(halves) != 2:
+            raise TaskBoardDependencyInvalid()
+        child_text, parents_text = halves[0].strip(), halves[1].strip()
+        if not child_text.isdigit() or not parents_text:
+            raise TaskBoardDependencyInvalid()
+        child = int(child_text)
+        pairs: list[tuple[int, int]] = []
+        for parent_text in parents_text.split(","):
+            cleaned = parent_text.strip()
+            if not cleaned.isdigit():
+                raise TaskBoardDependencyInvalid()
+            parent = int(cleaned)
+            if child >= task_count or parent >= task_count or child == parent:
+                raise TaskBoardDependencyInvalid()
+            pairs.append((child, parent))
+        if not pairs:
+            raise TaskBoardDependencyInvalid()
+        return tuple(pairs)
 
     def _idempotency_key(self, key: str | None) -> str:
         # Validates the replay-safe admission key before any local planning.
