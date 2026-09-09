@@ -9,6 +9,7 @@ from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
 from .task_board import TaskBoardCodexSession, TaskBoardSummarizer
+from .task_board_checkpoints import TaskBoardCheckpointer
 from .verification import RuntimeGrantVerifier
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "RuntimeGrantVerifier",
     "RuntimeHostRegistry",
     "RuntimeLaunchPlanner",
+    "TaskBoardCheckpointer",
     "TaskBoardCodexSession",
     "TaskBoardSummarizer",
 ]
