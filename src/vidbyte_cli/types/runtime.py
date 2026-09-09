@@ -112,6 +112,143 @@ class TaskBoardContextMode(StrEnum):
     ISOLATED = "isolated"
 
 
+class TaskBoardHandoffMode(StrEnum):
+    """What a finished task hands forward to the tasks allowed to read it."""
+
+    SUMMARY = "summary"
+    TASK_AND_SUMMARY = "task-and-summary"
+    FULL_RESULT = "full-result"
+
+
+class TaskBoardCheckpointMode(StrEnum):
+    """What happens, beyond the durable save, each time a step is checkpointed."""
+
+    SAVE_ONLY = "save-only"
+    STREAM = "stream"
+    EXPORT = "export"
+
+
+class TaskBoardSandbox(StrEnum):
+    """Filesystem authority granted to every task agent on one board."""
+
+    READ_ONLY = "read-only"
+    WORKSPACE_WRITE = "workspace-write"
+    FULL_ACCESS = "full-access"
+
+
+class TaskBoardReasoningEffort(StrEnum):
+    """Reasoning budget requested per task turn; provider-default leaves it unset."""
+
+    PROVIDER_DEFAULT = ""
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
+
+
+class TaskBoardAgentSettings(BaseModel):
+    """The Codex agent configuration every iteration of one board is built with."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    model: str = Field(
+        default="",
+        max_length=100,
+        description=(
+            "Which Codex model every task agent on this board runs, given as the provider's "
+            "own model identifier. Leaving it empty keeps whatever model the installed Codex "
+            "host defaults to, which is the right choice when the board is not model-sensitive. "
+            "Set it when a board needs a specific capability or price point, because every "
+            "iteration of the board is built with the same value and no task can override it. "
+            "The model is charged to the caller's own provider account, not to Vidbyte."
+        ),
+    )
+    sandbox: TaskBoardSandbox = Field(
+        default=TaskBoardSandbox.WORKSPACE_WRITE,
+        description=(
+            "How much of the filesystem every task agent on this board may change. "
+            "workspace-write, the default, lets a task edit files inside the working directory "
+            "and is what a board of implementation tasks needs. read-only lets a task inspect "
+            "the tree without writing to it, which is the correct setting for review, audit, "
+            "or planning boards. full-access removes the sandbox entirely and should be "
+            "reserved for boards whose tasks genuinely have to reach outside the workspace."
+        ),
+    )
+    reasoning_effort: TaskBoardReasoningEffort = Field(
+        default=TaskBoardReasoningEffort.PROVIDER_DEFAULT,
+        description=(
+            "How much reasoning each task turn asks the model to spend before answering. An "
+            "empty value leaves the provider default in place, which is what most boards want. "
+            "Raising it to high or xhigh suits a board of a few hard tasks, while minimal or "
+            "low suits a long board of mechanical ones. Effort multiplies the caller's own "
+            "provider bill per task, so a 500-task board at xhigh is a real cost decision."
+        ),
+    )
+    turn_timeout_seconds: int = Field(
+        ge=60,
+        le=5 * 24 * 60 * 60,
+        default=5 * 24 * 60 * 60,
+        description=(
+            "How long one task turn may run before the board cancels it and counts the attempt "
+            "as failed. The default of five days is a ceiling on a wedged child process rather "
+            "than a budget any task is expected to approach. Lower it when a board's tasks are "
+            "small and a stuck agent should surface quickly instead of blocking the run. The "
+            "timeout applies per attempt, so retries each get the full allowance again."
+        ),
+    )
+
+
+class TaskBoardRunControls(BaseModel):
+    """Where one invocation starts, how far it may go, and what it may spend."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    checkpoint_mode: TaskBoardCheckpointMode = TaskBoardCheckpointMode.SAVE_ONLY
+    export_file: str = Field(default="", max_length=4096)
+    report_file: str = Field(default="", max_length=4096)
+    on_checkpoint: str = Field(default="", max_length=4096)
+    start_from: int = Field(ge=0, default=0)
+    replay_index: int | None = Field(ge=0, default=None)
+    stop_after: int | None = Field(ge=1, default=None)
+    retry_failed_only: bool = False
+    max_tokens: int | None = Field(ge=1, default=None)
+    max_cost_usd: float | None = Field(gt=0, default=None)
+    usd_per_million_tokens: float = Field(ge=0, default=10.0)
+
+    def cost_of(self, tokens: int) -> float:
+        # One rate for the whole board, so a per-step estimate and the total never disagree.
+        return round(tokens / 1_000_000 * self.usd_per_million_tokens, 6)
+
+    def exhausted(self, tokens: int) -> str | None:
+        # Names the first breached budget so the caller learns why the board stopped early.
+        if self.max_tokens is not None and tokens >= self.max_tokens:
+            return "max-tokens"
+        if self.max_cost_usd is not None and self.cost_of(tokens) >= self.max_cost_usd:
+            return "max-cost"
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class TaskBoardPrefix:
+    """Where a resumed board starts and what its already-stored steps achieved."""
+
+    start_index: int
+    completed: int
+    failed: int
+    total_tokens: int
+    replay_indices: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TaskBoardTurn:
+    """One finished agent turn: the prompt it read, what it produced, what it cost."""
+
+    prompt: str
+    summary: str
+    result_text: str
+    thread_id: str
+    total_tokens: int | None
+
+
 class TaskBoardSettings(BaseModel):
     """Bounded, frozen task-board settings for one admitted local invocation."""
 
@@ -206,6 +343,29 @@ class TaskBoardSettings(BaseModel):
             "produces exactly one result entry, never a duplicate."
         ),
     )
+    handoff_mode: TaskBoardHandoffMode = Field(
+        default=TaskBoardHandoffMode.SUMMARY,
+        description=(
+            "What a finished task actually hands to the later tasks allowed to read it. In "
+            "summary mode, the default, a reader sees only the bounded summary of each prior "
+            "result, which is what keeps prompts flat on a long board. In task-and-summary mode "
+            "each entry is prefixed with the prior task's own statement, so a reader learns "
+            "what was asked as well as what came back. In full-result mode the untruncated "
+            "result text is forwarded instead, which is accurate but grows prompts without "
+            "bound and suits only short boards. This setting does nothing in isolated mode."
+        ),
+    )
+    agent: TaskBoardAgentSettings = Field(
+        default_factory=TaskBoardAgentSettings,
+        description=(
+            "The Codex agent configuration each iteration of the board is constructed with, "
+            "covering model, sandbox authority, reasoning effort, and per-attempt timeout. One "
+            "configuration applies to every task, because a board whose agents differ task by "
+            "task would make its results incomparable and its cost unpredictable. The defaults "
+            "reproduce the behavior a board had before these controls existed. Every field here "
+            "affects the caller's own provider bill rather than the flat Vidbyte admission."
+        ),
+    )
 
 
 class TaskBoardStepResult(BaseModel):
@@ -219,14 +379,181 @@ class TaskBoardStepResult(BaseModel):
     thread_id: str = Field(min_length=1, max_length=128)
 
 
+class TaskBoardCheckpoint(BaseModel):
+    """One durably stored step: prompt, outcome, usage, and its link to the step before."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    index: int = Field(ge=0)
+    # The link that makes stored steps a list rather than a bag: it names the step this one
+    # actually read, which after a fork is a step that lives in the parent board's directory.
+    parent_index: int | None = Field(default=None, ge=0)
+    task: str = Field(min_length=1, max_length=20_000)
+    prompt: str = Field(min_length=1, max_length=220_000)
+    summary: str = Field(min_length=1, max_length=8000)
+    result_text: str = Field(default="", max_length=220_000)
+    status: Literal["completed", "failed"]
+    thread_id: str = Field(min_length=1, max_length=128)
+    total_tokens: int | None = Field(default=None, ge=0)
+    estimated_cost_usd: float | None = Field(default=None, ge=0)
+    admission_id: str = Field(min_length=1, max_length=128)
+    created_at: datetime
+
+
+class TaskBoardCheckpointChain(BaseModel):
+    """One board's stored steps as a linked list, plus the fork edge to its parent board."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    parent_board_id: str | None = Field(default=None, min_length=1, max_length=64)
+    forked_at_index: int | None = Field(default=None, ge=0)
+    task_count: int = Field(ge=0)
+    nodes: tuple[TaskBoardCheckpoint, ...] = ()
+
+    def head(self) -> TaskBoardCheckpoint | None:
+        # The furthest step reached, which is where a resume continues from.
+        return max(self.nodes, key=lambda node: node.index, default=None)
+
+    def node_at(self, index: int) -> TaskBoardCheckpoint | None:
+        # Direct addressing, because stored indices can be sparse after a replay or repair.
+        return next((node for node in self.nodes if node.index == index), None)
+
+    def ancestors_of(self, index: int) -> tuple[TaskBoardCheckpoint, ...]:
+        # Walks parent_index backwards, so a caller sees the exact chain a step was built on
+        # rather than every lower index that happens to sit in the same directory.
+        walked: list[TaskBoardCheckpoint] = []
+        seen: set[int] = set()
+        cursor = self.node_at(index)
+        while cursor is not None and cursor.parent_index is not None:
+            if cursor.parent_index in seen:
+                break
+            seen.add(cursor.parent_index)
+            cursor = self.node_at(cursor.parent_index)
+            if cursor is not None:
+                walked.append(cursor)
+        return tuple(reversed(walked))
+
+    @property
+    def completed_indices(self) -> tuple[int, ...]:
+        return tuple(sorted(node.index for node in self.nodes if node.status == "completed"))
+
+    @property
+    def failed_indices(self) -> tuple[int, ...]:
+        return tuple(sorted(node.index for node in self.nodes if node.status == "failed"))
+
+    @property
+    def pending_indices(self) -> tuple[int, ...]:
+        stored = {node.index for node in self.nodes}
+        return tuple(index for index in range(self.task_count) if index not in stored)
+
+    @property
+    def total_tokens(self) -> int:
+        return sum(node.total_tokens or 0 for node in self.nodes)
+
+
 class TaskBoardResult(BaseModel):
-    """Final local output with per-task summaries in board order."""
+    """Final local output: per-task summaries plus where the board lives and how to continue."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     admission_id: str = Field(min_length=1, max_length=128)
     completed: int = Field(ge=0)
     failed: int = Field(ge=0)
     steps: tuple[TaskBoardStepResult, ...]
+    board_id: str | None = Field(default=None, min_length=1, max_length=64)
+    board_dir: str | None = Field(default=None, min_length=1, max_length=4096)
+    export_file: str | None = Field(default=None, min_length=1, max_length=4096)
+    report_file: str | None = Field(default=None, min_length=1, max_length=4096)
+    resume_command: str | None = Field(default=None, min_length=1, max_length=4096)
+    total_tokens: int | None = Field(default=None, ge=0)
+    estimated_cost_usd: float | None = Field(default=None, ge=0)
+    stopped_reason: str | None = Field(default=None, min_length=1, max_length=64)
+    text: str
+
+
+class TaskBoardBoardSummary(BaseModel):
+    """One row of the board index: identity, progress, and where the board lives."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    task_count: int = Field(ge=0)
+    completed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    pending: int = Field(ge=0)
+    parent_board_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class TaskBoardListing(BaseModel):
+    """Every board stored under one checkpoint root, newest progress first."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    checkpoint_root: str = Field(min_length=1, max_length=4096)
+    boards: tuple[TaskBoardBoardSummary, ...] = ()
+    text: str
+
+
+class TaskBoardStatusReport(BaseModel):
+    """One board's offline progress, spend, and the command that continues it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    task_count: int = Field(ge=0)
+    completed_indices: tuple[int, ...] = ()
+    failed_indices: tuple[int, ...] = ()
+    pending_indices: tuple[int, ...] = ()
+    total_tokens: int = Field(ge=0)
+    estimated_cost_usd: float = Field(ge=0)
+    parent_board_id: str | None = Field(default=None, min_length=1, max_length=64)
+    report_file: str | None = Field(default=None, min_length=1, max_length=4096)
+    resume_command: str = Field(min_length=1, max_length=4096)
+    text: str
+
+
+class TaskBoardStepDetail(BaseModel):
+    """Everything stored for one step, so inspecting it costs one call and no file reads."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    step_file: str = Field(min_length=1, max_length=4096)
+    step: TaskBoardCheckpoint
+    ancestors: tuple[int, ...] = ()
+    text: str
+
+
+class TaskBoardForkResult(BaseModel):
+    """A new board carrying a copy of another board's prefix, and how to continue it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    parent_board_id: str = Field(min_length=1, max_length=64)
+    forked_at_index: int = Field(ge=0)
+    copied_steps: int = Field(ge=0)
+    resume_command: str = Field(min_length=1, max_length=4096)
+    text: str
+
+
+class TaskBoardPromptPreview(BaseModel):
+    """The exact prompt one step would receive, rebuilt without starting any agent."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    index: int = Field(ge=0)
+    prompt: str = Field(min_length=1, max_length=220_000)
+    text: str
+
+
+class TaskBoardTaskExport(BaseModel):
+    """A board's task list written back out as a reviewable file."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    path: str = Field(min_length=1, max_length=4096)
+    task_count: int = Field(ge=1)
     text: str
 
 

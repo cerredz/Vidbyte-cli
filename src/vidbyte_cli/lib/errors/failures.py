@@ -98,6 +98,94 @@ class TaskBoardTaskFileInvalid(CliError):
         )
 
 
+class TaskBoardCheckpointMissing(CliError):
+    """A resume asked for steps whose checkpoint files are absent from disk."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, index: int) -> None:
+        # Names only the step number; task text and directory layout stay out of prose.
+        super().__init__(
+            f"No checkpoint exists for board step {index}.",
+            description=(
+                "Resuming reuses stored steps instead of re-running them, so every step "
+                f"before the resume point must exist on disk and step {index} has no file. "
+                "The board ran nothing: no admission was bought and no agent started. "
+                "Resume from an earlier step, or run the board fresh without --from."
+            ),
+            trace="TaskBoardCheckpointer.load_prefix read the step files in order.",
+            hint="Check .vidbyte/task-board for the board directory matching this run.",
+        )
+
+
+class TaskBoardCheckpointMismatch(CliError):
+    """Stored checkpoints do not match the board or settings of this invocation."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Carries only a fixed mismatch category, never task text or file bodies.
+        super().__init__(
+            "Stored checkpoints do not match this board invocation.",
+            description=(
+                "A resume or replay replays stored prompts exactly, so the task list and "
+                f"the window, context, and summary settings must match the stored run: {detail} "
+                "differs. The board ran nothing: no admission was bought and no agent "
+                "started. Re-run with the original board and settings, or start fresh."
+            ),
+            trace="TaskBoardCheckpointer.validate_manifest compared the stored manifest.",
+            hint="Use --checkpoint-id to resume a different stored board explicitly.",
+        )
+
+
+class TaskBoardBoardNotFound(CliError):
+    """No checkpointed board with the requested id exists under the checkpoint root."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, board_id: str) -> None:
+        # Names only the requested id; the stored task text never enters an error message.
+        super().__init__(
+            f"No checkpointed board {board_id} exists under this checkpoint root.",
+            description=(
+                "Reading a board loads its board.json manifest from the directory named by "
+                f"the board id, and no readable manifest was found for {board_id}. Nothing "
+                "was read, written, or charged. List the boards under this root first, or "
+                "pass --checkpoint-root if the board was saved somewhere other than the "
+                "default directory."
+            ),
+            trace="TaskBoardCheckpointer.read_manifest resolved the board directory.",
+            hint="Run `runtime task-board list` to see every stored board and its path.",
+        )
+
+
+class TaskBoardTaskListInvalid(CliError):
+    """A board task-list file is missing, unreadable, or not a supported board format."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # File contents are task text, so neither the path nor the body is echoed here.
+        super().__init__(
+            "A board task list must be a readable .md file of level-two sections or a "
+            ".json array of task strings.",
+            description=(
+                "A task list carries a whole board in one reviewable file, so it has to be "
+                "one of exactly two shapes: Markdown whose level-two headings separate the "
+                "tasks, or JSON holding a flat array of non-empty strings. The file was "
+                "unreadable, had an unsupported suffix, held a different JSON shape, or "
+                "produced no tasks at all. No board was built and nothing was charged."
+            ),
+            trace="TaskBoardFileStore.read_task_list parsed the supplied board file.",
+            hint="Export an existing board with `runtime task-board export-tasks` to see "
+            "the expected shape.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 
