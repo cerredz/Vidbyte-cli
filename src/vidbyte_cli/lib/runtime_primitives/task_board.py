@@ -1,8 +1,8 @@
-"""Sequential task-board execution over separate Codex agents with summaries.
+"""Task-board execution over separate Codex agents with summaries.
 
 The board owns ordering and context. The SDK owns each task turn. Raw prior results never
-reach the next agent; a windowed board forwards bounded summaries and an isolated board
-forwards nothing at all.
+reach the next agent; a linear board forwards windowed summaries, a DAG board forwards only
+direct dependencies' summaries, and an isolated board forwards nothing at all.
 """
 
 from __future__ import annotations
@@ -15,13 +15,14 @@ from typing import TYPE_CHECKING
 from ...types.runtime import RuntimeLaunchPlan as Plan
 from ...types.runtime import (
     TaskBoardContextMode,
+    TaskBoardExecutionType,
     TaskBoardResult,
     TaskBoardSettings,
     TaskBoardStepResult,
 )
 from ..constants.runtime import TaskBoardCodexConfig, TaskBoardLimit
 from ..constants.runtime import TaskBoardProgress as Progress
-from ..errors.failures import TaskBoardHostFailed
+from ..errors.failures import TaskBoardDependencyInvalid, TaskBoardHostFailed
 
 if TYPE_CHECKING:
     from vidbyte.agents.codex import CodexHarnessAgent
@@ -102,8 +103,9 @@ class TaskBoardCodexSession:
     async def _run(
         self, plan: Plan, settings: TaskBoardSettings, admission_id: str
     ) -> TaskBoardResult:
-        # Loops tasks in order, each in a fresh agent, appending one summary per attempted
-        # task so board indices and the window slice stay aligned even across failures.
+        # Delegates to the loop the execution type selects; linear order is preserved exactly.
+        if settings.execution_type is TaskBoardExecutionType.DAG:
+            return await self._run_dag(plan, settings, admission_id)
         summaries: list[str] = []
         steps: list[TaskBoardStepResult] = []
         completed = 0
@@ -123,6 +125,71 @@ class TaskBoardCodexSession:
             steps.append(self._completed_step(task, index, summary[0], summary[1]))
         self._progress(Progress.COMPLETE)
         return self._result(admission_id, completed, failed, steps)
+
+    async def _run_dag(
+        self, plan: Plan, settings: TaskBoardSettings, admission_id: str
+    ) -> TaskBoardResult:
+        # Runs each task once in topological order with dependency-only context.
+        order = self._topological_order(len(settings.tasks), settings.dependencies)
+        slots: list[str] = ["" for _ in settings.tasks]
+        failed: set[int] = set()
+        steps: list[TaskBoardStepResult] = []
+        completed = 0
+        uncompleted = 0
+        self._progress(Progress.TASK_STARTING)
+        parents = self._dag_parents(settings)
+        for index in order:
+            task = settings.tasks[index]
+            if any(parent in failed for parent in parents[index]):
+                failed.add(index)
+                uncompleted += 1
+                steps.append(self._failed_step(task, index))
+                slots[index] = f"Task {index} failed."
+                if settings.stop_on_error:
+                    break
+                continue
+            summary = await self._run_task(task, index, slots, settings)
+            if summary is None:
+                failed.add(index)
+                uncompleted += 1
+                steps.append(self._failed_step(task, index))
+                slots[index] = f"Task {index} failed."
+                if settings.stop_on_error:
+                    break
+                continue
+            completed += 1
+            slots[index] = summary[0]
+            steps.append(self._completed_step(task, index, summary[0], summary[1]))
+        self._progress(Progress.COMPLETE)
+        return self._result(admission_id, completed, uncompleted, steps)
+
+    def _topological_order(self, count: int, edges: tuple[tuple[int, int], ...]) -> tuple[int, ...]:
+        # Orders tasks so parents run first, breaking ties by smallest index.
+        children: dict[int, list[int]] = {index: [] for index in range(count)}
+        pending: dict[int, int] = {index: 0 for index in range(count)}
+        for child, parent in edges:
+            children[parent].append(child)
+            pending[child] += 1
+        ready = sorted(index for index in range(count) if pending[index] == 0)
+        order: list[int] = []
+        while ready:
+            current = ready.pop(0)
+            order.append(current)
+            for child in children[current]:
+                pending[child] -= 1
+                if pending[child] == 0:
+                    ready.append(child)
+            ready.sort()
+        if len(order) != count:
+            raise TaskBoardDependencyInvalid()
+        return tuple(order)
+
+    def _dag_parents(self, settings: TaskBoardSettings) -> dict[int, tuple[int, ...]]:
+        # Maps each task to its sorted direct parents for context selection.
+        grouped: dict[int, list[int]] = {index: [] for index in range(len(settings.tasks))}
+        for child, parent in settings.dependencies:
+            grouped[child].append(parent)
+        return {index: tuple(sorted(parents)) for index, parents in grouped.items()}
 
     async def _run_task(
         self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
@@ -154,8 +221,19 @@ class TaskBoardCodexSession:
         # renders exactly the trailing slice the window admits and nothing older.
         if settings.context_mode is TaskBoardContextMode.ISOLATED:
             return self._summarizer.render_prompt(task, index, None)
+        if settings.execution_type is TaskBoardExecutionType.DAG:
+            return self._build_dag_prompt(task, index, summaries, settings)
         windowed = self._summarizer.windowed(summaries, index, settings.window)
         context = self._summarizer.render_context(windowed)
+        return self._summarizer.render_prompt(task, index, context)
+
+    def _build_dag_prompt(
+        self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
+    ) -> str:
+        # Renders only direct dependencies' summaries so unrelated context never leaks in.
+        parents = self._dag_parents(settings)[index]
+        selected = tuple((parent, summaries[parent]) for parent in parents if summaries[parent])
+        context = self._summarizer.render_context(selected)
         return self._summarizer.render_prompt(task, index, context)
 
     def _build_agent(self, index: int) -> CodexHarnessAgent:

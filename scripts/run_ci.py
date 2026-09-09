@@ -74,6 +74,8 @@ class CiRunner:
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
             # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
             ("task board", (python, "scripts/test-task-board.py")),
+            # Offline: DAG parsing, topological order, and dep-only context, faked SDK turn.
+            ("task board dag", (python, "scripts/test-task-board-dag.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):
