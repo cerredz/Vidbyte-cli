@@ -102,7 +102,7 @@ class PersistentCodexSession:
             raise PersistenceHostFailed()
         if self._agent is None or self._agent.thread_id != data.thread_id:
             raise PersistenceHostFailed()
-        return data.thread_id
+        return str(data.thread_id)
 
     def _continuation_progress(self, index: int, count: int) -> Progress:
         if index == count - 1:

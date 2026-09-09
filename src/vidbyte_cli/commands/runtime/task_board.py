@@ -43,7 +43,9 @@ _COMMAND_HELP = (
     "is thrown away when its task ends so no thread is ever reused. By default an agent also "
     "reads bounded summaries of the few tasks immediately before it, which you can narrow "
     "with --window or switch off entirely with --context-mode isolated. Vidbyte charges two "
-    "cents to admit the whole run and every model call is billed to your own OpenAI account."
+    "cents to admit the whole run and every model call is billed to your own OpenAI account. "
+    "With --allow-decompose an agent may instead replace its own task with an array of "
+    "subtasks at its index, in which case every agent sees only its own task."
 )
 _TASK_FILE_HELP = (
     "Path to one Markdown file whose entire contents are a single board task. Repeat the "
@@ -121,6 +123,24 @@ _IDEMPOTENCY_KEY_HELP = (
     "resume or deduplicate the board itself: the tasks run again from index 0, and every "
     "model call is billed to your own OpenAI account again."
 )
+_ALLOW_DECOMPOSE_HELP = (
+    "Whether the agent for one task may replace that task with an array of subtasks at its "
+    "own index. With --allow-decompose every agent sees only its own task and never reads "
+    "sibling tasks or prior summaries, so each split decision stays local to the work being "
+    "divided. A parent that returns subtasks is replaced in place: three subtasks from task "
+    "1 turn a 3-task board into 5 tasks occupying positions 1, 2, and 3. Children never "
+    "decompose further, and the --window and summary options are ignored while this mode "
+    "is on."
+)
+_MAX_SUBTASKS_HELP = (
+    "How many subtasks one parent task may expand into when decomposition is allowed. Each "
+    "candidate must be a self-contained task string the session validates before splicing, "
+    "and duplicates collapse to their first occurrence so the board never grows with "
+    "repeated work. A parent that returns fewer than two valid candidates keeps its normal "
+    "completed result instead of decomposing. The whole board still caps at 500 tasks, so a "
+    "splice that would overflow truncates to fit, and this option does nothing unless "
+    "--allow-decompose is also passed."
+)
 
 
 class TaskBoardCommand:
@@ -185,6 +205,19 @@ class TaskBoardCommand:
             show_default=True,
             help=_RETRIES_PER_TASK_HELP,
         )
+        @click.option(
+            "--allow-decompose/--no-allow-decompose",
+            default=False,
+            show_default=True,
+            help=_ALLOW_DECOMPOSE_HELP,
+        )
+        @click.option(
+            "--max-subtasks",
+            type=click.IntRange(2, 10),
+            default=5,
+            show_default=True,
+            help=_MAX_SUBTASKS_HELP,
+        )
         @click.option("--idempotency-key", "key", default=None, help=_IDEMPOTENCY_KEY_HELP)
         @click.pass_obj
         def _run(
@@ -198,6 +231,8 @@ class TaskBoardCommand:
             summary_max_chars: int,
             stop_on_error: bool,
             retries_per_task: int,
+            allow_decompose: bool,
+            max_subtasks: int,
             key: str | None,
         ) -> None:
             # Delegates parsed values to the class-owned execution method.
@@ -212,6 +247,8 @@ class TaskBoardCommand:
                 summary_max_chars,
                 stop_on_error,
                 retries_per_task,
+                allow_decompose,
+                max_subtasks,
                 key,
             )
 
@@ -227,6 +264,8 @@ class TaskBoardCommand:
         summary_max_chars: int,
         stop_on_error: bool,
         retries_per_task: int,
+        allow_decompose: bool,
+        max_subtasks: int,
         key: str | None,
     ) -> None:
         # Everything before ADMISSION is free, so every rejection a caller can cause happens
@@ -251,7 +290,11 @@ class TaskBoardCommand:
             summary_max_chars,
             stop_on_error,
             retries_per_task,
+            allow_decompose,
+            max_subtasks,
         )
+        if allow_decompose:
+            progress("Decomposition is on: agents see only their own task; window context is off.")
         progress(Progress.CREDENTIALS)
         # Building the session imports the SDK and filters the child environment, so a missing
         # SDK or a missing provider key also fails before payment.
@@ -317,6 +360,8 @@ class TaskBoardCommand:
         summary_max_chars: int,
         stop_on_error: bool,
         retries_per_task: int,
+        allow_decompose: bool,
+        max_subtasks: int,
     ) -> TaskBoardSettings:
         # Constructs frozen board settings with validated context and summary behavior.
         mode = (
@@ -337,6 +382,8 @@ class TaskBoardCommand:
             summary_max_chars=summary_max_chars,
             stop_on_error=stop_on_error,
             max_retries_per_task=retries_per_task,
+            allow_decompose=allow_decompose,
+            max_subtasks=max_subtasks,
         )
 
     def _idempotency_key(self, key: str | None) -> str:

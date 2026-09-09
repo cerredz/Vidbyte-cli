@@ -43,7 +43,10 @@ The pending DAG design (`docs/design/task-board-dag.md`, untracked) adds `--type
 - R7: Total board size never exceeds 500 tasks or the per-task char bound; over-cap splices truncate to fit and note the truncation on stderr.
 - R8: Retries re-send the identical prompt to a brand-new agent; a retry that succeeds produces exactly one splice.
 - R9: `stop_on_error` semantics unchanged; a failed parent never decomposes.
-- R10: Result shape unchanged: `TaskBoardResult` with per-step `index`, `task`, `summary`, `status`, `thread_id`; steps stay in execution order carrying final board indices.
+- R10: Result shape unchanged: `TaskBoardResult` with per-step `index`, `task`, `summary`,
+  `status`, `thread_id`. Steps stay in execution order; the parent keeps its execution index
+  and each child carries the slot it occupies (`parent index` .. `parent index + K - 1`), so
+  the parent and its first child share an index by construction and later tasks shift right.
 
 ### Non-functional
 

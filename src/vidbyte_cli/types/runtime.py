@@ -200,6 +200,32 @@ class TaskBoardSettings(BaseModel):
             "produces exactly one result entry, never a duplicate."
         ),
     )
+    allow_decompose: bool = Field(
+        default=False,
+        description=(
+            "Whether the agent for one task may replace that task with an array of subtasks "
+            "at its own index. When enabled every agent sees only its own task and never "
+            "sibling tasks or prior summaries, so placement decisions stay local to the work "
+            "being split. A parent that decomposes is replaced in place: three subtasks from "
+            "task 1 turn a 3-task board into 5 tasks, with the children at positions 1, 2, "
+            "and 3. Children never decompose further in v1, and the window and summary "
+            "settings are ignored while this mode is on."
+        ),
+    )
+    max_subtasks: int = Field(
+        ge=2,
+        le=10,
+        default=5,
+        description=(
+            "How many subtasks one parent task may expand into when decomposition is allowed. "
+            "Each candidate must be a self-contained task string between 1 and 20,000 "
+            "characters, and duplicates collapse to the first occurrence so the board never "
+            "grows with repeated work. A parent returning fewer than two valid candidates "
+            "keeps its normal completed result instead of decomposing. The total board still "
+            "caps at 500 tasks, so a splice that would overflow truncates to fit, and this "
+            "setting does nothing unless decomposition is enabled."
+        ),
+    )
 
 
 class TaskBoardStepResult(BaseModel):

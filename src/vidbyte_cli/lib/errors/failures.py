@@ -98,6 +98,28 @@ class TaskBoardTaskFileInvalid(CliError):
         )
 
 
+class TaskBoardDecomposeInvalid(CliError):
+    """The decompose flags were combined in a way the board cannot honor."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the accepted flag shapes, never any task text.
+        super().__init__(
+            "Decomposition needs --allow-decompose with a --max-subtasks value from 2 to 10.",
+            description=(
+                "The decompose flags were rejected before credentials, payment, or host "
+                "execution. Decomposition expands one task into an array of subtasks at its "
+                "own index, so it requires an explicit opt-in plus a per-parent bound the "
+                "session can enforce. No board ran and no admission was charged. Re-run with "
+                "--allow-decompose and a --max-subtasks value between 2 and 10."
+            ),
+            trace="TaskBoardCommand validated decompose flags before building a launch plan.",
+            hint="Run 'vidbyte-cli runtime task-board --help' for usage.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 

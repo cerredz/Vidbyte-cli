@@ -8,7 +8,7 @@ from .executor import RuntimeExecutor
 from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
-from .task_board import TaskBoardCodexSession, TaskBoardSummarizer
+from .task_board import TaskBoardCodexSession, TaskBoardDecomposeParser, TaskBoardSummarizer
 from .verification import RuntimeGrantVerifier
 
 __all__ = [
@@ -18,5 +18,6 @@ __all__ = [
     "RuntimeHostRegistry",
     "RuntimeLaunchPlanner",
     "TaskBoardCodexSession",
+    "TaskBoardDecomposeParser",
     "TaskBoardSummarizer",
 ]
