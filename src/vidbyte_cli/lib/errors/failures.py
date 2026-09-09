@@ -98,6 +98,48 @@ class TaskBoardTaskFileInvalid(CliError):
         )
 
 
+class TaskBoardCheckpointMissing(CliError):
+    """A resume asked for steps whose checkpoint files are absent from disk."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, index: int) -> None:
+        # Names only the step number; task text and directory layout stay out of prose.
+        super().__init__(
+            f"No checkpoint exists for board step {index}.",
+            description=(
+                "Resuming reuses stored steps instead of re-running them, so every step "
+                f"before the resume point must exist on disk and step {index} has no file. "
+                "The board ran nothing: no admission was bought and no agent started. "
+                "Resume from an earlier step, or run the board fresh without --from."
+            ),
+            trace="TaskBoardCheckpointer.load_prefix read the step files in order.",
+            hint="Check .vidbyte/task-board for the board directory matching this run.",
+        )
+
+
+class TaskBoardCheckpointMismatch(CliError):
+    """Stored checkpoints do not match the board or settings of this invocation."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Carries only a fixed mismatch category, never task text or file bodies.
+        super().__init__(
+            "Stored checkpoints do not match this board invocation.",
+            description=(
+                "A resume or replay replays stored prompts exactly, so the task list and "
+                f"the window, context, and summary settings must match the stored run: {detail} "
+                "differs. The board ran nothing: no admission was bought and no agent "
+                "started. Re-run with the original board and settings, or start fresh."
+            ),
+            trace="TaskBoardCheckpointer.validate_manifest compared the stored manifest.",
+            hint="Use --checkpoint-id to resume a different stored board explicitly.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 

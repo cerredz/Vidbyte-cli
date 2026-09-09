@@ -24,6 +24,7 @@ from ...lib.output import OutputDocument
 from ...lib.runtime.context import ApplicationContext as Context
 from ...lib.runtime_primitives.gate import RuntimeAdmissionGate
 from ...lib.runtime_primitives.task_board import TaskBoardCodexSession
+from ...lib.runtime_primitives.task_board_checkpoints import TaskBoardCheckpointer
 from ...types.provider import PROVIDER_ENV_VARS, Provider
 from ...types.runtime import (
     RuntimeAdmissionRequest,
@@ -121,6 +122,40 @@ _IDEMPOTENCY_KEY_HELP = (
     "resume or deduplicate the board itself: the tasks run again from index 0, and every "
     "model call is billed to your own OpenAI account again."
 )
+_CHECKPOINT_HELP = (
+    "Whether every finished step is saved under .vidbyte/task-board as it completes, so a "
+    "later invocation can resume or replay without re-running paid turns. Each step stores "
+    "its prompt, bounded summary, thread ID, and reported token count in one atomic JSON "
+    "file, plus a manifest fingerprint of the board and its settings. Checkpointing is on "
+    "by default and costs nothing beyond local disk. Pass --no-checkpoint for a run that "
+    "must leave no trace, noting that --from, --replay-task, and --checkpoint-id then "
+    "have nothing to read and are rejected."
+)
+_CHECKPOINT_ID_HELP = (
+    "The directory name identifying this board's checkpoints inside .vidbyte/task-board. "
+    "Leave it unset and the CLI derives twelve hex characters from a hash of the task "
+    "list, so re-running the identical board naturally finds its own prior steps. Set it "
+    "explicitly to keep several runs of evolving boards apart, or to resume a board whose "
+    "tasks changed cosmetically. The value holds 1 to 64 letters, digits, dots, "
+    "underscores, or hyphens, and it requires checkpointing to stay enabled."
+)
+_FROM_HELP = (
+    "Resume a previously checkpointed board starting at step INDEX, skipping paid turns "
+    "for every earlier step. Steps before INDEX load from disk and seed the summary "
+    "window exactly as if they had just run, so step 70 sees summaries 60 through 69 "
+    "from storage. Only INDEX through the end of the board execute, and each newly "
+    "finished step overwrites nothing before it. Resuming still buys one fresh flat "
+    "admission for the invocation, and the stored board and settings must match, or the "
+    "run is rejected before payment."
+)
+_REPLAY_TASK_HELP = (
+    "Re-run exactly one board step for debugging, rebuilding its prompt byte-identically "
+    "from the task text plus the stored summaries its window would have held. Only the "
+    "addressed step executes, in a fresh agent with the normal retry policy, and only "
+    "its checkpoint file is overwritten. The rest of the board is untouched, which is "
+    "what makes replay safe to repeat while chasing a flaky step. It requires "
+    "checkpoints from a prior run of the same board and cannot be combined with --from."
+)
 
 
 class TaskBoardCommand:
@@ -186,6 +221,27 @@ class TaskBoardCommand:
             help=_RETRIES_PER_TASK_HELP,
         )
         @click.option("--idempotency-key", "key", default=None, help=_IDEMPOTENCY_KEY_HELP)
+        @click.option(
+            "--checkpoint/--no-checkpoint",
+            default=True,
+            show_default=True,
+            help=_CHECKPOINT_HELP,
+        )
+        @click.option("--checkpoint-id", default=None, help=_CHECKPOINT_ID_HELP)
+        @click.option(
+            "--from",
+            "--resume-from",
+            "start_from",
+            type=click.IntRange(0),
+            default=None,
+            help=_FROM_HELP,
+        )
+        @click.option(
+            "--replay-task",
+            type=click.IntRange(0),
+            default=None,
+            help=_REPLAY_TASK_HELP,
+        )
         @click.pass_obj
         def _run(
             ctx: Context,
@@ -199,6 +255,10 @@ class TaskBoardCommand:
             stop_on_error: bool,
             retries_per_task: int,
             key: str | None,
+            checkpoint: bool,
+            checkpoint_id: str | None,
+            start_from: int | None,
+            replay_task: int | None,
         ) -> None:
             # Delegates parsed values to the class-owned execution method.
             self.execute(
@@ -213,6 +273,10 @@ class TaskBoardCommand:
                 stop_on_error,
                 retries_per_task,
                 key,
+                checkpoint,
+                checkpoint_id,
+                start_from,
+                replay_task,
             )
 
     def execute(
@@ -228,6 +292,10 @@ class TaskBoardCommand:
         stop_on_error: bool,
         retries_per_task: int,
         key: str | None,
+        checkpoint: bool = True,
+        checkpoint_id: str | None = None,
+        start_from: int | None = None,
+        replay_task: int | None = None,
     ) -> None:
         # Everything before ADMISSION is free, so every rejection a caller can cause happens
         # before the wallet is touched, and execution happens only after the grant is verified.
@@ -252,10 +320,14 @@ class TaskBoardCommand:
             stop_on_error,
             retries_per_task,
         )
+        # Checkpoint storage is resolved before payment so a resume that cannot load its
+        # prefix, or a board that drifted from its manifest, fails before the wallet moves.
+        checkpointer = self._checkpointer(board, checkpoint, checkpoint_id, start_from, replay_task)
+        self._validate_resume(checkpointer, settings, start_from, replay_task)
         progress(Progress.CREDENTIALS)
         # Building the session imports the SDK and filters the child environment, so a missing
         # SDK or a missing provider key also fails before payment.
-        session = self._session(context)
+        session = self._session(context, checkpointer, start_from, replay_task)
         session.prepare(plan)
         endpoints = context.runtime_endpoints()
         progress(Progress.ADMISSION)
@@ -339,6 +411,51 @@ class TaskBoardCommand:
             max_retries_per_task=retries_per_task,
         )
 
+    def _checkpointer(
+        self,
+        board: tuple[str, ...],
+        enabled: bool,
+        checkpoint_id: str | None,
+        start_from: int | None,
+        replay_task: int | None,
+    ) -> TaskBoardCheckpointer | None:
+        # Derives the board directory without touching disk; resume flags require storage.
+        if start_from is not None and replay_task is not None:
+            raise click.BadParameter("--from and --replay-task cannot be combined.")
+        if not enabled:
+            if start_from is not None or replay_task is not None or checkpoint_id is not None:
+                raise click.BadParameter("Resume options require checkpointing to stay enabled.")
+            return None
+        if checkpoint_id is not None:
+            if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", checkpoint_id) is None:
+                raise click.BadParameter("Use 1–64 letters, digits, dots, underscores or hyphens.")
+            board_id = checkpoint_id
+        else:
+            board_id = TaskBoardCheckpointer.board_id_for(board)
+        return TaskBoardCheckpointer(Path.cwd() / ".vidbyte" / "task-board", board_id)
+
+    def _validate_resume(
+        self,
+        checkpointer: TaskBoardCheckpointer | None,
+        settings: TaskBoardSettings,
+        start_from: int | None,
+        replay_task: int | None,
+    ) -> None:
+        # Proves the stored prefix loads before admission so a doomed resume never pays.
+        if checkpointer is None:
+            return
+        board_size = len(settings.tasks)
+        if start_from is not None and start_from > board_size:
+            raise click.BadParameter(f"--from {start_from} is past this {board_size}-task board.")
+        if replay_task is not None and replay_task >= board_size:
+            raise click.BadParameter(f"--replay-task {replay_task} is past this board.")
+        if start_from:
+            checkpointer.validate_manifest(settings)
+            checkpointer.load_prefix(start_from)
+        elif replay_task is not None:
+            checkpointer.validate_manifest(settings)
+            checkpointer.load_prefix(replay_task)
+
     def _idempotency_key(self, key: str | None) -> str:
         # Validates the replay-safe admission key before any local planning.
         candidate = key or str(uuid4())
@@ -348,7 +465,13 @@ class TaskBoardCommand:
             )
         return candidate
 
-    def _session(self, context: Context) -> TaskBoardCodexSession:
+    def _session(
+        self,
+        context: Context,
+        checkpointer: TaskBoardCheckpointer | None = None,
+        start_from: int | None = None,
+        replay_task: int | None = None,
+    ) -> TaskBoardCodexSession:
         # Filters parent secrets so the child Codex process inherits only its key.
         credentials = context.require_provider_credentials(Provider.OPENAI)
         environment = dict(context.environment)
@@ -361,4 +484,11 @@ class TaskBoardCommand:
         ):
             environment[name] = ""
         environment["OPENAI_API_KEY"] = credentials.secret_value()
-        return TaskBoardCodexSession(environment, context.output().diagnostic)
+        session = TaskBoardCodexSession(environment, context.output().diagnostic)
+        if checkpointer is None:
+            return session
+        if replay_task is not None:
+            session.with_replay(checkpointer, replay_task)
+        else:
+            session.with_resume(checkpointer, start_from or 0)
+        return session

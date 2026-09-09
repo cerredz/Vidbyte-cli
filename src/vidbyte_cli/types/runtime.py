@@ -219,6 +219,22 @@ class TaskBoardStepResult(BaseModel):
     thread_id: str = Field(min_length=1, max_length=128)
 
 
+class TaskBoardCheckpoint(BaseModel):
+    """One durably stored step: prompt, outcome, and usage for resume and replay."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    index: int = Field(ge=0)
+    task: str = Field(min_length=1, max_length=20_000)
+    prompt: str = Field(min_length=1, max_length=220_000)
+    summary: str = Field(min_length=1, max_length=8000)
+    status: Literal["completed", "failed"]
+    thread_id: str = Field(min_length=1, max_length=128)
+    total_tokens: int | None = Field(default=None, ge=0)
+    estimated_cost_usd: float | None = Field(default=None, ge=0)
+    admission_id: str = Field(min_length=1, max_length=128)
+    created_at: datetime
+
+
 class TaskBoardResult(BaseModel):
     """Final local output with per-task summaries in board order."""
 
