@@ -109,6 +109,7 @@ class RelocationContracts(unittest.TestCase):
                 "hosts.py",
                 "planner.py",
                 "task_board.py",
+                "task_board_checkpoints.py",
                 "verification.py",
             },
         )
