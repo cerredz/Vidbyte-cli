@@ -25,6 +25,7 @@ Product = Literal[
     "runtime.same-host-ensemble@1",
     "runtime.persistence@1",
     "runtime.task-board@1",
+    "runtime.stages@1",
 ]
 
 
