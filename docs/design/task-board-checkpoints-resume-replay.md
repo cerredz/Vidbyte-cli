@@ -236,3 +236,81 @@ Create: 2. Modify: 5. Delete: 0.
   the board is the correct owner.
 - Backend-stored checkpoints: rejected — task content is local-only per
   runtime-primitive policy and must not travel to the backend.
+
+## 15. Review Resolution (PR #42 comments)
+
+Review asked for a larger surface than §1–§14 designed. This section is the authority where
+it differs from the sections above; everything below shipped in the replacement PR.
+
+### 15.1 Boards are addressable, and every result says where and how to continue
+
+`--checkpoint-root PATH` chooses the directory that holds boards, one subdirectory per board
+id, defaulting to `.vidbyte/task-board` under the invocation cwd. It is resolved to an
+absolute path, so several boards coexist under separate roots and never collide. Every result
+returns `board_id` and an absolute `board_dir`, plus a paste-able `resume_command`. That
+command points at the first step that did not complete, and at `--from 0 --retry-failed-only`
+when the board holds failures, so a caller never re-pays for steps that already landed.
+
+The manifest now stores the whole task list rather than only its hash, which is what makes
+the resume command genuinely paste-able: `--from`, `--replay-task`, and `--retry-failed-only`
+reuse the stored board when no task source is supplied.
+
+### 15.2 The read-only verbs
+
+`task-board` is now a group. `run` is the only paid verb; `list`, `status`, `show-step`,
+`fork`, and `export-tasks` are offline, free, and safe to call between every decision.
+
+| Verb | Returns |
+|---|---|
+| `list --checkpoint-root` | one row per board: id, task count, completed/failed/pending, absolute path |
+| `status --checkpoint-id` | completed/failed/pending indices, tokens, estimated spend, resume command, optional Markdown report |
+| `show-step --index` | the whole stored record including its exact prompt, its step file path, and its ancestors |
+| `fork --at --into` | a new board holding a copy of the prefix, with the edge back to its parent |
+| `export-tasks --to` | the stored task list written as `.md` sections or a `.json` array |
+
+### 15.3 Checkpoint policy is caller-visible
+
+`--checkpoint-mode save-only|stream|export` decides what happens beyond the durable save.
+`stream` publishes one record per step as an output transition, so a parent agent watching
+with `--format jsonl` sees each summary as it lands. `export` appends one line per step to
+`--export-file` (default `progress.jsonl` inside the board), which is the append-only log an
+outside forking tool tails. `--on-checkpoint CMD` runs a shell command after each successful
+save with `BOARD_DIR`, `BOARD_ID`, `STEP_FILE`, `STEP_INDEX`, and `STEP_STATUS` set; it is an
+observer with a 60-second timeout and its failure never costs the board a paid step.
+`--report-file` writes the stored history as Markdown.
+
+### 15.4 Slicing, repair, budgets, and free preview
+
+`--stop-after N` returns control after N new steps with the resume command attached.
+`--retry-failed-only` re-runs only the stored failures, so a board with 97 successes and 3
+failures costs three turns. `--max-tokens` and `--max-cost` are checked between steps, so at
+most one step overshoots, and a stopped board reports `stopped_reason` plus its continuation;
+`--usd-per-million-tokens` is the rate the estimate uses. `--print-prompt --replay-task N`
+rebuilds a prompt and returns it without buying admission or starting an agent.
+
+### 15.5 Types, handoffs, and per-iteration agent settings
+
+`TaskBoardAgentSettings` (`--model`, `--sandbox`, `--reasoning-effort`, `--turn-timeout`) is
+the Codex configuration every iteration of a board is constructed with. `--handoff
+summary|task-and-summary|full-result` decides what a finished task forwards, and it is part
+of the board fingerprint because it changes prompts. `TaskBoardCheckpointChain` is the DAG
+view: each `TaskBoardCheckpoint` carries `parent_index`, linking stored steps into a list,
+and a fork records `parent_board_id` and `forked_at_index`, which is the branch edge.
+
+`TaskBoardPrefix` and `TaskBoardTurn` replaced the anonymous tuples the session returned, and
+`TaskBoardRunControls` carries everything that varies per invocation rather than per board —
+kept out of the fingerprint so a resume with a different budget is not read as a new board.
+
+### 15.6 File operations live in one class
+
+`lib/runtime_primitives/task_board_files.py` holds `TaskBoardFileStore`: atomic JSON and text
+writes, appends, copies, directory scans, task-file reads, and task-list import and export.
+`TaskBoardCheckpointer` reaches disk only through it and owns board semantics alone.
+
+### 15.7 Not taken
+
+- YAML task lists. Markdown and JSON round-trip exactly through `--task-list` and
+  `export-tasks`; adding YAML would mean adding a parser dependency to a deliberately thin
+  CLI, or hand-rolling one that gets block scalars subtly wrong.
+- Parallel fan-out across forked boards. Forks are independent directories, so running two
+  is two invocations; concurrent agent execution needs its own admission and safety review.
