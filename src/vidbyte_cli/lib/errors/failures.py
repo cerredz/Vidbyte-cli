@@ -1956,3 +1956,131 @@ class RuntimePaymentFailed(CliError):
             ),
             trace="Runtime payment validation failed before the database-verified launch gate.",
         )
+
+
+class SuggestionInputInvalid(CliError):
+    """The suggestion request was missing, mixed, or malformed."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Never echoes goal text or file bodies, which can carry private task data.
+        super().__init__(
+            "Supply a nonempty goal or a valid --input document, not both.",
+            description=(
+                "A suggestion run needs exactly one goal source: --goal or a JSON --input "
+                "document, with --input mutually exclusive from individual goal and context "
+                "flags. An empty goal, a non-object document, or an unknown idea id also "
+                "fails here. Nothing was read from providers and no model was called."
+            ),
+            trace="SuggestRunCommand validated the request before building context.",
+            hint="Run with --goal 'outcome' or --input request.json, not both.",
+        )
+
+
+class SuggestionCategoryUnknown(CliError):
+    """An unknown suggestion category was requested."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Carries only the unknown ids, never goal or context content.
+        super().__init__(
+            f"Unknown suggestion category: {detail}.",
+            description=(
+                "Category ids come from a fixed registry shared by validation, prompts, and "
+                "schemas. An unknown id fails before files are read or models run, so a typo "
+                "cannot silently widen generation. List valid ids without credentials or "
+                "network access."
+            ),
+            trace="SuggestRunCommand checked categories against the owned registry.",
+            hint="Run 'vidbyte-cli agents suggest categories' to list valid ids.",
+        )
+
+
+class SuggestionContextUnreadable(CliError):
+    """An explicit context file could not be read or parsed."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Omits paths and bodies, which may name private files or task data.
+        super().__init__(
+            f"Could not read suggestion context: {detail}.",
+            description=(
+                "Only explicitly supplied files are read, and each must be UTF-8 text, "
+                "Markdown, or documented JSON with a supported schema version. Missing "
+                "files, directories, malformed JSON, and unsupported types fail here. No "
+                "model was called and no provider configuration was required."
+            ),
+            trace="SuggestionContextBuilder read one explicit context path.",
+            hint="Check the path suffix, encoding, and JSON schema version.",
+        )
+
+
+class SuggestionLimitExceeded(CliError):
+    """A generation limit was unusable for this run."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Counts and bounds are CLI-validated, so this is a narrow guard.
+        super().__init__(
+            "A suggestion limit is outside its supported range.",
+            description=(
+                "Counts, rounds, token bounds, and timeouts are stopping thresholds for "
+                "the whole workflow including revisions. Out-of-range values fail before "
+                "any model call so callers get usage errors rather than partial runs. No "
+                "provider work started."
+            ),
+            trace="SuggestRunCommand validated generation controls before the service.",
+            hint="Use --count 1-20, --rounds 1-3, and positive token/timeout values.",
+        )
+
+
+class SuggestionProviderFailed(CliError):
+    """The model provider failed during generation or critique."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # Withholds provider text, which can quote prompts and workspace paths.
+        super().__init__(
+            "The suggestion provider did not complete the run.",
+            description=(
+                "The provider raised, timed out, or returned output that did not validate "
+                "during generation or critique. This is reported as a provider failure, never "
+                "as no useful suggestions, so callers do not misread an outage as a verdict. "
+                "Partial reviewed batches are preserved where the service kept them."
+            ),
+            trace="SuggestionService drove one generator or critic turn via the SDK.",
+            hint="Retry, or rerun without provider flags for the offline path.",
+            cause=cause,
+        )
+
+
+class SuggestionSdkUnavailable(CliError):
+    """The installed SDK predates the integration the suggestion agent needs."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # Static text only; the missing symbol path is an install fact, not a secret.
+        super().__init__(
+            "The installed vidbyte-sdk does not expose the suggestion integration.",
+            description=(
+                "Suggestion SDK symbols resolve lazily so help and category listing work "
+                "without them. A run that explicitly requires provider execution fails here "
+                "when the pinned SDK revision is absent or predates the integration. The "
+                "deterministic offline path remains available without provider flags."
+            ),
+            trace="SuggestionSdk resolved Codex agent symbols at call time.",
+            hint="Install the SDK revision pinned in pyproject.toml.",
+            cause=cause,
+        )

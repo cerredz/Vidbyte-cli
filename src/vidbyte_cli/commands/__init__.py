@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import click
 
+from .agents import AgentsGroup
 from .auth.login import LoginCommand
 from .auth.logout import LogoutCommand
 from .auth.whoami import WhoamiCommand
@@ -43,6 +44,7 @@ def register_all_commands(program: click.Group) -> None:
     LogoutCommand().register(program)
     WhoamiCommand().register(program)
     DoctorCommand().register(program)
+    AgentsGroup().register(program)
 
     # The whole public API-key research surface: start, add, resume, read, watch, list.
     research = click.Group(name="research", help="Run and inspect Vidbyte research threads")

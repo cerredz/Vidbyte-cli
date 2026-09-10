@@ -38,3 +38,16 @@ has finished.
 Admission policy, host discovery, and launch planning stay in `lib/runtime_primitives/`,
 because `adversarial-team` and `same-host-ensemble` reach the same code. A service that owned
 them would have to be imported by its siblings to obtain an admission gate.
+
+## suggestions/
+
+The `agents suggest` specialized agent. A goal plus optional caller context in, ranked
+ideas with deterministic handoffs out. No admission, no backend, no execution.
+
+- `service.py` — the generate/critique/revise/select loop and its stopping rules.
+- `categories.py` — the versioned category registry shared by validation and prompts.
+- `context.py` — the bounded snapshot built from explicitly supplied files only.
+- `selection.py` — eligibility, ranking, and redundancy rules over reviewed ideas.
+- `handoff.py` — deterministic handoff assembly and execution-prompt rendering.
+- `prompts/` — generator and critic prompts as Markdown files, plus `library.py`.
+- `sdk.py` — the only module in this service that imports the Vidbyte SDK, lazily.

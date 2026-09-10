@@ -21,6 +21,8 @@ every invocation, including `--help` and `--version`.
 
 - `__init__.py` — registers every group. Keep it side-effect free: every help path executes
   it.
+- `agents/` — the `agents suggest` family (`run`, `categories`, `handoff`). Local-only
+  specialized agents: free, no admission, results for another agent to consume.
 
 ## Log
 
