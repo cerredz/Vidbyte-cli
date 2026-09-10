@@ -91,6 +91,12 @@ CASES = [
         machine_error=True,
     ),
     Case(["--json", "--format", "human", "doctor"], exit_code=2, error_code="INVALID_ARGUMENT"),
+    Case(["agents", "--help"]),
+    Case(["agents", "suggest", "--help"]),
+    Case(["agents", "suggest", "run", "--help"]),
+    Case(["agents", "suggest", "categories", "--help"]),
+    Case(["agents", "suggest", "handoff", "--help"]),
+    Case(["agents", "suggest", "categories"]),
 ]
 
 

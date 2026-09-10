@@ -32,6 +32,7 @@ from vidbyte_cli.lib.runtime.context import ApplicationContext  # noqa: E402
 from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
 EXPECTED_TOP_LEVEL = {
+    "agents",
     "config",
     "doctor",
     "login",
@@ -195,7 +196,7 @@ class SurfaceSuite:
         results = self.results
         actual = set(self.program.commands)
         results.check(
-            "the CLI exposes exactly seven top-level commands",
+            "the CLI exposes exactly eight top-level commands",
             actual == EXPECTED_TOP_LEVEL,
             f"got {sorted(actual)}",
         )
@@ -405,14 +406,32 @@ class SurfaceSuite:
             not failures_seen,
             ", ".join(failures_seen),
         )
+        agents = self._subcommands("agents") if "agents" in self.program.commands else set()
+        results.check("agents exposes exactly suggest", agents == {"suggest"})
+        if "agents" in self.program.commands:
+            agents_group = self.program.commands["agents"]
+            assert isinstance(agents_group, click.Group)
+            suggest = agents_group.commands["suggest"]
+            assert isinstance(suggest, click.Group)
+            results.check(
+                "agents suggest exposes run, categories, handoff",
+                set(suggest.commands) == {"run", "categories", "handoff"},
+            )
 
     def _command_paths(self) -> list[list[str]]:
-        # Every invocable path in the tree, root first, then groups, then their leaves.
+        # Every invocable path in the tree, recursing through nested groups.
         paths: list[list[str]] = [[]]
+
+        def _walk(group: click.Group, prefix: list[str]) -> None:
+            for name, command in sorted(group.commands.items()):
+                paths.append([*prefix, name])
+                if isinstance(command, click.Group):
+                    _walk(command, [*prefix, name])
+
         for name, command in sorted(self.program.commands.items()):
             paths.append([name])
             if isinstance(command, click.Group):
-                paths.extend([name, child] for child in sorted(command.commands))
+                _walk(command, [name])
         return paths
 
 

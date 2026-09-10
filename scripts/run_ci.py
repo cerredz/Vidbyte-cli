@@ -74,6 +74,8 @@ class CiRunner:
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
             # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
             ("task board", (python, "scripts/test-task-board.py")),
+            # Offline: deterministic suggestion agent with fakes only at the SDK turn.
+            ("suggestions", (python, "scripts/test_suggestions.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):
