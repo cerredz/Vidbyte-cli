@@ -484,12 +484,31 @@ class TaskBoardBoardSummary(BaseModel):
     parent_board_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+class TaskBoardUnreadableBoard(BaseModel):
+    """One board the index found but could not load, with the failure's own repair advice."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    board_id: str = Field(min_length=1, max_length=64)
+    board_dir: str = Field(min_length=1, max_length=4096)
+    problem: str = Field(min_length=1, max_length=1000)
+    hint: str = Field(default="", max_length=1000)
+
+
+@dataclass(frozen=True, slots=True)
+class TaskBoardIndex:
+    """Every board under one checkpoint root, split into loadable and unreadable."""
+
+    boards: tuple[TaskBoardBoardSummary, ...]
+    unreadable: tuple[TaskBoardUnreadableBoard, ...]
+
+
 class TaskBoardListing(BaseModel):
     """Every board stored under one checkpoint root, newest progress first."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     checkpoint_root: str = Field(min_length=1, max_length=4096)
     boards: tuple[TaskBoardBoardSummary, ...] = ()
+    unreadable: tuple[TaskBoardUnreadableBoard, ...] = ()
     text: str
 
 

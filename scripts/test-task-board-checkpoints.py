@@ -1,8 +1,8 @@
 """Verification for task-board checkpoints, resume, replay, repair, slicing, and reporting.
 
 Run with `python scripts/test-task-board-checkpoints.py`. Every case drives the real
-TaskBoardFileStore, TaskBoardCheckpointer, TaskBoardCodexSession, and TaskBoardCommand
-validation with fakes only at the SDK turn boundary. No network is used.
+LocalFileStore, TaskBoardTaskFiles, TaskBoardCheckpointer, TaskBoardCodexSession, and
+TaskBoardCommand with fakes only at the SDK turn boundary. No network is used.
 """
 
 from __future__ import annotations
@@ -14,21 +14,35 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vidbyte_cli.commands.runtime.task_board import TaskBoardCommand  # noqa: E402
 from vidbyte_cli.lib.errors.failures import (  # noqa: E402
+    LocalFileReadFailed,
+    LocalFileWriteFailed,
+    TaskBoardBoardIdInvalid,
     TaskBoardBoardNotFound,
     TaskBoardCheckpointMismatch,
     TaskBoardCheckpointMissing,
+    TaskBoardCheckpointRootUnreadable,
+    TaskBoardExportDestinationInvalid,
+    TaskBoardForkPrefixIncomplete,
+    TaskBoardForkTargetExists,
+    TaskBoardManifestUnreadable,
+    TaskBoardOutputWriteFailed,
+    TaskBoardStepNotStored,
+    TaskBoardStepUnreadable,
     TaskBoardTaskListInvalid,
 )
+from vidbyte_cli.lib.files import LocalFileStore  # noqa: E402
+from vidbyte_cli.lib.files import store as store_module  # noqa: E402
 from vidbyte_cli.lib.runtime_primitives.task_board import TaskBoardCodexSession  # noqa: E402
 from vidbyte_cli.lib.runtime_primitives.task_board_checkpoints import (  # noqa: E402
     TaskBoardCheckpointer,
 )
-from vidbyte_cli.lib.runtime_primitives.task_board_files import TaskBoardFileStore  # noqa: E402
+from vidbyte_cli.lib.runtime_primitives.task_board_tasks import TaskBoardTaskFiles  # noqa: E402
 from vidbyte_cli.types.runtime import (  # noqa: E402
     RuntimeAdmissionGrant,
     RuntimeHost,
@@ -205,7 +219,7 @@ def test_list_boards_reports_progress() -> None:
                 _armed(session, root, board)
                 await session._run(make_plan(), _settings(tasks), "rta_list")
             (root / "not-a-board").mkdir()
-            rows = TaskBoardCheckpointer.list_boards(root)
+            rows = TaskBoardCheckpointer.list_boards(root).boards
             by_id = {row.board_id: row for row in rows}
             return (
                 set(by_id) == {"b-a", "b-b"}
@@ -548,8 +562,8 @@ def test_fork_past_a_gap_fails() -> None:
             (root / "b-gap" / "step-0.json").unlink()
             try:
                 source.fork_into(TaskBoardCheckpointer(root, "b-gap-fork"), 2)
-            except TaskBoardCheckpointMissing:
-                return True
+            except TaskBoardForkPrefixIncomplete as error:
+                return "step 0" in error.message and not (root / "b-gap-fork").exists()
             return False
 
     record("fork past a gap fails", asyncio.run(go()))
@@ -737,7 +751,7 @@ def test_agent_settings_are_bounded_and_carried() -> None:
 def test_task_list_round_trips_through_both_formats() -> None:
     # [Edge Case] Import and export are inverses in Markdown and JSON, and reject other shapes.
     with tempfile.TemporaryDirectory() as directory:
-        store = TaskBoardFileStore(Path(directory))
+        store = TaskBoardTaskFiles()
         board = ("first task", "second task\nwith a second line")
         round_tripped = []
         for name in ("board.md", "board.json"):
@@ -838,6 +852,209 @@ def test_resume_bounds_rejected_before_admission() -> None:
                 record(name, True)
 
 
+def _capture_context(documents: list[object]) -> SimpleNamespace:
+    # The read verbs only ever call context.output().result(document, text).
+    output = SimpleNamespace(result=lambda document, _text: documents.append(document))
+    return SimpleNamespace(output=lambda: output)
+
+
+async def _stored_board(root: Path, board: str, tasks: tuple[str, ...], stop_after: int) -> None:
+    # Checkpoints the first `stop_after` steps of a board, leaving the rest pending.
+    session = _session_with_fakes([], [f"r{index}" for index in range(len(tasks))])
+    _armed(session, root, board, stop_after=stop_after)
+    await session._run(make_plan(), _settings(tasks), f"rta_{board}")
+
+
+def test_local_file_store_is_generic_and_tells_absent_from_broken() -> None:
+    # [Hidden Failure] An absent file is None, a broken one raises with a fixed reason, and
+    # the store itself names no product: it has to stay usable by any future primitive.
+    with tempfile.TemporaryDirectory() as directory:
+        store = LocalFileStore(Path(directory))
+        Path(directory, "bad.json").write_text("{not json", encoding="utf-8")
+        Path(directory, "blocker").write_text("a file", encoding="utf-8")
+        absent = store.read_json("missing.json") is None and store.read_text("gone.txt") is None
+        try:
+            store.read_json("bad.json")
+            parse_reason = ""
+        except LocalFileReadFailed as error:
+            parse_reason = error.reason
+        try:
+            store.write_text(Path("blocker", "child.txt"), "x")
+            write_reason = ""
+        except LocalFileWriteFailed as error:
+            write_reason = error.reason
+        source = Path(store_module.__file__).read_text(encoding="utf-8")
+        record(
+            "local file store is generic and tells absent from broken",
+            absent
+            and "JSON" in parse_reason
+            and "parent of the path is a file" in write_reason
+            and "TaskBoard" not in source
+            and "task_board" not in source,
+            f"absent={absent} parse={parse_reason!r} write={write_reason!r}",
+        )
+
+
+def test_list_reports_a_broken_board_instead_of_hiding_it() -> None:
+    # [Silent Failure] One corrupt manifest is listed with its fix, and the good board survives.
+    async def go() -> tuple[bool, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            await _stored_board(root, "good", ("a", "b"), 2)
+            (root / "broken").mkdir()
+            (root / "broken" / "board.json").write_text("{", encoding="utf-8")
+            (root / "..weird name").mkdir()
+            documents: list[object] = []
+            TaskBoardCommand().execute_list(_capture_context(documents), root)
+            data = documents[0].data  # type: ignore[attr-defined]
+            broken = data["unreadable"]
+            ok = (
+                [row["board_id"] for row in data["boards"]] == ["good"]
+                and len(broken) == 1
+                and broken[0]["board_id"] == "broken"
+                and "board.json" in broken[0]["problem"]
+                and "unreadable" in data["text"]
+            )
+            return ok, str(data)
+
+    ok, detail = asyncio.run(go())
+    record("list reports a broken board instead of hiding it", ok, detail)
+
+
+def test_list_names_an_unscannable_root() -> None:
+    # [Hidden Failure] A root that exists but cannot be scanned names --checkpoint-root.
+    with tempfile.TemporaryDirectory() as directory:
+        denied = PermissionError("denied")
+        with mock.patch.object(Path, "iterdir", side_effect=denied):
+            try:
+                TaskBoardCommand().execute_list(_capture_context([]), Path(directory))
+            except TaskBoardCheckpointRootUnreadable as error:
+                record(
+                    "list names an unscannable root",
+                    "permission" in error.message and "--checkpoint-root" in (error.hint or ""),
+                )
+                return
+        record("list names an unscannable root", False, "scan failure was not classified")
+
+
+def test_status_names_the_corrupt_step_and_the_replay_that_fixes_it() -> None:
+    # [Hidden Failure] A corrupt step file fails status with the step and the exact repair.
+    async def go() -> bool:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            await _stored_board(root, "b-corrupt", ("a", "b", "c"), 3)
+            (root / "b-corrupt" / "step-1.json").write_text('{"index": 1}', encoding="utf-8")
+            try:
+                TaskBoardCommand().execute_status(_capture_context([]), root, "b-corrupt", None)
+            except TaskBoardStepUnreadable as error:
+                return "step 1" in error.message and "--replay-task 1" in error.description
+            return False
+
+    record("status names the corrupt step and the replay that fixes it", asyncio.run(go()))
+
+
+def test_status_report_write_failure_names_the_option() -> None:
+    # [Hidden Failure] An unwritable --report-file is named as that option, not a crash.
+    async def go() -> bool:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            await _stored_board(root, "b-report-fail", ("a",), 1)
+            blocker = root / "blocker"
+            blocker.write_text("a file", encoding="utf-8")
+            try:
+                TaskBoardCommand().execute_status(
+                    _capture_context([]), root, "b-report-fail", blocker / "report.md"
+                )
+            except TaskBoardOutputWriteFailed as error:
+                return "--report-file" in error.message and "parent" in error.message
+            return False
+
+    record("status report write failure names the option", asyncio.run(go()))
+
+
+def test_show_step_tells_pending_from_out_of_range() -> None:
+    # [Edge Case] A missing index says whether it is pending or past the end of the board.
+    async def go() -> tuple[bool, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            await _stored_board(root, "b-show", ("a", "b", "c"), 1)
+            notes: list[str] = []
+            for index in (2, 9):
+                try:
+                    TaskBoardCommand().execute_show_step(
+                        _capture_context([]), root, "b-show", index
+                    )
+                except TaskBoardStepNotStored as error:
+                    notes.append(error.description)
+            ok = (
+                len(notes) == 2 and "has not run yet" in notes[0] and "only has 3 tasks" in notes[1]
+            )
+            return ok, str(notes)
+
+    ok, detail = asyncio.run(go())
+    record("show-step tells pending from out of range", ok, detail)
+
+
+def test_fork_refusals_create_nothing() -> None:
+    # [Hidden Failure] Every refusal happens before a byte is copied, so no partial board.
+    async def go() -> tuple[bool, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            await _stored_board(root, "b-fork-src", ("a", "b", "c"), 2)
+            await _stored_board(root, "b-taken", ("z",), 1)
+            command = TaskBoardCommand()
+            outcomes: dict[str, bool] = {}
+            cases = (
+                ("past stored prefix", "b-new", 3, TaskBoardForkPrefixIncomplete),
+                ("existing target", "b-taken", 1, TaskBoardForkTargetExists),
+                ("escaping id", "..", 1, TaskBoardBoardIdInvalid),
+            )
+            for name, into, at_index, expected in cases:
+                try:
+                    command.execute_fork(_capture_context([]), root, "b-fork-src", at_index, into)
+                    outcomes[name] = False
+                except expected:
+                    outcomes[name] = True
+            outcomes["no partial dir"] = not (root / "b-new").exists()
+            try:
+                command.execute_fork(_capture_context([]), root, "b-fork-src", 9, "b-new")
+            except TaskBoardForkPrefixIncomplete as error:
+                outcomes["largest at named"] = "--at 2" in (error.hint or "")
+            return all(outcomes.values()), str(outcomes)
+
+    ok, detail = asyncio.run(go())
+    record("fork refusals create nothing", ok, detail)
+
+
+def test_export_failures_are_classified() -> None:
+    # [Hidden Failure] A bad suffix, an old manifest, and an unwritable path each fail typed.
+    async def go() -> tuple[bool, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            await _stored_board(root, "b-export", ("a", "b"), 2)
+            legacy = root / "b-legacy"
+            legacy.mkdir()
+            (legacy / "board.json").write_text('{"version": 1}', encoding="utf-8")
+            (root / "blocker").write_text("a file", encoding="utf-8")
+            command = TaskBoardCommand()
+            outcomes: dict[str, bool] = {}
+            cases = (
+                ("bad suffix", "b-export", root / "board.yaml", TaskBoardExportDestinationInvalid),
+                ("legacy manifest", "b-legacy", root / "out.md", TaskBoardManifestUnreadable),
+                ("unwritable", "b-export", root / "blocker" / "x.md", TaskBoardOutputWriteFailed),
+            )
+            for name, board, destination, expected in cases:
+                try:
+                    command.execute_export_tasks(_capture_context([]), root, board, destination)
+                    outcomes[name] = False
+                except expected:
+                    outcomes[name] = True
+            return all(outcomes.values()), str(outcomes)
+
+    ok, detail = asyncio.run(go())
+    record("export failures are classified", ok, detail)
+
+
 def main() -> int:
     # Runs every checkpoint, resume, replay, repair, slicing, and reporting case.
     for case in (
@@ -874,6 +1091,14 @@ def main() -> int:
         test_task_list_round_trips_through_both_formats,
         test_unknown_board_fails_closed,
         test_resume_bounds_rejected_before_admission,
+        test_local_file_store_is_generic_and_tells_absent_from_broken,
+        test_list_reports_a_broken_board_instead_of_hiding_it,
+        test_list_names_an_unscannable_root,
+        test_status_names_the_corrupt_step_and_the_replay_that_fixes_it,
+        test_status_report_write_failure_names_the_option,
+        test_show_step_tells_pending_from_out_of_range,
+        test_fork_refusals_create_nothing,
+        test_export_failures_are_classified,
     ):
         case()
     passed = sum(1 for status, _, _ in RESULTS if status == PASS)

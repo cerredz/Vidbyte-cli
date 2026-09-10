@@ -16,13 +16,26 @@ from uuid import uuid4
 import click
 
 from ...lib.constants.runtime import TaskBoardProgress as Progress
-from ...lib.errors.failures import RuntimeAdmissionNotVerified, TaskBoardInputInvalid
+from ...lib.errors.failures import (
+    LocalFileReadFailed,
+    LocalFileWriteFailed,
+    RuntimeAdmissionNotVerified,
+    TaskBoardBoardIdInvalid,
+    TaskBoardCheckpointMissing,
+    TaskBoardCheckpointRootUnreadable,
+    TaskBoardForkFailed,
+    TaskBoardForkTargetExists,
+    TaskBoardInputInvalid,
+    TaskBoardOutputWriteFailed,
+    TaskBoardStepNotStored,
+)
+from ...lib.files import LocalFileStore
 from ...lib.output import OutputDocument
 from ...lib.runtime.context import ApplicationContext as Context
 from ...lib.runtime_primitives.gate import RuntimeAdmissionGate
 from ...lib.runtime_primitives.task_board import TaskBoardCodexSession
 from ...lib.runtime_primitives.task_board_checkpoints import TaskBoardCheckpointer
-from ...lib.runtime_primitives.task_board_files import TaskBoardFileStore
+from ...lib.runtime_primitives.task_board_tasks import TaskBoardTaskFiles
 from ...types.provider import PROVIDER_ENV_VARS, Provider
 from ...types.runtime import (
     RuntimeAdmissionRequest,
@@ -48,7 +61,6 @@ from ...types.runtime import (
 )
 
 _DEFAULT_CHECKPOINT_ROOT = Path(".vidbyte") / "task-board"
-_BOARD_ID_PATTERN = r"[A-Za-z0-9._-]{1,64}"
 
 _GROUP_HELP = (
     "Run an ordered board of tasks, each in its own Codex agent, and inspect the boards this "
@@ -724,18 +736,33 @@ class TaskBoardCommand:
         )
 
     def execute_list(self, context: Context, checkpoint_root: Path) -> None:
-        # Offline and free: one row per board directory holding a readable manifest.
-        root = checkpoint_root.expanduser().resolve()
-        boards = TaskBoardCheckpointer.list_boards(root)
+        # Offline and free: one row per board directory holding a manifest. Only a root that
+        # cannot be scanned fails the verb, naming --checkpoint-root; a board that will not
+        # load is listed with its own problem and fix instead, so one corrupt file never hides
+        # every other board from the caller deciding what to do next.
+        root = self._root(checkpoint_root)
+        try:
+            index = TaskBoardCheckpointer.list_boards(root)
+        except LocalFileReadFailed as error:
+            raise TaskBoardCheckpointRootUnreadable(error.reason) from error
         rows = [
             f"{item.board_id}  {item.completed}/{item.task_count} done, "
             f"{item.failed} failed, {item.pending} pending  {item.board_dir}"
-            for item in boards
+            for item in index.boards
         ]
+        rows.extend(
+            f"{item.board_id}  unreadable: {item.problem} {item.hint}  {item.board_dir}"
+            for item in index.unreadable
+        )
+        empty = (
+            f"No checkpointed boards under {root}. Pass --checkpoint-root if the boards were "
+            "saved somewhere else."
+        )
         listing = TaskBoardListing(
             checkpoint_root=str(root),
-            boards=boards,
-            text="\n".join(rows) if rows else f"No checkpointed boards under {root}.",
+            boards=index.boards,
+            unreadable=index.unreadable,
+            text="\n".join(rows) if rows else empty,
         )
         context.output().result(
             OutputDocument(kind="runtime.task-board.list", data=listing.model_dump(mode="json")),
@@ -745,11 +772,23 @@ class TaskBoardCommand:
     def execute_status(
         self, context: Context, checkpoint_root: Path, board_id: str, report_file: Path | None
     ) -> None:
-        # Offline and free, so an agent can call it between every decision it makes.
+        # Offline and free, so an agent can call it between every decision it makes. Reading
+        # the board fails with the checkpointer's own board-specific failures, which already
+        # name the board, the step, and the repair. Only the report write is put in context
+        # here, because only this verb knows the destination came from --report-file.
         checkpointer = self._read_only(checkpoint_root, board_id)
         chain = checkpointer.chain()
         spend = sum(node.estimated_cost_usd or 0.0 for node in chain.nodes)
-        report = None if report_file is None else str(checkpointer.write_report(chain, report_file))
+        try:
+            report = (
+                None if report_file is None else str(checkpointer.write_report(chain, report_file))
+            )
+        except LocalFileWriteFailed as error:
+            raise TaskBoardOutputWriteFailed("--report-file", error.reason) from error
+        except (OSError, RuntimeError) as error:
+            # Expanding ~ or resolving the destination fails before the store is reached.
+            reason = LocalFileStore.reason_for(error)
+            raise TaskBoardOutputWriteFailed("--report-file", reason) from error
         status = TaskBoardStatusReport(
             board_id=chain.board_id,
             board_dir=chain.board_dir,
@@ -776,10 +815,17 @@ class TaskBoardCommand:
     def execute_show_step(
         self, context: Context, checkpoint_root: Path, board_id: str, index: int
     ) -> None:
-        # Returns the whole stored record, so a caller never has to open a checkpoint file.
+        # Returns the whole stored record, so a caller never has to open a checkpoint file. The
+        # chain is read first because the task count is what tells an out-of-range index apart
+        # from a step that is merely pending, and those two need different next calls.
         checkpointer = self._read_only(checkpoint_root, board_id)
-        record = checkpointer.read_step(index)
         chain = checkpointer.chain()
+        try:
+            record = checkpointer.read_step(index)
+        except TaskBoardCheckpointMissing as error:
+            # The shared missing-step failure is worded for a resume; here the fix is a
+            # different --index, so it is replaced by one that says which indices exist.
+            raise TaskBoardStepNotStored(checkpointer.board_id, index, chain.task_count) from error
         detail = TaskBoardStepDetail(
             board_id=checkpointer.board_id,
             board_dir=str(checkpointer.directory),
@@ -796,14 +842,20 @@ class TaskBoardCommand:
     def execute_fork(
         self, context: Context, checkpoint_root: Path, board_id: str, at_index: int, into: str
     ) -> None:
-        # Copies a prefix into a new board; the source board is only ever read.
+        # Copies a prefix into a new board; the source board is only ever read. Every check
+        # that can refuse the fork runs before the first byte is copied: the new id must be
+        # safe, the source must load, the target must be unused, and fork_into proves the
+        # prefix is stored. What remains is a filesystem failure mid-copy, which names the
+        # partial directory to delete.
+        self._require_board_id(into, "--into")
         source = self._read_only(checkpoint_root, board_id)
-        self._require_board_id(into)
-        root = checkpoint_root.expanduser().resolve()
-        target = TaskBoardCheckpointer(root, into)
+        target = TaskBoardCheckpointer(self._root(checkpoint_root), into)
         if target.directory.exists():
-            raise click.BadParameter(f"Board {into} already exists under {root}.")
-        copied = source.fork_into(target, at_index)
+            raise TaskBoardForkTargetExists(into)
+        try:
+            copied = source.fork_into(target, at_index)
+        except LocalFileWriteFailed as error:
+            raise TaskBoardForkFailed(into, error.reason) from error
         fork = TaskBoardForkResult(
             board_id=into,
             board_dir=str(target.directory),
@@ -821,12 +873,20 @@ class TaskBoardCommand:
     def execute_export_tasks(
         self, context: Context, checkpoint_root: Path, board_id: str, destination: Path
     ) -> None:
-        # Writes the stored board back out in a shape --task-list reads back identically.
+        # Writes the stored board back out in a shape --task-list reads back identically. A
+        # manifest with no task list fails in stored_tasks and an unknown suffix fails in
+        # write_task_list, each with its own failure; a refused write is named against --to.
         checkpointer = self._read_only(checkpoint_root, board_id)
         board = checkpointer.stored_tasks()
-        written = TaskBoardFileStore(Path.cwd()).write_task_list(
-            destination.expanduser().resolve(), board
-        )
+        try:
+            written = TaskBoardTaskFiles().write_task_list(
+                destination.expanduser().resolve(), board
+            )
+        except LocalFileWriteFailed as error:
+            raise TaskBoardOutputWriteFailed("--to", error.reason) from error
+        except (OSError, RuntimeError) as error:
+            # Expanding ~ or resolving the destination fails before the store is reached.
+            raise TaskBoardOutputWriteFailed("--to", LocalFileStore.reason_for(error)) from error
         export = TaskBoardTaskExport(
             board_id=checkpointer.board_id,
             path=str(written),
@@ -864,16 +924,26 @@ class TaskBoardCommand:
         )
 
     def _read_only(self, checkpoint_root: Path, board_id: str) -> TaskBoardCheckpointer:
-        # Every offline verb addresses a board the same way, and proves it exists before use.
-        self._require_board_id(board_id)
-        checkpointer = TaskBoardCheckpointer(checkpoint_root.expanduser().resolve(), board_id)
+        # Every offline verb addresses a board the same way and proves it exists before use:
+        # an unsafe id, an unresolvable root, an absent board, and a broken manifest each fail
+        # here with their own typed failure, before the verb reads anything further.
+        self._require_board_id(board_id, "--checkpoint-id")
+        checkpointer = TaskBoardCheckpointer(self._root(checkpoint_root), board_id)
         checkpointer.read_manifest()
         return checkpointer
 
-    def _require_board_id(self, board_id: str) -> None:
-        # One character class for every board id, so a board can never escape its own root.
-        if re.fullmatch(_BOARD_ID_PATTERN, board_id) is None:
-            raise click.BadParameter("Use 1–64 letters, digits, dots, underscores or hyphens.")
+    def _root(self, checkpoint_root: Path) -> Path:
+        # Absolute from here on. Expanding ~ or resolving a link loop can fail, and that is a
+        # bad --checkpoint-root rather than a CLI defect, so it is named as one.
+        try:
+            return checkpoint_root.expanduser().resolve()
+        except (OSError, RuntimeError) as error:
+            raise TaskBoardCheckpointRootUnreadable(LocalFileStore.reason_for(error)) from error
+
+    def _require_board_id(self, board_id: str, option: str) -> None:
+        # The character class lives with the board layout; this names the option to fix.
+        if not TaskBoardCheckpointer.valid_id(board_id):
+            raise TaskBoardBoardIdInvalid(option)
 
     def _resume_command(
         self, checkpointer: TaskBoardCheckpointer, chain: TaskBoardCheckpointChain
@@ -895,16 +965,16 @@ class TaskBoardCommand:
         # A board comes from exactly one source: literal task strings, whole Markdown files one
         # task each, one task-list file, or the list a stored board recorded. Accepting two at
         # once would leave the board's order ambiguous.
-        store = TaskBoardFileStore(Path.cwd())
+        files = TaskBoardTaskFiles()
         literals = tuple(item for item in (task.strip() for task in tasks) if item)
         if sum((bool(literals), bool(task_files), task_list is not None)) > 1:
             raise TaskBoardInputInvalid()
         if literals:
             return literals
         if task_files:
-            return tuple(store.read_task_file(path) for path in task_files)
+            return tuple(files.read_task_file(path) for path in task_files)
         if task_list is not None:
-            return store.read_task_list(task_list)
+            return files.read_task_list(task_list)
         if stored is not None:
             return stored.stored_tasks()
         raise TaskBoardInputInvalid()
@@ -934,7 +1004,7 @@ class TaskBoardCommand:
             return None
         if parsed.checkpoint_id is None:
             return None
-        self._require_board_id(parsed.checkpoint_id)
+        self._require_board_id(parsed.checkpoint_id, "--checkpoint-id")
         return TaskBoardCheckpointer(parsed.root(), parsed.checkpoint_id)
 
     def _identified(

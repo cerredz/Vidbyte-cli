@@ -303,9 +303,23 @@ kept out of the fingerprint so a resume with a different budget is not read as a
 
 ### 15.6 File operations live in one class
 
-`lib/runtime_primitives/task_board_files.py` holds `TaskBoardFileStore`: atomic JSON and text
-writes, appends, copies, directory scans, task-file reads, and task-list import and export.
-`TaskBoardCheckpointer` reaches disk only through it and owns board semantics alone.
+`lib/files/store.py` holds `LocalFileStore`, a product-neutral store any command or primitive
+can use: atomic JSON and text writes, appends, copies, and directory scans. It returns `None`
+only for an absent file and raises `LocalFileReadFailed` / `LocalFileWriteFailed` with a fixed
+reason category for everything else. `TaskBoardCheckpointer` reaches disk only through it and
+owns board semantics alone, and the task-board formats — one-task Markdown files and whole-board
+task lists in and out — live in `lib/runtime_primitives/task_board_tasks.py` as
+`TaskBoardTaskFiles`, on top of the same store. (PR #46 review, comment 3973252882.)
+
+### 15.6a Offline verbs fail with typed, repairable errors
+
+Each offline verb catches what can go wrong and re-raises it with the context only it knows:
+an unscannable `--checkpoint-root`, an unsafe `--checkpoint-id` or `--into`, an absent versus a
+corrupt manifest or step file, a `show-step --index` that is pending versus past the board, a
+fork whose prefix is not fully stored (checked before the first copy), and a `--report-file` or
+`--to` destination that cannot be written. `list` reports a board that will not load, with its
+failure's own fix, rather than failing the listing or silently dropping it. (PR #46 review,
+comment 3973234823.)
 
 ### 15.7 Not taken
 

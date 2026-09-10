@@ -30,7 +30,11 @@ from ...types.runtime import (
 from ..constants.runtime import TaskBoardCodexConfig, TaskBoardLimit
 from ..constants.runtime import TaskBoardProgress as Progress
 from ..errors.cli_error import CliError
-from ..errors.failures import TaskBoardCheckpointMismatch, TaskBoardHostFailed
+from ..errors.failures import (
+    LocalFileWriteFailed,
+    TaskBoardCheckpointMismatch,
+    TaskBoardHostFailed,
+)
 from .task_board_checkpoints import TaskBoardCheckpointer
 
 if TYPE_CHECKING:
@@ -339,7 +343,7 @@ class TaskBoardCodexSession:
         checkpointer = self._require_checkpointer()
         try:
             step_file = checkpointer.write_step(record)
-        except OSError:
+        except LocalFileWriteFailed:
             self._progress(f"Checkpoint write failed for task {record.index}; continuing.")
             return
         if self._controls.checkpoint_mode is TaskBoardCheckpointMode.STREAM and self._stream:
@@ -357,7 +361,8 @@ class TaskBoardCodexSession:
         # The export log is an observer of the same event, so its failure is also non-fatal.
         try:
             checkpointer.append_export(record, checkpointer.export_path(self._controls.export_file))
-        except OSError:
+        except (LocalFileWriteFailed, OSError):
+            # OSError: resolving a configured export path can fail before the store is reached.
             self._progress(f"Checkpoint export failed for task {record.index}; continuing.")
 
     def _parent_index(self, entries: list[str | None], index: int) -> int | None:
@@ -375,7 +380,7 @@ class TaskBoardCodexSession:
         # A board that cannot record its manifest is still worth running; only resume is lost.
         try:
             self._require_checkpointer().write_manifest(settings)
-        except OSError:
+        except LocalFileWriteFailed:
             self._progress("Checkpoint manifest write failed; continuing.")
 
     def _require_checkpointer(self) -> TaskBoardCheckpointer:
@@ -565,11 +570,12 @@ class TaskBoardCodexSession:
         try:
             report = Path(self._controls.report_file)
             return str(checkpointer.write_report(checkpointer.chain(), report))
+        except (LocalFileWriteFailed, OSError):
+            # OSError: resolving the configured report path can fail before the store is reached.
+            self._progress("Checkpoint report write failed; continuing.")
+            return None
         except CliError:
             self._progress("Checkpoint report could not read the board; continuing.")
-            return None
-        except OSError:
-            self._progress("Checkpoint report write failed; continuing.")
             return None
 
     def _resume_command(

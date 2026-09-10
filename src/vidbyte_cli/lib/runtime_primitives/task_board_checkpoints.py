@@ -1,7 +1,7 @@
 """One board's checkpoint directory: its layout, its manifest, and its stored step chain.
 
 A board is addressable by an absolute directory, so several boards coexist under one root and
-a caller can name the one it means. Every byte written here goes through `TaskBoardFileStore`;
+a caller can name the one it means. Every byte written here goes through `LocalFileStore`;
 this class owns only board semantics — which file a step lives in, whether a stored board still
 matches this invocation, how a fork copies a prefix, and how stored steps read back as a chain.
 Nothing here touches the network; the backend never sees tasks.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,15 +20,22 @@ from ...types.runtime import (
     TaskBoardBoardSummary,
     TaskBoardCheckpoint,
     TaskBoardCheckpointChain,
+    TaskBoardIndex,
     TaskBoardSettings,
+    TaskBoardUnreadableBoard,
 )
 from ..errors.failures import (
+    LocalFileReadFailed,
     TaskBoardBoardNotFound,
     TaskBoardCheckpointMismatch,
     TaskBoardCheckpointMissing,
+    TaskBoardForkPrefixIncomplete,
+    TaskBoardManifestUnreadable,
+    TaskBoardStepUnreadable,
 )
-from .task_board_files import TaskBoardFileStore
+from ..files import LocalFileStore
 
+_BOARD_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _MANIFEST_NAME = "board.json"
 _MANIFEST_VERSION = 2
 _EXPORT_NAME = "progress.jsonl"
@@ -39,7 +47,7 @@ class TaskBoardCheckpointer:
 
     def __init__(self, root: Path, board_id: str) -> None:
         # Building the store resolves the directory without creating it; writes create parents.
-        self._store = TaskBoardFileStore(root / board_id)
+        self._store = LocalFileStore(root / board_id)
         self._board_id = board_id
 
     @property
@@ -57,6 +65,12 @@ class TaskBoardCheckpointer:
         # Hashes the joined tasks so an unchanged board reuses one directory.
         digest = hashlib.sha1("\x00".join(tasks).encode("utf-8")).hexdigest()
         return digest[:12]
+
+    @staticmethod
+    def valid_id(board_id: str) -> bool:
+        # One character class for every board id, so a board can never escape its own root:
+        # no separator can appear, and an all-dots name would address the root or its parent.
+        return _BOARD_ID_PATTERN.fullmatch(board_id) is not None and set(board_id) != {"."}
 
     @staticmethod
     def timestamp() -> datetime:
@@ -90,10 +104,16 @@ class TaskBoardCheckpointer:
         self._store.write_json(_MANIFEST_NAME, payload)
 
     def read_manifest(self) -> dict[str, object]:
-        # A board with no readable manifest is not a board; every read path fails closed here.
-        manifest = self._store.read_json(_MANIFEST_NAME)
-        if not isinstance(manifest, dict):
+        # A board with no manifest is not a board, and every read path fails closed here. An
+        # absent file and a broken one fail differently, because they have different repairs.
+        try:
+            manifest = self._store.read_json(_MANIFEST_NAME)
+        except LocalFileReadFailed as error:
+            raise TaskBoardManifestUnreadable(self._board_id, error.reason) from error
+        if manifest is None:
             raise TaskBoardBoardNotFound(self._board_id)
+        if not isinstance(manifest, dict):
+            raise TaskBoardManifestUnreadable(self._board_id, "it is JSON but not an object")
         return manifest
 
     def validate_manifest(self, settings: TaskBoardSettings) -> None:
@@ -110,8 +130,10 @@ class TaskBoardCheckpointer:
     def stored_tasks(self) -> tuple[str, ...]:
         # The board as it was checkpointed, which is what makes a resume command paste-able.
         tasks = self.read_manifest().get("tasks")
-        if not isinstance(tasks, list) or not all(isinstance(task, str) for task in tasks):
-            raise TaskBoardCheckpointMismatch("manifest-tasks-unreadable")
+        if not isinstance(tasks, list) or not tasks or not all(isinstance(t, str) for t in tasks):
+            raise TaskBoardManifestUnreadable(
+                self._board_id, "it holds no task list, as manifests before version 2 do not"
+            )
         return tuple(str(task) for task in tasks)
 
     def write_step(self, record: TaskBoardCheckpoint) -> Path:
@@ -120,13 +142,19 @@ class TaskBoardCheckpointer:
 
     def read_step(self, index: int) -> TaskBoardCheckpoint:
         # A gap fails loudly, because silently re-running a step is what resume exists to avoid.
-        raw = self._store.read_text(self.step_name(index))
+        # A file that exists but will not load is a different failure with a different repair.
+        try:
+            raw = self._store.read_text(self.step_name(index))
+        except LocalFileReadFailed as error:
+            raise TaskBoardStepUnreadable(self._board_id, index, error.reason) from error
         if raw is None:
             raise TaskBoardCheckpointMissing(index)
         try:
             return TaskBoardCheckpoint.model_validate_json(raw)
         except ValueError as error:
-            raise TaskBoardCheckpointMismatch(f"step-{index}-unreadable") from error
+            raise TaskBoardStepUnreadable(
+                self._board_id, index, "it does not hold a valid step record"
+            ) from error
 
     def load_prefix(self, count: int) -> tuple[TaskBoardCheckpoint, ...]:
         # Loads steps 0..count-1 in order; any gap fails instead of re-executing.
@@ -144,8 +172,7 @@ class TaskBoardCheckpointer:
     def chain(self) -> TaskBoardCheckpointChain:
         # The stored steps as a linked list plus the fork edge to the board they branched from.
         manifest = self.read_manifest()
-        count = manifest.get("task_count")
-        task_count = count if isinstance(count, int) else 0
+        task_count = self._task_count(manifest)
         parent = manifest.get("parent_board_id")
         forked = manifest.get("forked_at_index")
         return TaskBoardCheckpointChain(
@@ -171,16 +198,35 @@ class TaskBoardCheckpointer:
         )
 
     @classmethod
-    def list_boards(cls, root: Path) -> tuple[TaskBoardBoardSummary, ...]:
-        # Scans one checkpoint root. A directory without a readable manifest is skipped rather
-        # than failing the listing, because an unrelated folder under the root is not an error.
-        summaries: list[TaskBoardBoardSummary] = []
-        for directory in TaskBoardFileStore(root).subdirectories():
-            try:
-                summaries.append(cls(root, directory.name).summary())
-            except (TaskBoardBoardNotFound, TaskBoardCheckpointMismatch):
+    def list_boards(cls, root: Path) -> TaskBoardIndex:
+        # Scans one checkpoint root. A directory with no manifest, or a name no verb could
+        # address, is an unrelated folder and is skipped. A board that has a manifest but will
+        # not load is reported with its own failure's wording instead, so one broken board
+        # neither fails the whole listing nor silently disappears from it.
+        boards: list[TaskBoardBoardSummary] = []
+        unreadable: list[TaskBoardUnreadableBoard] = []
+        for directory in LocalFileStore(root).subdirectories():
+            if not cls.valid_id(directory.name):
                 continue
-        return tuple(summaries)
+            board = cls(root, directory.name)
+            try:
+                boards.append(board.summary())
+            except TaskBoardBoardNotFound:
+                continue
+            except (
+                TaskBoardManifestUnreadable,
+                TaskBoardStepUnreadable,
+                TaskBoardCheckpointMissing,
+            ) as error:
+                unreadable.append(
+                    TaskBoardUnreadableBoard(
+                        board_id=board.board_id,
+                        board_dir=str(board.directory),
+                        problem=error.message,
+                        hint=error.hint or "",
+                    )
+                )
+        return TaskBoardIndex(boards=tuple(boards), unreadable=tuple(unreadable))
 
     def resume_command(self, index: int, repair: bool = False) -> str:
         # One rendering site for the paste-able continuation, so every verb that returns one
@@ -202,22 +248,24 @@ class TaskBoardCheckpointer:
         return self._store.append_line(path, record.model_dump_json())
 
     def write_report(self, chain: TaskBoardCheckpointChain, path: Path) -> Path:
-        # A board's history as prose, for the reader who will never open a JSON step file.
+        # A board's history as prose, for the reader who will never open a JSON step file. The
+        # destination is absolute, so the board's own store writes it wherever it points.
         target = Path(path).expanduser().resolve()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self._report_body(chain), encoding="utf-8")
-        return target
+        return self._store.write_text(target, self._report_body(chain))
 
     def fork_into(self, target: TaskBoardCheckpointer, at_index: int) -> int:
         # Copies steps 0..at_index-1 into a new board and records the edge back to this one, so
-        # both histories stay independently readable and neither can overwrite the other.
+        # both histories stay independently readable and neither can overwrite the other. The
+        # whole prefix is proven present before the first copy, so a bad --at creates nothing,
+        # and the manifest is written last, so a copy that dies partway is never a board.
         settings_manifest = self.read_manifest()
+        task_count = self._task_count(settings_manifest)
+        available = self._stored_prefix(task_count)
+        if at_index > available:
+            raise TaskBoardForkPrefixIncomplete(self._board_id, at_index, available, task_count)
         copied = 0
         for index in range(at_index):
-            name = self.step_name(index)
-            if not self._store.exists(name):
-                raise TaskBoardCheckpointMissing(index)
-            self._store.copy_into(name, target.step_file(index))
+            self._store.copy_into(self.step_name(index), target.step_file(index))
             copied += 1
         forked: dict[str, object] = dict(settings_manifest)
         forked["board_id"] = target.board_id
@@ -257,6 +305,23 @@ class TaskBoardCheckpointer:
         except (OSError, subprocess.SubprocessError):
             return False
         return finished.returncode == 0
+
+    def _stored_prefix(self, limit: int) -> int:
+        # Length of the unbroken run of stored steps from step 0, which is the largest valid
+        # fork point: a fork copies a dense prefix, never one with a hole in it.
+        for index in range(limit):
+            if not self._store.exists(self.step_name(index)):
+                return index
+        return limit
+
+    @staticmethod
+    def _task_count(manifest: dict[str, object]) -> int:
+        # A hand-edited or damaged count reads as an empty board rather than a crash, so the
+        # read verbs still report the board and its stored steps instead of failing outright.
+        count = manifest.get("task_count")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            return 0
+        return count
 
     def _export_default(self) -> Path:
         # Keeps the log inside the board it describes when the caller names no path.

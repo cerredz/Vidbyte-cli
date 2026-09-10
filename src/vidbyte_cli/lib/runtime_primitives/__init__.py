@@ -10,7 +10,7 @@ from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
 from .task_board import TaskBoardCodexSession, TaskBoardSummarizer
 from .task_board_checkpoints import TaskBoardCheckpointer
-from .task_board_files import TaskBoardFileStore
+from .task_board_tasks import TaskBoardTaskFiles
 from .verification import RuntimeGrantVerifier
 
 __all__ = [
@@ -21,6 +21,6 @@ __all__ = [
     "RuntimeLaunchPlanner",
     "TaskBoardCheckpointer",
     "TaskBoardCodexSession",
-    "TaskBoardFileStore",
     "TaskBoardSummarizer",
+    "TaskBoardTaskFiles",
 ]

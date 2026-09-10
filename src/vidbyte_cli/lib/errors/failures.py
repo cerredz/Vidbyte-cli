@@ -180,9 +180,234 @@ class TaskBoardTaskListInvalid(CliError):
                 "unreadable, had an unsupported suffix, held a different JSON shape, or "
                 "produced no tasks at all. No board was built and nothing was charged."
             ),
-            trace="TaskBoardFileStore.read_task_list parsed the supplied board file.",
+            trace="TaskBoardTaskFiles.read_task_list parsed the supplied board file.",
             hint="Export an existing board with `runtime task-board export-tasks` to see "
             "the expected shape.",
+        )
+
+
+class TaskBoardBoardIdInvalid(CliError):
+    """A board id is not a single safe directory name inside the checkpoint root."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, option: str) -> None:
+        # Names the option, never the rejected value, which may be an arbitrary path.
+        super().__init__(
+            f"{option} must be 1 to 64 letters, digits, dots, underscores, or hyphens, and "
+            "not only dots.",
+            description=(
+                "A board id names exactly one directory directly inside the checkpoint root, "
+                "so it may not contain a path separator or be made only of dots, which would "
+                f"address a directory outside that root. The value given for {option} broke "
+                "that rule, so nothing was read, written, or charged. Copy the id from a run "
+                "result or from `runtime task-board list` instead of passing a path."
+            ),
+            trace="TaskBoardCommand checked the board id before building any board directory.",
+            hint="Pass the directory to --checkpoint-root and only the board's name as the id.",
+        )
+
+
+class TaskBoardCheckpointRootUnreadable(CliError):
+    """The checkpoint root cannot be resolved or scanned for boards."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, reason: str) -> None:
+        # The caller passed the root themselves, so the option name is enough to act on.
+        super().__init__(
+            f"The checkpoint root could not be read: {reason}.",
+            description=(
+                "Every board lives in a subdirectory of the checkpoint root, so a root that "
+                f"cannot be resolved or listed hides every board inside it; here {reason}. "
+                "Nothing was read, written, or charged. Retrying unchanged fails the same way; "
+                "fix the directory's permissions or pass a different --checkpoint-root."
+            ),
+            trace="TaskBoardCommand resolved --checkpoint-root and scanned it for boards.",
+            hint="Pass --checkpoint-root pointing at the readable directory holding your boards.",
+        )
+
+
+class TaskBoardManifestUnreadable(CliError):
+    """A board directory holds a board.json manifest that cannot be used."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, board_id: str, reason: str) -> None:
+        # Names the board and a fixed reason category; the manifest body is task text.
+        super().__init__(
+            f"Board {board_id} has an unusable board.json manifest: {reason}.",
+            description=(
+                "The manifest is what makes a board addressable by id: it records the task "
+                f"list and the settings every stored prompt depends on, and here {reason}. "
+                "Nothing was changed and nothing was charged, and the step files beside it "
+                "are untouched. Fix the file's permissions if that is the reason; a corrupt "
+                "or pre-version-2 manifest cannot be resumed, so start a fresh board instead."
+            ),
+            trace="TaskBoardCheckpointer.read_manifest loaded board.json from the board directory.",
+            hint="Fix board.json permissions, or rerun the board under a new --checkpoint-id.",
+        )
+
+
+class TaskBoardStepUnreadable(CliError):
+    """A stored step file exists but cannot be read or does not hold a valid step record."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, board_id: str, index: int, reason: str) -> None:
+        # Names the board, the step number, and a fixed reason; never the stored prompt.
+        super().__init__(
+            f"Board {board_id} step {index} is stored but unreadable: {reason}.",
+            description=(
+                f"step-{index}.json exists in the board directory, but {reason}, so it can "
+                "neither be reported nor reused as context for later steps. Nothing was "
+                "changed or charged. Fix the file's permissions if that is the reason; "
+                "otherwise re-run just that step with `runtime task-board run "
+                f"--checkpoint-id {board_id} --replay-task {index}`, which rewrites the file "
+                "and buys one admission."
+            ),
+            trace="TaskBoardCheckpointer.read_step read and validated one step file.",
+            hint=f"Replay step {index} to rebuild its checkpoint file.",
+        )
+
+
+class TaskBoardStepNotStored(CliError):
+    """show-step asked for a step index that has no checkpoint file on this board."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, board_id: str, index: int, task_count: int) -> None:
+        # Tells an out-of-range index apart from a step that simply has not run yet.
+        where = (
+            f"the board only has {task_count} tasks, so valid indices are 0 to {task_count - 1}"
+            if index >= task_count
+            else "that step has not run yet, or its file was removed"
+        )
+        super().__init__(
+            f"Board {board_id} has no stored step {index}.",
+            description=(
+                f"show-step reads step-{index}.json from the board directory and that file "
+                f"does not exist: {where}. Nothing was read, written, or charged. Run "
+                "`runtime task-board status` to see the completed and failed indices that do "
+                "have stored records, and pass one of those to --index."
+            ),
+            trace="TaskBoardCommand.execute_show_step read one step file from the board.",
+            hint="Run `runtime task-board status --checkpoint-id` first to list stored indices.",
+        )
+
+
+class TaskBoardForkTargetExists(CliError):
+    """fork was asked to write into a board id that already has a directory."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, into: str) -> None:
+        # Refusing is the whole point: a fork over a board would destroy that board's history.
+        super().__init__(
+            f"Board {into} already exists under this checkpoint root.",
+            description=(
+                "A fork writes a copied prefix and a new manifest into its own directory, and "
+                f"a directory named {into} is already there. Writing over it would destroy "
+                "whatever history it holds, so nothing was copied, written, or charged. Pick "
+                "an unused --into id, or remove that directory yourself if it is a leftover."
+            ),
+            trace="TaskBoardCommand.execute_fork checked the target directory before copying.",
+            hint="Run `runtime task-board list` to see which board ids are already taken.",
+        )
+
+
+class TaskBoardForkPrefixIncomplete(CliError):
+    """fork --at asks for more leading steps than the source board has stored."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, board_id: str, at_index: int, available: int, task_count: int) -> None:
+        # `available` is the length of the unbroken stored prefix, i.e. the largest valid --at.
+        where = (
+            f"the board only has {task_count} tasks"
+            if at_index > task_count
+            else f"step {available} has no stored checkpoint"
+        )
+        super().__init__(
+            f"Board {board_id} cannot be forked at {at_index}: {where}.",
+            description=(
+                "A fork copies steps 0 through --at minus one, and every one of them must "
+                f"already be stored, but {where}. Nothing was copied, written, or charged, so "
+                "no partial board was created. The largest --at this board supports right "
+                f"now is {available}; fork there, or finish the board first."
+            ),
+            trace="TaskBoardCheckpointer.fork_into checked the stored prefix before copying.",
+            hint=f"Retry with --at {available} or lower.",
+        )
+
+
+class TaskBoardForkFailed(CliError):
+    """Copying a fork's prefix or writing its manifest failed on the filesystem."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, into: str, reason: str) -> None:
+        # The manifest is written last, so a failure leaves a directory no verb treats as a board.
+        super().__init__(
+            f"Forking into board {into} failed: {reason}.",
+            description=(
+                f"The copy stopped partway because {reason}. The source board is untouched, "
+                f"but the {into} directory may now hold copied step files with no manifest, "
+                "which list ignores and which blocks reusing that id. Nothing was charged. "
+                f"Fix the cause, delete the {into} directory, and run the same fork again."
+            ),
+            trace="TaskBoardCheckpointer.fork_into copied step files, then wrote the manifest.",
+            hint=f"Delete the partial {into} directory before retrying the same --into.",
+        )
+
+
+class TaskBoardOutputWriteFailed(CliError):
+    """A file a task-board verb was asked to write could not be written."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, option: str, reason: str) -> None:
+        # Names the option that chose the destination, since that is what the caller changes.
+        super().__init__(
+            f"The file named by {option} could not be written: {reason}.",
+            description=(
+                f"The board itself was read successfully, but writing the {option} "
+                f"destination failed because {reason}. The write goes through a temporary "
+                "sibling, so any previous file at that path is intact. Nothing was charged; "
+                f"pass a {option} path inside a writable directory and run the command again."
+            ),
+            trace="TaskBoardCommand rendered the output and handed it to LocalFileStore.",
+            hint=f"Choose a {option} path in a directory you can write to.",
+        )
+
+
+class TaskBoardExportDestinationInvalid(CliError):
+    """export-tasks was given a destination whose suffix names no supported format."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # The suffix picks the format, so an unknown suffix has no well-defined output.
+        super().__init__(
+            "The export-tasks destination must end in .md, .markdown, or .json.",
+            description=(
+                "The destination's suffix chooses the format: Markdown gets one level-two "
+                "section per task and JSON gets a flat array of task strings, and both reload "
+                "through --task-list. Any other suffix names a format this command cannot "
+                "write, so nothing was written and nothing was charged. Rename the --to path."
+            ),
+            trace="TaskBoardTaskFiles.write_task_list chose a format from the suffix.",
+            hint="Use --to board.md or --to board.json.",
         )
 
 
@@ -775,6 +1000,53 @@ class StateWriteFailed(CliError):
             hint="Check directory ownership and available disk space, then retry.",
             cause=cause,
         )
+
+
+class LocalFileReadFailed(CliError):
+    """A local file exists but could not be read, decoded, or parsed."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, name: str, reason: str, cause: Exception) -> None:
+        # The reason is a fixed category chosen by LocalFileStore, never the OS message, so
+        # callers can re-raise it with their own context without leaking absolute paths.
+        super().__init__(
+            f"Could not read {name}: {reason}.",
+            description=(
+                "The file exists, so this is not a missing-file case: opening, decoding, or "
+                f"parsing it failed because {reason}. Nothing was changed on disk. Retrying "
+                "without changing anything will fail the same way, so repair the file or its "
+                "permissions first, or point the command at a different location."
+            ),
+            trace="LocalFileStore read the file as UTF-8 text and, for JSON, parsed it.",
+            hint="Check the file's permissions and contents, then retry.",
+            cause=cause,
+        )
+        self.reason = reason
+
+
+class LocalFileWriteFailed(CliError):
+    """The operating system refused to create, replace, append to, or copy a local file."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, name: str, reason: str, cause: Exception) -> None:
+        # Same fixed-category contract as LocalFileReadFailed, for the write direction.
+        super().__init__(
+            f"Could not write {name}: {reason}.",
+            description=(
+                f"Writing the file failed at the filesystem level because {reason}. Replacing "
+                "writes go through a temporary sibling, so the previous version of the file, "
+                "if any, is intact and no partial file was left behind. Retrying helps only "
+                "after the cause is fixed, such as freeing space or choosing a writable path."
+            ),
+            trace="LocalFileStore created parent directories and wrote through a temp sibling.",
+            hint="Check directory permissions and free space, or choose another destination.",
+            cause=cause,
+        )
+        self.reason = reason
 
 
 class MigrationVerificationFailed(CliError):
