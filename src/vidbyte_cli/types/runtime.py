@@ -14,7 +14,7 @@ from enum import IntEnum, StrEnum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..lib.constants.runtime import AdmissionReason, StagesLimit
 
@@ -114,6 +114,13 @@ class TaskBoardContextMode(StrEnum):
     ISOLATED = "isolated"
 
 
+class TaskBoardExecutionType(StrEnum):
+    """Which loop structure a board run follows."""
+
+    LINEAR = "linear"
+    DAG = "dag"
+
+
 class TaskBoardSettings(BaseModel):
     """Bounded, frozen task-board settings for one admitted local invocation."""
 
@@ -208,6 +215,66 @@ class TaskBoardSettings(BaseModel):
             "produces exactly one result entry, never a duplicate."
         ),
     )
+    execution_type: TaskBoardExecutionType = Field(
+        default=TaskBoardExecutionType.LINEAR,
+        description=(
+            "Which loop structure the board run follows. In linear mode tasks run in board "
+            "order 0 through N-1 and each agent reads bounded summaries of the immediately "
+            "preceding window tasks, which preserves the original board behavior exactly. In "
+            "dag mode tasks run once each in deterministic topological order and each agent "
+            "reads only its direct dependencies' summaries, so an independent task never pays "
+            "for unrelated context. Execution stays sequential in both modes with one fresh "
+            "agent per task; dag mode ignores the window for context selection."
+        ),
+    )
+    dependencies: tuple[tuple[int, int], ...] = Field(
+        default=(),
+        description=(
+            "The directed dependency links as sorted unique child-parent index pairs, where "
+            "each pair means the child task reads the parent task's summary and runs only "
+            "after it. Indices are 0-based board positions, so 8:2 means task 8 depends on "
+            "task 2. Links are accepted only in dag mode and must form an acyclic graph with "
+            "no self-links or duplicates; an empty set means every task is independent and "
+            "runs in board order with empty dependency context."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_dependencies(self) -> TaskBoardSettings:
+        # Rejects dangling, reflexive, repeated, or cyclic links before paid admission.
+        count = len(self.tasks)
+        seen: set[tuple[int, int]] = set()
+        for child, parent in self.dependencies:
+            if child < 0 or parent < 0 or child >= count or parent >= count:
+                raise ValueError("dependency indices must reference board positions")
+            if child == parent:
+                raise ValueError("a task cannot depend on itself")
+            if (child, parent) in seen:
+                raise ValueError("duplicate dependency link")
+            seen.add((child, parent))
+        if seen and self._has_cycle(count, seen):
+            raise ValueError("dependency links must form an acyclic graph")
+        return self
+
+    @staticmethod
+    def _has_cycle(count: int, edges: set[tuple[int, int]]) -> bool:
+        # Kahn's algorithm over counts only; a short drain means a cycle remains.
+        children: dict[int, list[int]] = {index: [] for index in range(count)}
+        pending: dict[int, int] = {index: 0 for index in range(count)}
+        for child, parent in edges:
+            children[parent].append(child)
+            pending[child] += 1
+        ready = sorted(index for index in range(count) if pending[index] == 0)
+        visited = 0
+        while ready:
+            current = ready.pop(0)
+            visited += 1
+            for child in children[current]:
+                pending[child] -= 1
+                if pending[child] == 0:
+                    ready.append(child)
+            ready.sort()
+        return visited != count
 
 
 class TaskBoardStepResult(BaseModel):

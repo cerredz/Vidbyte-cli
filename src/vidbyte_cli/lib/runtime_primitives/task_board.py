@@ -1,8 +1,8 @@
-"""Sequential task-board execution over separate Codex agents with summaries.
+"""Task-board execution over separate Codex agents with summaries.
 
 The board owns ordering and context. The SDK owns each task turn. Raw prior results never
-reach the next agent; a windowed board forwards bounded summaries and an isolated board
-forwards nothing at all.
+reach the next agent; a linear board forwards windowed summaries, a DAG board forwards only
+direct dependencies' summaries, and an isolated board forwards nothing at all.
 """
 
 from __future__ import annotations
@@ -15,13 +15,14 @@ from typing import TYPE_CHECKING
 from ...types.runtime import RuntimeLaunchPlan as Plan
 from ...types.runtime import (
     TaskBoardContextMode,
+    TaskBoardExecutionType,
     TaskBoardResult,
     TaskBoardSettings,
     TaskBoardStepResult,
 )
 from ..constants.runtime import TaskBoardCodexConfig, TaskBoardLimit
 from ..constants.runtime import TaskBoardProgress as Progress
-from ..errors.failures import TaskBoardHostFailed
+from ..errors.failures import TaskBoardDependencyInvalid, TaskBoardHostFailed
 
 if TYPE_CHECKING:
     from vidbyte.agents.codex import CodexHarnessAgent
@@ -102,8 +103,9 @@ class TaskBoardCodexSession:
     async def _run(
         self, plan: Plan, settings: TaskBoardSettings, admission_id: str
     ) -> TaskBoardResult:
-        # Loops tasks in order, each in a fresh agent, appending one summary per attempted
-        # task so board indices and the window slice stay aligned even across failures.
+        # Delegates to the loop the execution type selects; linear order is preserved exactly.
+        if settings.execution_type is TaskBoardExecutionType.DAG:
+            return await self._run_dag(plan, settings, admission_id)
         summaries: list[str] = []
         steps: list[TaskBoardStepResult] = []
         completed = 0
@@ -124,14 +126,102 @@ class TaskBoardCodexSession:
         self._progress(Progress.COMPLETE)
         return self._result(admission_id, completed, failed, steps)
 
+    async def _run_dag(
+        self, plan: Plan, settings: TaskBoardSettings, admission_id: str
+    ) -> TaskBoardResult:
+        # Runs each task once in topological order with dependency-only context. Slots stay
+        # board-indexed so a DAG prompt can read any parent summary by position, while steps
+        # are appended in execution order with each step carrying its board index.
+        order = self._topological_order(len(settings.tasks), settings.dependencies)
+        slots: list[str] = ["" for _ in settings.tasks]
+        failed: set[int] = set()
+        steps: list[TaskBoardStepResult] = []
+        completed = 0
+        uncompleted = 0
+        self._progress(Progress.TASK_STARTING)
+        # The parent map is built once up front so every iteration reads the same edges.
+        parents = self._dag_parents(settings)
+        self._progress(Progress.DAG_PLAN_READY)
+        for index in order:
+            task = settings.tasks[index]
+            # A task whose dependency failed never spawns an agent: it is recorded failed
+            # with the blocking parents named so the result explains the skip on its own.
+            blockers = sorted(parent for parent in parents[index] if parent in failed)
+            if blockers:
+                failed.add(index)
+                uncompleted += 1
+                steps.append(self._failed_dag_step(task, index, self._skip_detail(blockers)))
+                slots[index] = f"Task {index} failed."
+                self._progress(Progress.TASK_SKIPPED)
+                if settings.stop_on_error:
+                    break
+                continue
+            # One fresh agent per attempted task, exactly like the linear loop; retries reuse
+            # the same dependency-scoped prompt so recovery never re-decides the context.
+            outcome, failure_note = await self._run_task_detailed(task, index, slots, settings)
+            if outcome is None:
+                failed.add(index)
+                uncompleted += 1
+                steps.append(self._failed_dag_step(task, index, failure_note))
+                slots[index] = f"Task {index} failed."
+                self._progress(Progress.TASK_FAILED)
+                if settings.stop_on_error:
+                    break
+                continue
+            completed += 1
+            slots[index] = outcome[0]
+            steps.append(self._completed_step(task, index, outcome[0], outcome[1]))
+        self._progress(Progress.COMPLETE)
+        return self._result(admission_id, completed, uncompleted, steps)
+
+    def _topological_order(self, count: int, edges: tuple[tuple[int, int], ...]) -> tuple[int, ...]:
+        # Orders tasks so parents run first, breaking ties by smallest index.
+        children: dict[int, list[int]] = {index: [] for index in range(count)}
+        pending: dict[int, int] = {index: 0 for index in range(count)}
+        for child, parent in edges:
+            children[parent].append(child)
+            pending[child] += 1
+        ready = sorted(index for index in range(count) if pending[index] == 0)
+        order: list[int] = []
+        while ready:
+            current = ready.pop(0)
+            order.append(current)
+            for child in children[current]:
+                pending[child] -= 1
+                if pending[child] == 0:
+                    ready.append(child)
+            ready.sort()
+        if len(order) != count:
+            raise TaskBoardDependencyInvalid()
+        return tuple(order)
+
+    def _dag_parents(self, settings: TaskBoardSettings) -> dict[int, tuple[int, ...]]:
+        # Maps each task to its sorted direct parents for context selection.
+        grouped: dict[int, list[int]] = {index: [] for index in range(len(settings.tasks))}
+        for child, parent in settings.dependencies:
+            grouped[child].append(parent)
+        return {index: tuple(sorted(parents)) for index, parents in grouped.items()}
+
     async def _run_task(
         self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
     ) -> tuple[str, str] | None:
         # One task start to finish. Every attempt builds its own agent and renders the same
         # prompt, so a retry recovers from a dead host rather than re-deciding the context.
-        for attempt in range(settings.max_retries_per_task + 1):
+        outcome, _note = await self._run_task_detailed(task, index, summaries, settings)
+        return outcome
+
+    async def _run_task_detailed(
+        self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
+    ) -> tuple[tuple[str, str] | None, str]:
+        # Same retry loop as _run_task, but also returns the failure note the DAG loop
+        # records when every attempt is exhausted. The note carries only observed facts —
+        # attempt count, failure kind, and any partial agent text — never task content.
+        attempts = settings.max_retries_per_task + 1
+        last_note = ""
+        for attempt in range(attempts):
             if attempt > 0:
                 self._progress(Progress.TASK_RETRYING)
+            reply: AgentMessage | None = None
             try:
                 prompt = self._build_prompt(task, index, summaries, settings)
                 reply = await self._turn(self._build_agent(index), prompt)
@@ -141,11 +231,53 @@ class TaskBoardCodexSession:
                     settings.summary_mode.value,
                     settings.summary_max_chars,
                 )
-                return (summary, thread)
-            except Exception:
-                # Attempt failures stay local: stop-on-error is the caller's policy.
+                return ((summary, thread), "")
+            except Exception as error:
+                # Attempt failures stay local: stop-on-error is the caller's policy, and
+                # only the final note survives so earlier attempts never leak stale causes.
+                last_note = self._attempt_note(error, reply, settings, attempt, attempts)
                 continue
-        return None
+        return (None, f"Ran {attempts} attempt(s), all exhausted. {last_note}")
+
+    def _attempt_note(
+        self,
+        error: Exception,
+        reply: AgentMessage | None,
+        settings: TaskBoardSettings,
+        attempt: int,
+        attempts: int,
+    ) -> str:
+        # Names what ended one attempt so the recorded failure explains itself: timeouts
+        # are told apart from dead hosts, and an incomplete turn keeps the partial text
+        # its agent left behind, bounded by the same summarizer prompts already use.
+        if isinstance(error.__cause__, TimeoutError):
+            kind = "the Codex turn timed out before returning"
+        elif reply is not None and self._partial_text(reply):
+            partial = self._summarizer.summarize(
+                self._partial_text(reply),
+                settings.summary_mode.value,
+                settings.summary_max_chars,
+            )
+            kind = f"the agent returned an incomplete turn, leaving: {partial}"
+        else:
+            kind = "the Codex host failed before returning a completed turn"
+        return f"Attempt {attempt + 1} of {attempts}: {kind}."
+
+    def _partial_text(self, reply: AgentMessage) -> str:
+        # Reads whatever text an incomplete turn left behind without validating it, so a
+        # failure note can carry the agent's own words even when the turn never completed.
+        try:
+            return str(reply.content or "").strip()
+        except Exception:
+            return ""
+
+    def _skip_detail(self, blockers: list[int]) -> str:
+        # Names the failed dependencies so a skip is actionable without re-reading the graph.
+        names = ", ".join(f"task {parent}" for parent in blockers)
+        return (
+            f"No agent was started because {names} did not complete. "
+            "Fix or re-run the failed dependencies, then re-run this task."
+        )
 
     def _build_prompt(
         self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
@@ -154,8 +286,19 @@ class TaskBoardCodexSession:
         # renders exactly the trailing slice the window admits and nothing older.
         if settings.context_mode is TaskBoardContextMode.ISOLATED:
             return self._summarizer.render_prompt(task, index, None)
+        if settings.execution_type is TaskBoardExecutionType.DAG:
+            return self._build_dag_prompt(task, index, summaries, settings)
         windowed = self._summarizer.windowed(summaries, index, settings.window)
         context = self._summarizer.render_context(windowed)
+        return self._summarizer.render_prompt(task, index, context)
+
+    def _build_dag_prompt(
+        self, task: str, index: int, summaries: list[str], settings: TaskBoardSettings
+    ) -> str:
+        # Renders only direct dependencies' summaries so unrelated context never leaks in.
+        parents = self._dag_parents(settings)[index]
+        selected = tuple((parent, summaries[parent]) for parent in parents if summaries[parent])
+        context = self._summarizer.render_context(selected)
         return self._summarizer.render_prompt(task, index, context)
 
     def _build_agent(self, index: int) -> CodexHarnessAgent:
@@ -226,6 +369,18 @@ class TaskBoardCodexSession:
             index=index,
             task=task,
             summary=f"Task {index} failed.",
+            status="failed",
+            thread_id=f"task-board-{index}-failed",
+        )
+
+    def _failed_dag_step(self, task: str, index: int, detail: str) -> TaskBoardStepResult:
+        # Records one failed DAG step with the reason inline: skipped tasks name the failed
+        # parents, exhausted tasks carry the final attempt note. The linear placeholder is
+        # left untouched so windowed linear prompts keep their exact marker.
+        return TaskBoardStepResult(
+            index=index,
+            task=task,
+            summary=f"Task {index} failed. {detail}",
             status="failed",
             thread_id=f"task-board-{index}-failed",
         )
