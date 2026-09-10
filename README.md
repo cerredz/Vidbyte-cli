@@ -63,6 +63,53 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Run one Codex session with 6–100 additional improvement turns |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
+| `vidbyte-cli connections login <github\|slack\|google\|google-drive>` | Connect a context provider account |
+| `vidbyte-cli connections list\|status\|logout` | Inspect or remove named context connections |
+| `vidbyte-cli connections read ...` | Read one bounded repository, channel, or Drive file |
+
+### Context-provider connections
+
+Context-provider connections are separate from model-provider API keys. Configure one OAuth
+application per service before logging in:
+
+```powershell
+# GitHub OAuth App: enable Device Flow in the app settings.
+$env:VIDBYTE_GITHUB_CLIENT_ID = "..."
+
+# Slack app: enable PKCE and configure the user history scopes in OAuth & Permissions.
+$env:VIDBYTE_SLACK_CLIENT_ID = "..."
+
+# Google Cloud: enable Drive API, create a Desktop OAuth client, and download its JSON.
+$env:VIDBYTE_GOOGLE_CLIENT_SECRETS = "C:\path\client_secret.json"
+```
+
+On macOS/Linux, use the equivalent `export NAME=value` commands. The GitHub and Slack client
+IDs are public application identifiers; Slack PKCE does not use a client secret. Google reads
+the standard `installed` client JSON only. The default Google `drive.readonly` scope may require
+adding the account as a test user during development and completing Google's verification before
+shipping to a wider audience.
+
+Then authenticate and verify access:
+
+```bash
+vidbyte-cli connections login github --name work-github
+vidbyte-cli connections login slack --name work-slack
+vidbyte-cli connections login google-drive --name work-drive
+vidbyte-cli connections list
+vidbyte-cli connections status work-github
+vidbyte-cli connections read github repo acme/api --connection work-github
+vidbyte-cli connections read slack channel C123456 --connection work-slack --limit 25
+vidbyte-cli connections read google-drive file FILE_ID --connection work-drive
+```
+
+OAuth access and refresh tokens are stored in the operating system keyring under the dedicated
+Vidbyte connection service. The local metadata file contains account labels and scopes only.
+GitHub device flow is documented by GitHub, Google uses a loopback callback with PKCE, and
+Slack requires PKCE to be enabled for localhost desktop redirects. `drive.readonly` is the
+default Google scope so arbitrary readable document IDs can be fetched; Google may require
+application verification for that restricted scope.
+
+`google` is accepted as a shorthand for the canonical `google-drive` provider name.
 
 ### Research threads
 
@@ -170,6 +217,9 @@ displaying loop indices. JSON output includes
 | `VIDBYTE_PROFILE` | Profile name; the lower-precedence equivalent of `--profile` |
 | `VIDBYTE_OUTPUT_FORMAT` / `VIDBYTE_COLOR` | Presentation defaults |
 | `VIDBYTE_REQUEST_TIMEOUT_SECONDS` | Per-request timeout |
+| `VIDBYTE_GITHUB_CLIENT_ID` / `VIDBYTE_GITHUB_CLIENT_SECRET` | GitHub OAuth App client settings |
+| `VIDBYTE_SLACK_CLIENT_ID` | Slack PKCE public-app client ID |
+| `VIDBYTE_GOOGLE_CLIENT_SECRETS` | Path to a Google installed-app client JSON |
 
 Non-secret settings resolve command option → environment → selected profile → default
 profile → built-in, and `vidbyte-cli config get <key>` reports both the effective value and

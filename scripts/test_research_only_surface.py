@@ -33,6 +33,7 @@ from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
 EXPECTED_TOP_LEVEL = {
     "config",
+    "connections",
     "doctor",
     "login",
     "logout",
@@ -41,6 +42,7 @@ EXPECTED_TOP_LEVEL = {
     "runtime",
     "whoami",
 }
+EXPECTED_CONNECTIONS = {"list", "login", "logout", "read", "status"}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
 EXPECTED_RUNTIME = {
     "adversarial-team",
@@ -196,7 +198,7 @@ class SurfaceSuite:
         results = self.results
         actual = set(self.program.commands)
         results.check(
-            "the CLI exposes exactly seven top-level commands",
+            "the CLI exposes exactly nine top-level commands",
             actual == EXPECTED_TOP_LEVEL,
             f"got {sorted(actual)}",
         )
@@ -209,6 +211,10 @@ class SurfaceSuite:
         results.check(
             "config exposes exactly get and set",
             self._subcommands("config") == {"get", "set"},
+        )
+        results.check(
+            "connections exposes exactly five subcommands",
+            self._subcommands("connections") == EXPECTED_CONNECTIONS,
         )
         results.check(
             "runtime exposes exactly the scaffolded local commands",

@@ -2044,3 +2044,300 @@ class RuntimePaymentFailed(CliError):
             ),
             trace="Runtime payment validation failed before the database-verified launch gate.",
         )
+
+
+class ConnectionConfigurationInvalid(CliError):
+    """A provider connection is missing safe client configuration."""
+
+    code = CliErrorCode.CONNECTION_CONFIGURATION_INVALID
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, provider: str) -> None:
+        # Provider names are closed enum values and safe to include in this message.
+        super().__init__(
+            f"The {provider} connection is not configured.",
+            description=(
+                "The provider login cannot start because its public client configuration is "
+                "missing or malformed. No browser was opened, no provider request was sent, "
+                "and no local credential was changed. Configure the documented client setting "
+                "and retry."
+            ),
+            trace="ConnectionManager selected a provider adapter before beginning OAuth.",
+            hint="Run 'vidbyte-cli connections login --help' for provider configuration names.",
+        )
+
+
+class ConnectionOAuthFailed(CliError):
+    """An OAuth provider denied or failed the interactive authorization."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str, cause: Exception | None = None) -> None:
+        # OAuth response bodies and authorization codes remain private causes.
+        super().__init__(
+            f"The {provider} OAuth login did not complete.",
+            description=(
+                "The provider denied consent, the authorization code expired, the callback "
+                "timed out, or the token exchange returned an unusable result. No new token "
+                "was persisted. Retry the login and complete the provider approval flow."
+            ),
+            trace="The provider-specific connection adapter failed during OAuth authorization.",
+            hint="Retry login and complete the browser approval before the code expires.",
+            cause=cause,
+        )
+
+
+class ConnectionOAuthStateInvalid(CliError):
+    """The OAuth callback did not prove that this CLI started it."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_STATE_INVALID
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        # The received and expected state values are never rendered.
+        super().__init__(
+            f"The {provider} OAuth callback could not be verified.",
+            description=(
+                "The callback returned a state value different from the one generated for this "
+                "login. The CLI rejected it as an unsolicited or stale response, did not "
+                "exchange the authorization code, and did not change local credentials."
+            ),
+            trace="OAuthCallbackServer returned a callback and the adapter rejected its state.",
+            hint="Start a fresh login and use the browser opened by this command.",
+        )
+
+
+class ConnectionAuthenticationRequired(CliError):
+    """A connection token is absent or rejected by its provider."""
+
+    code = CliErrorCode.CONNECTION_AUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        # Provider names are safe; token values and response bodies are not.
+        super().__init__(
+            f"The stored {provider} connection is not authenticated.",
+            description=(
+                "The connection was missing, revoked, expired without a refresh token, or "
+                "rejected by the provider. The requested status or read did not continue and "
+                "no token value was printed. Run the provider connection login again."
+            ),
+            trace="ConnectionManager resolved a connection token and provider identity failed.",
+            hint=f"Run 'vidbyte-cli connections login {provider}'.",
+        )
+
+
+class ConnectionReauthenticationRequired(CliError):
+    """A provider refresh token cannot restore an expired connection."""
+
+    code = CliErrorCode.CONNECTION_REAUTH_REQUIRED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        # The provider is a closed value and the refresh token is withheld.
+        super().__init__(
+            f"The {provider} connection needs to be authenticated again.",
+            description=(
+                "The stored access token is expired or no longer accepted, and its refresh "
+                "token could not produce a replacement. No provider resource request was made. "
+                "Run login again to obtain a new authorization grant."
+            ),
+            trace="ConnectionManager found an expired token without a usable refresh result.",
+            hint=f"Run 'vidbyte-cli connections login {provider}'.",
+        )
+
+
+class ConnectionScopeInsufficient(CliError):
+    """A provider token lacks permission for the requested operation."""
+
+    code = CliErrorCode.CONNECTION_SCOPE_INSUFFICIENT
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        # Scope names from provider response data are intentionally not echoed.
+        super().__init__(
+            f"The {provider} connection lacks the required permission.",
+            description=(
+                "The account is authenticated, but the selected OAuth scopes do not permit "
+                "this identity check or resource read. No broader permission was requested "
+                "silently. Re-authenticate with the required scope or choose an accessible "
+                "resource."
+            ),
+            trace=(
+                "The provider adapter classified the response as a missing or insufficient scope."
+            ),
+            hint="Run login again with the provider scope required for this resource.",
+        )
+
+
+class ConnectionResourceUnavailable(CliError):
+    """The authenticated account cannot read the selected resource."""
+
+    code = CliErrorCode.CONNECTION_RESOURCE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, provider: str) -> None:
+        # Resource identifiers can contain private names, so they stay out of static prose.
+        super().__init__(
+            f"The selected {provider} resource could not be read.",
+            description=(
+                "The provider did not return the selected repository, channel, document, or "
+                "pull request. It may be private, deleted, outside the token's permissions, or "
+                "invalid. The connection itself was not removed. Check the identifier and the "
+                "account's access."
+            ),
+            trace="The provider adapter received a resource-level denial or not-found response.",
+            hint="Check the resource identifier and granted provider permissions.",
+        )
+
+
+class ConnectionProtocolError(CliError):
+    """A provider returned a response shape the adapter cannot safely interpret."""
+
+    code = CliErrorCode.CONNECTION_PROTOCOL_ERROR
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, provider: str, cause: Exception | None = None) -> None:
+        # The response body is held only as a private cause.
+        super().__init__(
+            f"The {provider} provider returned an unsupported response.",
+            description=(
+                "The provider answered, but the body was empty, malformed, oversized, or "
+                "missing fields required to establish a safe connection or read. No token was "
+                "persisted from this response. Check the provider status and retry."
+            ),
+            trace="OAuthHttpClient validated the provider response and found an unsupported shape.",
+            hint="Retry after checking the provider API status.",
+            cause=cause,
+        )
+
+
+class ConnectionApiUnavailable(CliError):
+    """The provider API could not be reached."""
+
+    code = CliErrorCode.CONNECTION_API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, provider: str, cause: Exception | None = None) -> None:
+        # Transport exception details may contain URLs or credentials and remain private.
+        super().__init__(
+            f"The {provider} provider API could not be reached.",
+            description=(
+                "The provider connection failed before a usable response arrived. No new "
+                "credential was persisted and an existing local connection was not deleted. "
+                "The operation is safe to retry after checking connectivity."
+            ),
+            trace="OAuthHttpClient sent a provider request and httpx raised a transport error.",
+            hint="Check connectivity and retry.",
+            cause=cause,
+        )
+
+
+class ConnectionRateLimited(CliError):
+    """A provider asked the CLI to wait before trying again."""
+
+    code = CliErrorCode.CONNECTION_RATE_LIMITED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+    retryable = True
+
+    def __init__(self, provider: str) -> None:
+        # Retry timing is deliberately not copied from an untrusted response body.
+        super().__init__(
+            f"The {provider} provider rate-limited the request.",
+            description=(
+                "The provider refused this request temporarily because its rate limit was "
+                "reached. No connection state changed. Wait according to the provider's limits "
+                "and retry the status or read operation."
+            ),
+            trace="OAuthHttpClient classified a provider response as HTTP 429.",
+            hint="Wait and retry with fewer or less frequent requests.",
+        )
+
+
+class ConnectionStoreUnavailable(CliError):
+    """The dedicated OS keyring could not store or read an OAuth token."""
+
+    code = CliErrorCode.CONNECTION_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception | None = None) -> None:
+        # Keyring exceptions can quote account names or backend details, so they stay private.
+        super().__init__(
+            "The context connection keyring is unavailable.",
+            description=(
+                "The operating system keychain/keyring is missing, locked, or rejected a "
+                "scoped connection operation. OAuth tokens are never written to a plaintext "
+                "fallback file. No connection can be reported as saved until the keyring reads "
+                "back successfully."
+            ),
+            trace=(
+                "ConnectionKeyringStore performed a scoped operation against its dedicated service."
+            ),
+            hint="Unlock or configure the OS keyring, then retry the connection login.",
+            cause=cause,
+        )
+
+
+class StoredConnectionSecretUnreadable(CliError):
+    """A keyring token envelope could not be decoded safely."""
+
+    code = CliErrorCode.CONNECTION_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # The malformed secret payload never crosses into rendered error fields.
+        super().__init__(
+            "The stored context connection token is unreadable.",
+            description=(
+                "The dedicated keyring entry exists but is not a supported version-one token "
+                "envelope. The CLI will not guess at its contents or overwrite it during a "
+                "read. Remove the connection and authenticate again after checking the keyring."
+            ),
+            trace="ConnectionKeyringStore decoded and validated a stored token envelope.",
+            hint="Run 'vidbyte-cli connections logout <name>', then login again.",
+            cause=cause,
+        )
+
+
+class StoredConnectionMetadataUnreadable(CliError):
+    """The local secret-free connection metadata document could not be parsed."""
+
+    code = CliErrorCode.CONNECTION_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # Metadata may contain private account labels, so only static prose is rendered.
+        super().__init__(
+            "Stored context connection metadata is invalid or unavailable.",
+            description=(
+                "The local connection metadata file is unreadable, malformed, oversized, or "
+                "uses an unsupported schema. The CLI will not rewrite a file it cannot parse, "
+                "and no token was returned to the caller. Repair or remove the metadata only "
+                "after confirming the dedicated keyring entries."
+            ),
+            trace="ConnectionMetadataStore read and validated its version-one metadata document.",
+            hint="Inspect the connection metadata file, then retry or log in again.",
+            cause=cause,
+        )
+
+
+class ConnectionNotFound(CliError):
+    """The requested named connection does not exist for this profile."""
+
+    code = CliErrorCode.CONNECTION_NOT_FOUND
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Names and account labels are omitted because they are not needed to repair usage.
+        super().__init__(
+            "That context connection does not exist.",
+            description=(
+                "The selected profile has no matching named connection metadata and keyring "
+                "entry. The provider request was not started. List available connections or "
+                "run the provider's login command first."
+            ),
+            trace="ConnectionManager looked up a profile-scoped provider/name pair and found none.",
+            hint="Run 'vidbyte-cli connections list'.",
+        )

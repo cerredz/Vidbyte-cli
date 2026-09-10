@@ -1,6 +1,6 @@
 # Design Doc: Context Provider Connections
 
-**Status:** Draft  
+**Status:** Implemented
 **Author:** Codex  
 **Created:** 2026-09-10  
 **Last Updated:** 2026-09-10
@@ -75,8 +75,8 @@ exercises a bounded provider resource API so the feature is useful end to end.
 
 ### Functional Requirements
 
-1. Accept exactly github, slack, or google-drive and a validated name that defaults to the
-   provider name.
+1. Accept github, slack, or google-drive (plus the `google` CLI shorthand) and a validated name
+   that defaults to the canonical provider name.
 2. GitHub login must request a device code, show only the user-facing verification URL and
    code on stderr, poll using the server interval, classify pending/slow-down/denied/expired
    outcomes, verify /user, and persist only after verification.
@@ -459,6 +459,9 @@ Click callbacks.
     vidbyte-cli connections read slack channel CHANNEL_ID [--connection NAME] [--limit N]
     vidbyte-cli connections read google-drive file FILE_ID_OR_URL [--connection NAME]
 
+The CLI also accepts `google` as a shorthand for `google-drive`; persisted provider metadata
+always uses the canonical `google-drive` value.
+
 #### Logic / Algorithm
 
 1. Click validates provider/resource choices and bounded numeric options.
@@ -475,9 +478,8 @@ Click callbacks.
 ### 6.10 Paths, Errors, and Package Wiring
 
 **File(s):** src/vidbyte_cli/lib/config/paths.py; src/vidbyte_cli/lib/errors/codes.py;
-src/vidbyte_cli/lib/errors/failures.py; src/vidbyte_cli/lib/errors/handler.py;
-src/vidbyte_cli/lib/connections/__init__.py  
-**Type:** Modified; modified; modified; modified; new
+src/vidbyte_cli/lib/errors/failures.py; src/vidbyte_cli/lib/connections/__init__.py
+**Type:** Modified; modified; modified; new
 
 #### What it does
 
@@ -528,7 +530,8 @@ connection conditions, with authentication, usage, operational, or storage exit 
     }
 
 **Migration strategy:** No migration. Existing credential documents remain untouched. The new
-file is created on first successful login and removed only when its final entry is logged out.
+file is created on first successful login and remains as an empty versioned document after the
+final entry is logged out, avoiding a destructive filesystem delete during normal cleanup.
 
 ### 7.2 Connection Token Envelope
 
@@ -540,8 +543,12 @@ file is created on first successful login and removed only when its final entry 
       "refresh_token": "<secret-or-null>",
       "token_type": "Bearer",
       "expires_at": 1790000000,
-      "provider_data": {}
+    "provider_data": {}
     }
+
+The Google installed-client ID and secret are retained inside the keyring envelope when a user
+passes `--client-secrets`, so refresh does not depend on the original path. They are never copied
+to `connections.json` or rendered.
 
 **Migration strategy:** Unknown keyring schema is rejected and requires re-login; no payload
 is printed.
@@ -615,6 +622,8 @@ directly from the local CLI.
 | MODIFY | src/vidbyte_cli/lib/errors/codes.py | Stable error codes |
 | MODIFY | src/vidbyte_cli/lib/errors/failures.py | Typed connection failures |
 | CREATE | scripts/test-context-provider-connections.py | Offline verification script |
+| MODIFY | scripts/run_ci.py | Run the connection verification in the canonical gate |
+| MODIFY | scripts/test_research_only_surface.py | Update the exact command-surface contract |
 | MODIFY | README.md | Setup and command documentation |
 | MODIFY | .env.example | Client configuration names |
 
