@@ -72,6 +72,10 @@ class CiRunner:
             ),
             ("runtime payment methods", (python, "scripts/test-runtime-payment-methods.py")),
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
+            (
+                "context provider connections",
+                (python, "scripts/test-context-provider-connections.py"),
+            ),
             # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
             ("task board", (python, "scripts/test-task-board.py")),
             # Offline: DAG parsing, topological order, and dep-only context, faked SDK turn.

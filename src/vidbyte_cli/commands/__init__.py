@@ -16,6 +16,7 @@ from .auth.logout import LogoutCommand
 from .auth.whoami import WhoamiCommand
 from .config.get import ConfigGetCommand
 from .config.set import ConfigSetCommand
+from .connections import ConnectionsGroup
 from .provider.login import ProviderLoginCommand
 from .provider.logout import ProviderLogoutCommand
 from .provider.whoami import ProviderWhoamiCommand
@@ -76,3 +77,5 @@ def register_all_commands(program: click.Group) -> None:
     ProviderLogoutCommand().register(provider)
     ProviderWhoamiCommand().register(provider)
     program.add_command(provider)
+
+    ConnectionsGroup().register(program)
