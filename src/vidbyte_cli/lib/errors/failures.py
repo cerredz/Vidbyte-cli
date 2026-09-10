@@ -1738,6 +1738,72 @@ class ResearchWatchTimedOut(CliError):
         )
 
 
+class StagesHostFailed(CliError):
+    """A stages turn did not complete with a usable Codex reply."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can quote task text, so this message stays static.
+        super().__init__(
+            "Codex did not complete the stages turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete reply for one stage. "
+                "Execution stopped immediately and later stages never started. The admission "
+                "may already have been charged and completed local work remains in the "
+                "working directory."
+            ),
+            trace="StagesCodexSession checked the SDK turn status and reply identity.",
+            hint="Inspect local Codex configuration before retrying the stages run.",
+        )
+
+
+class StagesSettingsInvalid(CliError):
+    """The supplied stage options did not validate against the stages contract."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the contract, never the submitted stage text.
+        super().__init__(
+            "The run must describe 1 to 25 valid stages.",
+            description=(
+                "No stage was given, more than 25 were given, or a stage carried a blank "
+                "name, prompt, or system prompt. It was rejected before credentials, "
+                "payment, or host execution, so no credits were spent. Give each stage at "
+                "least a --stage-prompt and a --stage-system-prompt and retry."
+            ),
+            trace="StagesOptions validated the stage options before any launch plan was built.",
+            hint="Run 'vidbyte-cli runtime stages describe' for every accepted stage option.",
+        )
+
+
+class StagesOptionCountMismatch(CliError):
+    """Per-stage options were repeated a different number of times than the stages."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Names the alignment contract without quoting any submitted stage text.
+        super().__init__(
+            "Every repeated --stage-* option must be given once per stage, or not at all.",
+            description=(
+                "Stages are assembled by position: the first --stage-prompt, the first "
+                "--stage-system-prompt, and the first occurrence of every other --stage-* "
+                "option describe stage 1, the second occurrences describe stage 2, and so "
+                "on. One option repeated a different number of times than --stage-prompt "
+                "leaves the run ambiguous, so it is rejected before payment rather than "
+                "guessed at. An option omitted entirely is not a mismatch: every stage then "
+                "takes that setting's default."
+            ),
+            trace="StagesOptions compared each repeated option list against the prompt count.",
+            hint="Repeat each --stage-* option exactly as many times as --stage-prompt.",
+        )
+
+
 class EnsembleInputsInvalid(CliError):
     """The supplied ensemble options failed their validated input contract."""
 

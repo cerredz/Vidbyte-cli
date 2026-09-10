@@ -102,6 +102,16 @@ class AdmissionContracts(unittest.TestCase):
         self.assertTrue(self.gate.verify(self.plan, self.grant, self.now, KEY).admitted)
         self.assertTrue(self.gate.verify_online(self.plan, self.grant, self.grant).admitted)
 
+    def test_stages_one_cent_price(self) -> None:
+        # The stages product admits exactly one cent and rejects persistence pricing.
+        plan = self.plan.model_copy(update={"capability_id": "runtime.stages@1"})
+        one_cent = {"capability_id": "runtime.stages@1", "charged_cents": 1}
+        two_cent = {"capability_id": "runtime.stages@1", "charged_cents": 2}
+        good = self.grant.model_copy(update=one_cent)
+        bad = self.grant.model_copy(update=two_cent)
+        self.assertTrue(self.gate.verify_online(plan, good, good).admitted)
+        self.assertFalse(self.gate.verify_online(plan, bad, bad).admitted)
+
     def test_checks_return_dataclasses_with_enum_reasons(self) -> None:
         check = self.gate._check_policy(self.plan, None, self.now)
         self.assertIsInstance(check, RuntimeAdmissionCheck)

@@ -127,3 +127,37 @@ class RuntimePaymentConfig:
     MAX_AUTHORIZATION_SECONDS = 3600
     MICROUNITS_PER_CENT = 10000
     PERSISTENCE_CENTS = 2
+
+
+class StagesLimit(IntEnum):
+    """Execution bounds for the stages primitive."""
+
+    # Review of PR #36 raised this ceiling from 10 to 25: a staged skill such as a design-doc
+    # flow decomposes further than the original estimate, and every stage past the ceiling has
+    # to be split across two paid runs. The admission stays one cent however many stages run.
+    MAX_STAGES = 25
+    TURN_TIMEOUT_SECONDS = 3600
+
+
+class StagesCodexConfig(StrEnum):
+    """Child-only provider configuration; no native login state is changed."""
+
+    PROVIDER = 'model_provider="vidbyte_openai"'
+    NAME = 'model_providers.vidbyte_openai.name="OpenAI"'
+    BASE_URL = 'model_providers.vidbyte_openai.base_url="https://api.openai.com/v1"'
+    ENV_KEY = 'model_providers.vidbyte_openai.env_key="OPENAI_API_KEY"'
+    WIRE_API = 'model_providers.vidbyte_openai.wire_api="responses"'
+
+
+class StagesProgress(StrEnum):
+    """Product-facing milestones for staged local execution."""
+
+    PREPARING = "Preparing your task and checking that Codex can run in this working directory."
+    CREDENTIALS = "Loading your OpenAI credentials to run the stages with your own API account."
+    ADMISSION = "Requesting the one-cent Vidbyte admission for this stages run."
+    VERIFYING = "Verifying your admission receipt before starting the first stage."
+    ADMITTED = "Your admission is verified. Preparing a fresh Codex agent per stage."
+    STAGE_STARTING = "Starting the next stage with its own Codex agent."
+    STAGE_RETRYING = "Retrying the current stage with a fresh Codex agent."
+    STAGE_COMPLETE = "A stage returned its response. Continuing with the next stage."
+    COMPLETE = "Codex has completed every requested stage. Returning the final response."

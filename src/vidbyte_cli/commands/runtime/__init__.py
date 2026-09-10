@@ -9,6 +9,7 @@ from .doctor import RuntimeDoctorCommand
 from .list import RuntimeListCommand
 from .persistence import PersistenceCommand
 from .same_host_ensemble import SameHostEnsembleCommand
+from .stages import StagesCommand
 from .task_board import TaskBoardCommand
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "RuntimeListCommand",
     "SameHostEnsembleCommand",
     "TaskBoardCommand",
+    "StagesCommand",
 ]
