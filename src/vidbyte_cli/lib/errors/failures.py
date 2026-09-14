@@ -98,25 +98,365 @@ class TaskBoardTaskFileInvalid(CliError):
         )
 
 
-class TaskBoardDecomposeInvalid(CliError):
-    """The decompose flags were combined in a way the board cannot honor."""
+class TaskBoardCheckpointMissing(CliError):
+    """A resume asked for steps whose checkpoint files are absent from disk."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, index: int) -> None:
+        # Names only the step number; task text and directory layout stay out of prose.
+        super().__init__(
+            f"No checkpoint exists for board step {index}.",
+            description=(
+                "Resuming reuses stored steps instead of re-running them, so every step "
+                f"before the resume point must exist on disk and step {index} has no file. "
+                "The board ran nothing: no admission was bought and no agent started. "
+                "Resume from an earlier step, or run the board fresh without --from."
+            ),
+            trace="TaskBoardCheckpointer.load_prefix read the step files in order.",
+            hint="Check .vidbyte/task-board for the board directory matching this run.",
+        )
+
+
+class TaskBoardCheckpointMismatch(CliError):
+    """Stored checkpoints do not match the board or settings of this invocation."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Carries only a fixed mismatch category, never task text or file bodies.
+        super().__init__(
+            "Stored checkpoints do not match this board invocation.",
+            description=(
+                "A resume or replay replays stored prompts exactly, so the task list and "
+                f"the window, context, and summary settings must match the stored run: {detail} "
+                "differs. The board ran nothing: no admission was bought and no agent "
+                "started. Re-run with the original board and settings, or start fresh."
+            ),
+            trace="TaskBoardCheckpointer.validate_manifest compared the stored manifest.",
+            hint="Use --checkpoint-id to resume a different stored board explicitly.",
+        )
+
+
+class TaskBoardBoardNotFound(CliError):
+    """No checkpointed board with the requested id exists under the checkpoint root."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, board_id: str) -> None:
+        # Names only the requested id; the stored task text never enters an error message.
+        super().__init__(
+            f"No checkpointed board {board_id} exists under this checkpoint root.",
+            description=(
+                "Reading a board loads its board.json manifest from the directory named by "
+                f"the board id, and no readable manifest was found for {board_id}. Nothing "
+                "was read, written, or charged. List the boards under this root first, or "
+                "pass --checkpoint-root if the board was saved somewhere other than the "
+                "default directory."
+            ),
+            trace="TaskBoardCheckpointer.read_manifest resolved the board directory.",
+            hint="Run `runtime task-board list` to see every stored board and its path.",
+        )
+
+
+class TaskBoardTaskListInvalid(CliError):
+    """A board task-list file is missing, unreadable, or not a supported board format."""
 
     code = CliErrorCode.INVALID_ARGUMENT
     exit_status = ExitCode.USAGE
 
     def __init__(self) -> None:
-        # Reports only the accepted flag shapes, never any task text.
+        # File contents are task text, so neither the path nor the body is echoed here.
         super().__init__(
-            "Decomposition needs --allow-decompose with a --max-subtasks value from 2 to 10.",
+            "A board task list must be a readable .md file of level-two sections or a "
+            ".json array of task strings.",
             description=(
-                "The decompose flags were rejected before credentials, payment, or host "
-                "execution. Decomposition expands one task into an array of subtasks at its "
-                "own index, so it requires an explicit opt-in plus a per-parent bound the "
-                "session can enforce. No board ran and no admission was charged. Re-run with "
-                "--allow-decompose and a --max-subtasks value between 2 and 10."
+                "A task list carries a whole board in one reviewable file, so it has to be "
+                "one of exactly two shapes: Markdown whose level-two headings separate the "
+                "tasks, or JSON holding a flat array of non-empty strings. The file was "
+                "unreadable, had an unsupported suffix, held a different JSON shape, or "
+                "produced no tasks at all. No board was built and nothing was charged."
+            ),
+            trace="TaskBoardTaskFiles.read_task_list parsed the supplied board file.",
+            hint="Export an existing board with `runtime task-board export-tasks` to see "
+            "the expected shape.",
+        )
+
+
+class TaskBoardBoardIdInvalid(CliError):
+    """A board id is not a single safe directory name inside the checkpoint root."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, option: str) -> None:
+        # Names the option, never the rejected value, which may be an arbitrary path.
+        super().__init__(
+            f"{option} must be 1 to 64 letters, digits, dots, underscores, or hyphens, and "
+            "not only dots.",
+            description=(
+                "A board id names exactly one directory directly inside the checkpoint root, "
+                "so it may not contain a path separator or be made only of dots, which would "
+                f"address a directory outside that root. The value given for {option} broke "
+                "that rule, so nothing was read, written, or charged. Copy the id from a run "
+                "result or from `runtime task-board list` instead of passing a path."
+            ),
+            trace="TaskBoardCommand checked the board id before building any board directory.",
+            hint="Pass the directory to --checkpoint-root and only the board's name as the id.",
+        )
+
+
+class TaskBoardCheckpointRootUnreadable(CliError):
+    """The checkpoint root cannot be resolved or scanned for boards."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, reason: str) -> None:
+        # The caller passed the root themselves, so the option name is enough to act on.
+        super().__init__(
+            f"The checkpoint root could not be read: {reason}.",
+            description=(
+                "Every board lives in a subdirectory of the checkpoint root, so a root that "
+                f"cannot be resolved or listed hides every board inside it; here {reason}. "
+                "Nothing was read, written, or charged. Retrying unchanged fails the same way; "
+                "fix the directory's permissions or pass a different --checkpoint-root."
+            ),
+            trace="TaskBoardCommand resolved --checkpoint-root and scanned it for boards.",
+            hint="Pass --checkpoint-root pointing at the readable directory holding your boards.",
+        )
+
+
+class TaskBoardManifestUnreadable(CliError):
+    """A board directory holds a board.json manifest that cannot be used."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, board_id: str, reason: str) -> None:
+        # Names the board and a fixed reason category; the manifest body is task text.
+        super().__init__(
+            f"Board {board_id} has an unusable board.json manifest: {reason}.",
+            description=(
+                "The manifest is what makes a board addressable by id: it records the task "
+                f"list and the settings every stored prompt depends on, and here {reason}. "
+                "Nothing was changed and nothing was charged, and the step files beside it "
+                "are untouched. Fix the file's permissions if that is the reason; a corrupt "
+                "or pre-version-2 manifest cannot be resumed, so start a fresh board instead."
+            ),
+            trace="TaskBoardCheckpointer.read_manifest loaded board.json from the board directory.",
+            hint="Fix board.json permissions, or rerun the board under a new --checkpoint-id.",
+        )
+
+
+class TaskBoardStepUnreadable(CliError):
+    """A stored step file exists but cannot be read or does not hold a valid step record."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, board_id: str, index: int, reason: str) -> None:
+        # Names the board, the step number, and a fixed reason; never the stored prompt.
+        super().__init__(
+            f"Board {board_id} step {index} is stored but unreadable: {reason}.",
+            description=(
+                f"step-{index}.json exists in the board directory, but {reason}, so it can "
+                "neither be reported nor reused as context for later steps. Nothing was "
+                "changed or charged. Fix the file's permissions if that is the reason; "
+                "otherwise re-run just that step with `runtime task-board run "
+                f"--checkpoint-id {board_id} --replay-task {index}`, which rewrites the file "
+                "and buys one admission."
+            ),
+            trace="TaskBoardCheckpointer.read_step read and validated one step file.",
+            hint=f"Replay step {index} to rebuild its checkpoint file.",
+        )
+
+
+class TaskBoardStepNotStored(CliError):
+    """show-step asked for a step index that has no checkpoint file on this board."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, board_id: str, index: int, task_count: int) -> None:
+        # Tells an out-of-range index apart from a step that simply has not run yet.
+        where = (
+            f"the board only has {task_count} tasks, so valid indices are 0 to {task_count - 1}"
+            if index >= task_count
+            else "that step has not run yet, or its file was removed"
+        )
+        super().__init__(
+            f"Board {board_id} has no stored step {index}.",
+            description=(
+                f"show-step reads step-{index}.json from the board directory and that file "
+                f"does not exist: {where}. Nothing was read, written, or charged. Run "
+                "`runtime task-board status` to see the completed and failed indices that do "
+                "have stored records, and pass one of those to --index."
+            ),
+            trace="TaskBoardCommand.execute_show_step read one step file from the board.",
+            hint="Run `runtime task-board status --checkpoint-id` first to list stored indices.",
+        )
+
+
+class TaskBoardForkTargetExists(CliError):
+    """fork was asked to write into a board id that already has a directory."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, into: str) -> None:
+        # Refusing is the whole point: a fork over a board would destroy that board's history.
+        super().__init__(
+            f"Board {into} already exists under this checkpoint root.",
+            description=(
+                "A fork writes a copied prefix and a new manifest into its own directory, and "
+                f"a directory named {into} is already there. Writing over it would destroy "
+                "whatever history it holds, so nothing was copied, written, or charged. Pick "
+                "an unused --into id, or remove that directory yourself if it is a leftover."
+            ),
+            trace="TaskBoardCommand.execute_fork checked the target directory before copying.",
+            hint="Run `runtime task-board list` to see which board ids are already taken.",
+        )
+
+
+class TaskBoardForkPrefixIncomplete(CliError):
+    """fork --at asks for more leading steps than the source board has stored."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(
+        self, board_id: str, at_index: int, available: int, task_count: int, missing: int
+    ) -> None:
+        # `available` is the length of the unbroken stored prefix, i.e. the largest valid --at;
+        # `missing` is the board index of the first absent step, which differs on a DAG board.
+        where = (
+            f"the board only has {task_count} tasks"
+            if at_index > task_count
+            else f"step {missing} has no stored checkpoint"
+        )
+        super().__init__(
+            f"Board {board_id} cannot be forked at {at_index}: {where}.",
+            description=(
+                "A fork copies the first --at steps in the order the board runs them, which is "
+                "board order unless the board is a DAG, and every one of them must "
+                f"already be stored, but {where}. Nothing was copied, written, or charged, so "
+                "no partial board was created. The largest --at this board supports right "
+                f"now is {available}; fork there, or finish the board first."
+            ),
+            trace="TaskBoardCheckpointer.fork_into checked the stored prefix before copying.",
+            hint=f"Retry with --at {available} or lower.",
+        )
+
+
+class TaskBoardForkFailed(CliError):
+    """Copying a fork's prefix or writing its manifest failed on the filesystem."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, into: str, reason: str) -> None:
+        # The manifest is written last, so a failure leaves a directory no verb treats as a board.
+        super().__init__(
+            f"Forking into board {into} failed: {reason}.",
+            description=(
+                f"The copy stopped partway because {reason}. The source board is untouched, "
+                f"but the {into} directory may now hold copied step files with no manifest, "
+                "which list ignores and which blocks reusing that id. Nothing was charged. "
+                f"Fix the cause, delete the {into} directory, and run the same fork again."
+            ),
+            trace="TaskBoardCheckpointer.fork_into copied step files, then wrote the manifest.",
+            hint=f"Delete the partial {into} directory before retrying the same --into.",
+        )
+
+
+class TaskBoardOutputWriteFailed(CliError):
+    """A file a task-board verb was asked to write could not be written."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, option: str, reason: str) -> None:
+        # Names the option that chose the destination, since that is what the caller changes.
+        super().__init__(
+            f"The file named by {option} could not be written: {reason}.",
+            description=(
+                f"The board itself was read successfully, but writing the {option} "
+                f"destination failed because {reason}. The write goes through a temporary "
+                "sibling, so any previous file at that path is intact. Nothing was charged; "
+                f"pass a {option} path inside a writable directory and run the command again."
+            ),
+            trace="TaskBoardCommand rendered the output and handed it to LocalFileStore.",
+            hint=f"Choose a {option} path in a directory you can write to.",
+        )
+
+
+class TaskBoardExportDestinationInvalid(CliError):
+    """export-tasks was given a destination whose suffix names no supported format."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # The suffix picks the format, so an unknown suffix has no well-defined output.
+        super().__init__(
+            "The export-tasks destination must end in .md, .markdown, or .json.",
+            description=(
+                "The destination's suffix chooses the format: Markdown gets one level-two "
+                "section per task and JSON gets a flat array of task strings, and both reload "
+                "through --task-list. Any other suffix names a format this command cannot "
+                "write, so nothing was written and nothing was charged. Rename the --to path."
+            ),
+            trace="TaskBoardTaskFiles.write_task_list chose a format from the suffix.",
+            hint="Use --to board.md or --to board.json.",
+        )
+
+
+class TaskBoardDependencyInvalid(CliError):
+    """One supplied dependency link is malformed or the link set is not a DAG."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the accepted grammar, never the submitted indices or task text.
+        super().__init__(
+            "Dependency links must be CHILD:PARENT pairs forming an acyclic graph.",
+            description=(
+                "A link names 0-based board positions as CHILD:PARENT with comma-separated "
+                "parents, so --depends-on 8:2 means task 8 reads task 2 and runs after it. "
+                "Links need --type dag, must stay inside the board, allow no self-links, "
+                "duplicates, or cycles, and are rejected before credentials, payment, or "
+                "host execution. The board order and task text are never repeated here."
+            ),
+            trace="TaskBoardCommand parsed dependency links before building a launch plan.",
+            hint="Repeat --depends-on once per link, e.g. --type dag --depends-on 8:2.",
+        )
+
+
+class TaskBoardDecomposeInvalid(CliError):
+    """--allow-decompose was combined with an option whose state depends on stable indices."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, conflict: str) -> None:
+        # Names only the conflicting option; the board and its task text never appear here.
+        super().__init__(
+            f"--allow-decompose cannot be combined with {conflict}.",
+            description=(
+                "Decomposition replaces one task with its subtasks at the same index, so every "
+                "later task shifts to a new position while the board runs. Checkpoints store "
+                "steps by board index and DAG links name board indices, so neither can describe "
+                f"a board that reshapes itself, and {conflict} was requested. The flags were "
+                "rejected before credentials, payment, or host execution, so nothing was "
+                "charged. Run decomposing boards linear and unchecked for now."
             ),
             trace="TaskBoardCommand validated decompose flags before building a launch plan.",
-            hint="Run 'vidbyte-cli runtime task-board --help' for usage.",
+            hint="Re-run with --allow-decompose --no-checkpoint and without --type dag.",
         )
 
 
@@ -185,7 +525,7 @@ class OperationInterrupted(CliError):
             ),
             trace=(
                 "The interrupt reached the CliApplication.run boundary from wherever the "
-                "invocation was waiting — argument parsing, prompting, or command execution."
+                "invocation was waiting â€” argument parsing, prompting, or command execution."
             ),
         )
 
@@ -230,8 +570,8 @@ class AuthenticationRequired(CliError):
                 "the key is reused by every later invocation."
             ),
             trace=(
-                "A command requiring the Vidbyte API — a research command through "
-                "ApplicationContext.api_client, or WhoamiCommand.execute directly — reached "
+                "A command requiring the Vidbyte API â€” a research command through "
+                "ApplicationContext.api_client, or WhoamiCommand.execute directly â€” reached "
                 "CredentialResolver.resolve, which found no key in the environment, the "
                 "keyring, or the restricted file for this profile and host."
             ),
@@ -655,7 +995,7 @@ class InvalidConfigOverride(CliError):
                 "credentials. No command ran and no local state changed."
             ),
             trace=(
-                "ConfigResolver.resolve applied command → environment → profile precedence per "
+                "ConfigResolver.resolve applied command â†’ environment â†’ profile precedence per "
                 "field and constructed the ResolvedConfig from the winning values."
             ),
             hint="Check VIDBYTE_* settings and the selected CLI profile.",
@@ -698,7 +1038,7 @@ class StateWriteFailed(CliError):
             "CLI state could not be saved.",
             description=(
                 "Creating, flushing, or replacing the state file failed at the filesystem "
-                "level — typically permissions, a read-only or full volume, or a parent "
+                "level â€” typically permissions, a read-only or full volume, or a parent "
                 "directory the CLI may not create. The temporary sibling was removed, so the "
                 "previous file is intact and the operation had no partial effect."
             ),
@@ -709,6 +1049,53 @@ class StateWriteFailed(CliError):
             hint="Check directory ownership and available disk space, then retry.",
             cause=cause,
         )
+
+
+class LocalFileReadFailed(CliError):
+    """A local file exists but could not be read, decoded, or parsed."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, name: str, reason: str, cause: Exception) -> None:
+        # The reason is a fixed category chosen by LocalFileStore, never the OS message, so
+        # callers can re-raise it with their own context without leaking absolute paths.
+        super().__init__(
+            f"Could not read {name}: {reason}.",
+            description=(
+                "The file exists, so this is not a missing-file case: opening, decoding, or "
+                f"parsing it failed because {reason}. Nothing was changed on disk. Retrying "
+                "without changing anything will fail the same way, so repair the file or its "
+                "permissions first, or point the command at a different location."
+            ),
+            trace="LocalFileStore read the file as UTF-8 text and, for JSON, parsed it.",
+            hint="Check the file's permissions and contents, then retry.",
+            cause=cause,
+        )
+        self.reason = reason
+
+
+class LocalFileWriteFailed(CliError):
+    """The operating system refused to create, replace, append to, or copy a local file."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, name: str, reason: str, cause: Exception) -> None:
+        # Same fixed-category contract as LocalFileReadFailed, for the write direction.
+        super().__init__(
+            f"Could not write {name}: {reason}.",
+            description=(
+                f"Writing the file failed at the filesystem level because {reason}. Replacing "
+                "writes go through a temporary sibling, so the previous version of the file, "
+                "if any, is intact and no partial file was left behind. Retrying helps only "
+                "after the cause is fixed, such as freeing space or choosing a writable path."
+            ),
+            trace="LocalFileStore created parent directories and wrote through a temp sibling.",
+            hint="Check directory permissions and free space, or choose another destination.",
+            cause=cause,
+        )
+        self.reason = reason
 
 
 class MigrationVerificationFailed(CliError):
@@ -745,7 +1132,7 @@ class CredentialStoreUnavailable(CliError):
             "The operating-system credential store is unavailable.",
             description=(
                 "No keyring backend reported itself usable, or the backend rejected the "
-                "operation — a locked keychain, a headless session with no agent, or a write "
+                "operation â€” a locked keychain, a headless session with no agent, or a write "
                 "that did not read back as written. The backend's own message is withheld "
                 "because it can quote account identifiers. No credential was stored or read."
             ),
@@ -1079,7 +1466,7 @@ class ApiUnreachable(CliError):
             "The Vidbyte API could not be reached.",
             description=(
                 "Connecting to the configured API host failed, or the connection was lost "
-                "before a reply arrived — typically no network route, DNS failure, a proxy, or "
+                "before a reply arrived â€” typically no network route, DNS failure, a proxy, or "
                 "a timeout. The transport error is withheld because it quotes the URL and may "
                 "quote proxy configuration. Safe requests were already retried, so the failure "
                 "persisted across every attempt."
@@ -1257,7 +1644,7 @@ class ApiRequestConflicted(CliError):
         super().__init__(
             "The run is not in a state that can be continued.",
             description=(
-                "Continuing a run is legal only after it has already settled badly — partial, "
+                "Continuing a run is legal only after it has already settled badly â€” partial, "
                 "failed, or out of credit. A run that is still admitting or running has not "
                 "finished, and a run that completed has nothing left to continue. Nothing was "
                 "admitted and no credits were spent. Read the run first and continue it only "
@@ -1435,7 +1822,7 @@ class ProviderStoreUnavailable(CliError):
             "The provider credential store is unavailable.",
             description=(
                 "No keyring backend reported itself usable, or the backend rejected the "
-                "operation — a locked keychain or a headless session with no agent. No "
+                "operation â€” a locked keychain or a headless session with no agent. No "
                 "provider credential was stored or read."
             ),
             trace=(
@@ -1738,6 +2125,72 @@ class ResearchWatchTimedOut(CliError):
         )
 
 
+class StagesHostFailed(CliError):
+    """A stages turn did not complete with a usable Codex reply."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can quote task text, so this message stays static.
+        super().__init__(
+            "Codex did not complete the stages turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete reply for one stage. "
+                "Execution stopped immediately and later stages never started. The admission "
+                "may already have been charged and completed local work remains in the "
+                "working directory."
+            ),
+            trace="StagesCodexSession checked the SDK turn status and reply identity.",
+            hint="Inspect local Codex configuration before retrying the stages run.",
+        )
+
+
+class StagesSettingsInvalid(CliError):
+    """The supplied stage options did not validate against the stages contract."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the contract, never the submitted stage text.
+        super().__init__(
+            "The run must describe 1 to 25 valid stages.",
+            description=(
+                "No stage was given, more than 25 were given, or a stage carried a blank "
+                "name, prompt, or system prompt. It was rejected before credentials, "
+                "payment, or host execution, so no credits were spent. Give each stage at "
+                "least a --stage-prompt and a --stage-system-prompt and retry."
+            ),
+            trace="StagesOptions validated the stage options before any launch plan was built.",
+            hint="Run 'vidbyte-cli runtime stages describe' for every accepted stage option.",
+        )
+
+
+class StagesOptionCountMismatch(CliError):
+    """Per-stage options were repeated a different number of times than the stages."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Names the alignment contract without quoting any submitted stage text.
+        super().__init__(
+            "Every repeated --stage-* option must be given once per stage, or not at all.",
+            description=(
+                "Stages are assembled by position: the first --stage-prompt, the first "
+                "--stage-system-prompt, and the first occurrence of every other --stage-* "
+                "option describe stage 1, the second occurrences describe stage 2, and so "
+                "on. One option repeated a different number of times than --stage-prompt "
+                "leaves the run ambiguous, so it is rejected before payment rather than "
+                "guessed at. An option omitted entirely is not a mismatch: every stage then "
+                "takes that setting's default."
+            ),
+            trace="StagesOptions compared each repeated option list against the prompt count.",
+            hint="Repeat each --stage-* option exactly as many times as --stage-prompt.",
+        )
+
+
 class EnsembleInputsInvalid(CliError):
     """The supplied ensemble options failed their validated input contract."""
 
@@ -1957,4 +2410,24 @@ class EnsembleImplementerFailed(CliError):
             ),
             hint="Check 'git status' for partial edits before retrying.",
             cause=cause,
+        )
+
+
+class RuntimePaymentFailed(CliError):
+    """Explicit x402 admission could not be safely authorized or completed."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, reason: str) -> None:
+        # Exposes only a fixed reason category, never payer credentials or response bodies.
+        super().__init__(
+            "Runtime x402 payment could not be completed.",
+            description=(
+                "Set VIDBYTE_X402_PRIVATE_KEY and the supported VIDBYTE_X402_NETWORK for "
+                "explicit x402 payment. No local agent was launched. If payment was already "
+                "attempted, recover with the same idempotency key; do not authorize a new "
+                f"purchase to resolve an uncertain outcome. Reason: {reason}."
+            ),
+            trace="Runtime payment validation failed before the database-verified launch gate.",
         )

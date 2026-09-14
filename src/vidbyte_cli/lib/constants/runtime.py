@@ -79,6 +79,20 @@ class TaskBoardProgress(StrEnum):
     ADMITTED = "Your admission is verified. Preparing Codex to work through your board."
     TASK_STARTING = "Working through board tasks in order with Codex."
     TASK_RETRYING = "Retrying the current board task with the same prior summaries."
+    DAG_PLAN_READY = (
+        "Board dependencies checked. Running each task after the tasks it depends on with Codex."
+    )
+    TASK_SKIPPED = (
+        "Skipping a board task whose dependency did not complete. "
+        "Continuing with tasks that can still run."
+    )
+    TASK_FAILED = (
+        "A board task did not complete after retries. "
+        "Recording what happened and continuing with the remaining tasks."
+    )
+    DECOMPOSE_ISOLATED = (
+        "Decomposition is on: agents see only their own task; window context is off."
+    )
     COMPLETE = "Codex has worked through the requested board tasks. Returning the summaries."
 
 
@@ -88,7 +102,8 @@ class PersistenceProgress(StrEnum):
     PREPARING = "Preparing your task and checking that Codex can run in this working directory."
     CREDENTIALS = "Loading your OpenAI credentials to run the task with your own API account."
     ADMISSION = "Requesting the two-cent Vidbyte admission for this persistence session."
-    VERIFYING = "Verifying your admission receipt before starting work on your task."
+    X402_ADMISSION = "Paying the two-cent admission through x402."
+    VERIFYING = "Verifying your admission payment in Vidbyte before starting work on your task."
     ADMITTED = "Your admission is verified. Preparing Codex to work on your task."
     STARTING = "Starting your original task in Codex, with your request preserved exactly."
     INITIAL_COMPLETE = (
@@ -104,3 +119,50 @@ class PersistenceProgress(StrEnum):
     LATE = "Giving Codex more time to refine its work while keeping your original request in view."
     FINAL = "Requesting the final improvement pass before returning the result to you."
     COMPLETE = "Codex has completed the requested persistence passes. Returning its final response."
+
+
+class RuntimePaymentConfig:
+    """Reviewed EVM payment bounds; cents remain separate from provider token usage."""
+
+    PRIVATE_KEY_ENV = "VIDBYTE_X402_PRIVATE_KEY"
+    NETWORK_ENV = "VIDBYTE_X402_NETWORK"
+    DEFAULT_NETWORK = "eip155:8453"
+    NETWORKS = ("eip155:8453", "eip155:84532")
+    MAX_CHALLENGE_CHARACTERS = 16384
+    MAX_AUTHORIZATION_SECONDS = 3600
+    MICROUNITS_PER_CENT = 10000
+    PERSISTENCE_CENTS = 2
+
+
+class StagesLimit(IntEnum):
+    """Execution bounds for the stages primitive."""
+
+    # Review of PR #36 raised this ceiling from 10 to 25: a staged skill such as a design-doc
+    # flow decomposes further than the original estimate, and every stage past the ceiling has
+    # to be split across two paid runs. The admission stays one cent however many stages run.
+    MAX_STAGES = 25
+    TURN_TIMEOUT_SECONDS = 3600
+
+
+class StagesCodexConfig(StrEnum):
+    """Child-only provider configuration; no native login state is changed."""
+
+    PROVIDER = 'model_provider="vidbyte_openai"'
+    NAME = 'model_providers.vidbyte_openai.name="OpenAI"'
+    BASE_URL = 'model_providers.vidbyte_openai.base_url="https://api.openai.com/v1"'
+    ENV_KEY = 'model_providers.vidbyte_openai.env_key="OPENAI_API_KEY"'
+    WIRE_API = 'model_providers.vidbyte_openai.wire_api="responses"'
+
+
+class StagesProgress(StrEnum):
+    """Product-facing milestones for staged local execution."""
+
+    PREPARING = "Preparing your task and checking that Codex can run in this working directory."
+    CREDENTIALS = "Loading your OpenAI credentials to run the stages with your own API account."
+    ADMISSION = "Requesting the one-cent Vidbyte admission for this stages run."
+    VERIFYING = "Verifying your admission receipt before starting the first stage."
+    ADMITTED = "Your admission is verified. Preparing a fresh Codex agent per stage."
+    STAGE_STARTING = "Starting the next stage with its own Codex agent."
+    STAGE_RETRYING = "Retrying the current stage with a fresh Codex agent."
+    STAGE_COMPLETE = "A stage returned its response. Continuing with the next stage."
+    COMPLETE = "Codex has completed every requested stage. Returning the final response."

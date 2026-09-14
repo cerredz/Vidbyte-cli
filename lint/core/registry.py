@@ -12,7 +12,10 @@ import importlib
 from lint.core.diagnostic import Diagnostic, Finding
 from lint.core.discovery import SourceCatalog
 
-_RULE_MODULES = ("lint.rules.c001_command_help_description_depth",)
+_RULE_MODULES = (
+    "lint.rules.c001_command_help_description_depth",
+    "lint.rules.c002_paid_execute_comment_density",
+)
 
 
 class RuleSelectionError(RuntimeError):

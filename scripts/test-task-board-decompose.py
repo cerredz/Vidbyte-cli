@@ -14,6 +14,11 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from vidbyte_cli.commands.runtime.task_board import (  # noqa: E402
+    TaskBoardCommand,
+    TaskBoardOptions,
+)
+from vidbyte_cli.lib.errors.failures import TaskBoardDecomposeInvalid  # noqa: E402
 from vidbyte_cli.lib.runtime_primitives.task_board import (  # noqa: E402
     TaskBoardCodexSession,
     TaskBoardDecomposeParser,
@@ -58,11 +63,11 @@ def _session_with_script(replies: list[str]) -> tuple[TaskBoardCodexSession, lis
     # Fake session whose turns replay one reply body per call in order.
     session = TaskBoardCodexSession({}, lambda _msg: None)
     session.prepare(make_plan())
-    session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+    session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
     seen: list[str] = []
     state = {"n": 0}
 
-    async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+    async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
         seen.append(prompt)
         body = replies[state["n"]] if state["n"] < len(replies) else f"plain-{state['n']}"
         state["n"] += 1
@@ -240,9 +245,9 @@ def test_failed_parent_never_splices() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+        session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             raise RuntimeError("boom")
 
         session._turn = fake_turn  # type: ignore[method-assign]
@@ -260,10 +265,10 @@ def test_retry_yields_single_splice() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+        session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
         state = {"n": 0}
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             state["n"] += 1
             if state["n"] == 1:
                 raise RuntimeError("boom")
@@ -292,6 +297,83 @@ def test_braces_not_interpolated() -> None:
     record("braces not interpolated", asyncio.run(go()))
 
 
+def _options(**overrides: object) -> TaskBoardOptions:
+    # Builds a parsed decomposing run invocation with every other option at its default.
+    base: dict[str, object] = {
+        "task_files": (),
+        "task_list": None,
+        "host": "codex",
+        "window": 10,
+        "context_mode": "windowed-summaries",
+        "handoff": "summary",
+        "summary_mode": "truncate-tail",
+        "summary_max_chars": 1200,
+        "stop_on_error": True,
+        "retries_per_task": 1,
+        "execution_type": "linear",
+        "depends_on": (),
+        "allow_decompose": True,
+        "max_subtasks": 5,
+        "model": "",
+        "sandbox": "workspace-write",
+        "reasoning_effort": "",
+        "turn_timeout": 600,
+        "key": None,
+        "checkpoint": False,
+        "checkpoint_root": Path(".vidbyte/task-board"),
+        "checkpoint_id": None,
+        "checkpoint_mode": "save-only",
+        "export_file": None,
+        "report_file": None,
+        "on_checkpoint": "",
+        "start_from": None,
+        "replay_task": None,
+        "print_prompt": False,
+        "stop_after": None,
+        "retry_failed_only": False,
+        "max_tokens": None,
+        "max_cost": None,
+        "usd_per_million_tokens": 10.0,
+    }
+    base.update(overrides)
+    return TaskBoardOptions(base)
+
+
+def test_index_keyed_features_rejected() -> None:
+    # [Hidden Assumption] A splice shifts indices, so DAG links and checkpoints are refused
+    # before admission, while an unchecked linear decomposing board is accepted.
+    command = TaskBoardCommand()
+    refused: list[str] = []
+    for overrides in (
+        {"execution_type": "dag", "depends_on": ("1:0",)},
+        {"checkpoint": True},
+    ):
+        try:
+            command._settings(("a", "b"), _options(**overrides))
+        except TaskBoardDecomposeInvalid as error:
+            refused.append(error.message)
+    accepted = command._settings(("a", "b"), _options())
+    record(
+        "index-keyed features rejected",
+        len(refused) == 2
+        and "--type dag" in refused[0]
+        and "checkpointing" in refused[1]
+        and accepted.allow_decompose,
+        str(refused),
+    )
+
+
+def test_block_only_reply_keeps_a_summary() -> None:
+    # [Hidden Failure] A reply that is only a rejected block still records a completed step.
+    async def go() -> bool:
+        session, _seen = _session_with_script(['```decompose\n["only one"]\n```'])
+        settings = TaskBoardSettings(tasks=("P",), allow_decompose=True, max_retries_per_task=0)
+        result = await session._run(make_plan(), settings, "rta_block_only")
+        return result.completed == 1 and bool(result.steps[0].summary)
+
+    record("block only reply keeps a summary", asyncio.run(go()))
+
+
 def main() -> int:
     # Runs every design-doc Section 10 decompose case and reports the tally.
     test_defaults_off()
@@ -310,6 +392,8 @@ def main() -> int:
     test_failed_parent_never_splices()
     test_retry_yields_single_splice()
     test_braces_not_interpolated()
+    test_index_keyed_features_rejected()
+    test_block_only_reply_keeps_a_summary()
     passed = sum(1 for status, _, _ in RESULTS if status == PASS)
     print(f"{passed}/{len(RESULTS)} tests passed")
     return 0 if passed == len(RESULTS) else 1

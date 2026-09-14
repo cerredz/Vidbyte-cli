@@ -33,9 +33,10 @@ from vidbyte_cli.lib.runtime.context import ApplicationContext
 from vidbyte_cli.lib.runtime_primitives.executor import RuntimeExecutor
 from vidbyte_cli.lib.runtime_primitives.gate import RuntimeAdmissionGate
 from vidbyte_cli.lib.runtime_primitives.hosts import RuntimeHostRegistry
-from vidbyte_cli.lib.runtime_primitives.persistence import PersistentCodexSession
 from vidbyte_cli.lib.runtime_primitives.planner import RuntimeLaunchPlanner
 from vidbyte_cli.lib.runtime_primitives.verification import RuntimeGrantVerifier
+from vidbyte_cli.services.persistence.runner import PersistenceRunner
+from vidbyte_cli.services.persistence.session import PersistentCodexSession
 from vidbyte_cli.types.runtime import (
     PersistenceSettings,
     PersistenceStrength,
@@ -100,6 +101,16 @@ class AdmissionContracts(unittest.TestCase):
         # Both trusted verification modes accept the exact intended receipt.
         self.assertTrue(self.gate.verify(self.plan, self.grant, self.now, KEY).admitted)
         self.assertTrue(self.gate.verify_online(self.plan, self.grant, self.grant).admitted)
+
+    def test_stages_one_cent_price(self) -> None:
+        # The stages product admits exactly one cent and rejects persistence pricing.
+        plan = self.plan.model_copy(update={"capability_id": "runtime.stages@1"})
+        one_cent = {"capability_id": "runtime.stages@1", "charged_cents": 1}
+        two_cent = {"capability_id": "runtime.stages@1", "charged_cents": 2}
+        good = self.grant.model_copy(update=one_cent)
+        bad = self.grant.model_copy(update=two_cent)
+        self.assertTrue(self.gate.verify_online(plan, good, good).admitted)
+        self.assertFalse(self.gate.verify_online(plan, bad, bad).admitted)
 
     def test_checks_return_dataclasses_with_enum_reasons(self) -> None:
         check = self.gate._check_policy(self.plan, None, self.now)
@@ -174,7 +185,7 @@ class AdmissionContracts(unittest.TestCase):
         settings = PersistenceSettings(strength=PersistenceStrength.TIER_1)
         verdict = self.gate.verify(self.plan, None, self.now, KEY)
         with self.assertRaises(RuntimeAdmissionNotVerified):
-            executor.execute_persistence(self.plan, settings, session, verdict)
+            PersistenceRunner(executor).run(self.plan, settings, session, verdict)
         session.run.assert_not_called()
         with self.assertRaises(RuntimeAdmissionNotVerified):
             executor.execute_adversarial_team(self.plan)
@@ -310,7 +321,7 @@ class PersistenceContracts(unittest.TestCase):
 
         self.transport.run = blocked
         limits = SimpleNamespace(TURN_TIMEOUT_SECONDS=0.01)
-        with patch("vidbyte_cli.lib.runtime_primitives.persistence.PersistenceLimit", limits):
+        with patch("vidbyte_cli.services.persistence.session.PersistenceLimit", limits):
             with self.assertRaises(PersistenceHostFailed):
                 self._run()
         self.assertEqual(cancelled, [True])

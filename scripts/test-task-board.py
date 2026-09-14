@@ -247,12 +247,12 @@ def test_separate_threads_per_task() -> None:
         session.prepare(make_plan())
         calls: list[str] = []
 
-        def fake_build(index: int) -> object:
+        def fake_build(index: int, settings: object) -> object:
             # Avoids SDK import while tracking per-task construction.
             calls.append(f"agent-{index}")
             return object()
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             # Returns a distinct thread per prompt in call order.
             idx = len([c for c in calls if c.startswith("agent-")]) - 1
             return _fake_reply(f"outcome-{idx}", f"thread-{idx}")
@@ -272,9 +272,9 @@ def test_stop_on_error_halts() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+        session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             # Fails every turn so the board must halt at index 0.
             raise RuntimeError("boom")
 
@@ -295,10 +295,10 @@ def test_continue_on_error_marks_failed() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+        session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
         state = {"n": 0}
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             # Fails first task, succeeds second; second prompt must see the failure placeholder.
             state["n"] += 1
             if state["n"] == 1:
@@ -325,10 +325,10 @@ def test_isolated_mode_ignores_window() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+        session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
         seen: list[str] = []
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             # Records every prompt so the absence of prior context can be asserted.
             seen.append(prompt)
             return _fake_reply(f"outcome-{len(seen)}", f"thread-{len(seen)}")
@@ -348,10 +348,10 @@ def test_windowed_mode_still_forwards_context() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()  # type: ignore[method-assign]
+        session._build_agent = lambda _i, _s: object()  # type: ignore[method-assign]
         seen: list[str] = []
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             # Returns a distinctive body so the next prompt can be checked for it.
             seen.append(prompt)
             return _fake_reply(f"carried-{len(seen)}", f"thread-{len(seen)}")

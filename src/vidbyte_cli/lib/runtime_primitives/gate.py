@@ -18,6 +18,7 @@ _ALLOWED_PRICES = {
     "runtime.same-host-ensemble@1": 2,
     "runtime.persistence@1": 2,
     "runtime.task-board@1": 2,
+    "runtime.stages@1": 1,
 }
 _MAX_TTL_SECONDS = 3600
 Key = str | None
@@ -39,7 +40,7 @@ class RuntimeAdmissionGate:
         return self._verdict(plan, grant, check)
 
     def verify_online(self, plan: Plan, grant: Grant, verified: Grant) -> Verdict:
-        # The endpoint supplies the canonical receipt after checking signature and ownership.
+        # The backend confirms signature, ownership and Mongo payment evidence for either method.
         check = self._check_policy(plan, grant, datetime.now(UTC))
         if grant != verified:
             check = Check(Reason.RECEIPT_MISMATCH)

@@ -1,14 +1,17 @@
 """Local planning boundaries for runtime primitives.
 
 Exports discovery, planning, admission verification, and the guarded executor.
-Persistence delegates native execution to the SDK after admission succeeds.
+Each primitive's own algorithm lives in `services/`; only what all of them share is here.
 """
 
 from .executor import RuntimeExecutor
 from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
+from .stages import StagesCodexSession
 from .task_board import TaskBoardCodexSession, TaskBoardDecomposeParser, TaskBoardSummarizer
+from .task_board_checkpoints import TaskBoardCheckpointer
+from .task_board_tasks import TaskBoardTaskFiles
 from .verification import RuntimeGrantVerifier
 
 __all__ = [
@@ -17,7 +20,10 @@ __all__ = [
     "RuntimeGrantVerifier",
     "RuntimeHostRegistry",
     "RuntimeLaunchPlanner",
+    "StagesCodexSession",
+    "TaskBoardCheckpointer",
     "TaskBoardCodexSession",
     "TaskBoardDecomposeParser",
     "TaskBoardSummarizer",
+    "TaskBoardTaskFiles",
 ]
