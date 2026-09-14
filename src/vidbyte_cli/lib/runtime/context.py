@@ -35,6 +35,7 @@ from ..auth.provider_verifier import ProviderVerifier, verifier_for_provider
 from ..config import ConfigResolver, ConfigStore, ResolvedConfig, VidbytePaths
 from ..config.migration import StateMigration
 from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
+from ..connections.manager import ConnectionManager
 from ..errors.failures import AuthenticationRequired, ProviderAuthenticationRequired
 from ..errors.handler import ErrorHandler
 from ..io import IOStreams
@@ -91,6 +92,7 @@ class ApplicationContext:
         self._runtime_executor: RuntimeExecutor | None = None
         self._provider_store: ProviderCredentialStore | None = None
         self._provider_resolver: ProviderResolver | None = None
+        self._connections: ConnectionManager | None = None
 
     def configure(self, options: InvocationOptions, config: ResolvedConfig) -> None:
         # Root options are read twice — once by the pre-scan, once by Click — so an unchanged
@@ -227,6 +229,12 @@ class ApplicationContext:
         if resolved is None:
             raise ProviderAuthenticationRequired(provider.value)
         return resolved.credentials
+
+    def connections(self) -> ConnectionManager:
+        # Lazily creates the context-provider manager so help never discovers a keyring backend.
+        if self._connections is None:
+            self._connections = ConnectionManager(self)
+        return self._connections
 
     def error_handler(self) -> ErrorHandler:
         return self._errors

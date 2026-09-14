@@ -60,3 +60,7 @@ class VidbytePaths:
     def provider_credentials_file(self) -> Path:
         # Data, not config: provider fallback keys must not be synced as settings.
         return self.data_root / "provider-credentials.json"
+
+    def connection_metadata_file(self) -> Path:
+        # Metadata is secret-free, but account labels and granted scopes still belong in data.
+        return self.data_root / "connections.json"
