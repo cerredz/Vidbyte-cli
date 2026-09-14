@@ -25,6 +25,9 @@ from ...errors.failures import (
     ConnectionProtocolError,
     ConnectionReauthenticationRequired,
     ConnectionResourceUnavailable,
+    GitHubAccessDenied,
+    GitHubClientInvalid,
+    GitHubDeviceCodeExpired,
 )
 from ..oauth import OAuthBrowser
 from .base import AuthenticatedConnection, ProviderAdapterBase
@@ -89,6 +92,16 @@ class GitHubConnectionAdapter(ProviderAdapterBase):
                 interval += 5
                 time.sleep(min(interval, max(0.0, deadline - time.monotonic())))
                 continue
+            if outcome == "access_denied":
+                raise GitHubAccessDenied()
+            if outcome == "expired_token":
+                raise GitHubDeviceCodeExpired()
+            if outcome in {
+                "incorrect_device_code",
+                "incorrect_client_credentials",
+                "unsupported_grant_type",
+            }:
+                raise GitHubClientInvalid()
             if isinstance(outcome, str) and outcome:
                 raise ConnectionOAuthFailed(_GITHUB_PROVIDER)
             token = self._token_from_payload(token_payload, requested_scopes)

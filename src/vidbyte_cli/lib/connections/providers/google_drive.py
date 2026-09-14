@@ -24,11 +24,17 @@ from ....types.connection import (
     ConnectionToken,
 )
 from ...errors.failures import (
+    ConnectionAuthenticationRequired,
     ConnectionConfigurationInvalid,
     ConnectionOAuthFailed,
     ConnectionProtocolError,
     ConnectionReauthenticationRequired,
     ConnectionResourceUnavailable,
+    ConnectionScopeInsufficient,
+    GoogleAccessDenied,
+    GoogleClientInvalid,
+    GoogleInvalidGrant,
+    GoogleScopeInvalid,
 )
 from ..oauth import OAuthBrowser, OAuthCallbackServer, PkceChallenge
 from .base import AuthenticatedConnection, ProviderAdapterBase
@@ -178,11 +184,14 @@ class GoogleDriveConnectionAdapter(ProviderAdapterBase):
             raise ConnectionResourceUnavailable(_GOOGLE_PROVIDER)
         file_id = self._file_id(resource.identifier)
         encoded_id = quote(file_id, safe="")
-        metadata_payload = self._client(context, _GOOGLE_PROVIDER).get_json(
-            f"{_GOOGLE_DRIVE_API}/files/{encoded_id}",
-            self._headers(token),
-            {"fields": "id,name,mimeType,modifiedTime,size,webViewLink"},
-        )
+        try:
+            metadata_payload = self._client(context, _GOOGLE_PROVIDER).get_json(
+                f"{_GOOGLE_DRIVE_API}/files/{encoded_id}",
+                self._headers(token),
+                {"fields": "id,name,mimeType,modifiedTime,size,webViewLink"},
+            )
+        except ConnectionAuthenticationRequired as error:
+            raise self._rescope_or_auth(context, token, error) from error
         mime_type = self._text(metadata_payload, "mimeType", _GOOGLE_PROVIDER)
         if mime_type in _WORKSPACE_EXPORTS:
             content = self._client(context, _GOOGLE_PROVIDER).get_bytes(
@@ -279,11 +288,27 @@ class GoogleDriveConnectionAdapter(ProviderAdapterBase):
             from ...errors.failures import ConnectionOAuthStateInvalid
 
             raise ConnectionOAuthStateInvalid(_GOOGLE_PROVIDER)
+        if query.get("error") == "access_denied":
+            raise GoogleAccessDenied()
         if query.get("error"):
             raise ConnectionOAuthFailed(_GOOGLE_PROVIDER)
 
+    def _raise_for_token_error(self, payload: dict[str, object]) -> None:
+        # Matches Google token error codes before any access token is read.
+        error = payload.get("error")
+        if not isinstance(error, str) or not error:
+            return
+        if error == "invalid_grant":
+            raise GoogleInvalidGrant()
+        if error in {"invalid_client", "unauthorized_client"}:
+            raise GoogleClientInvalid()
+        if error == "invalid_scope":
+            raise GoogleScopeInvalid()
+        raise ConnectionOAuthFailed(_GOOGLE_PROVIDER)
+
     def _token_from_payload(self, payload: dict[str, object], scopes: tuple[str, ...], old_refresh: str | None = None, client_config: GoogleClientConfig | None = None) -> ConnectionToken:  # fmt: skip  # noqa: E501
         # Converts a Google token response and retains a refresh token omitted during rotation.
+        self._raise_for_token_error(payload)
         access_token = self._text(payload, "access_token", _GOOGLE_PROVIDER)
         refresh_token = self._optional_text(payload, "refresh_token") or old_refresh
         expires_in = self._optional_integer(payload, "expires_in")
@@ -305,6 +330,18 @@ class GoogleDriveConnectionAdapter(ProviderAdapterBase):
             )
         except ValidationError as error:
             raise ConnectionProtocolError(_GOOGLE_PROVIDER, error) from error
+
+    def _rescope_or_auth(self, context: ApplicationContext, token: ConnectionToken, error: ConnectionAuthenticationRequired) -> ConnectionAuthenticationRequired | ConnectionScopeInsufficient:  # fmt: skip  # noqa: E501
+        # Re-probes identity to split revoked tokens from under-scoped ones.
+        try:
+            self.verify(context, token)
+        except ConnectionAuthenticationRequired:
+            return error
+        except ConnectionScopeInsufficient as scope_error:
+            return scope_error
+        except Exception:  # noqa: BLE001
+            return error
+        return ConnectionScopeInsufficient(_GOOGLE_PROVIDER)
 
     def _file_id(self, value: str) -> str:
         # Accepts a Drive ID or common Drive/Docs URL and rejects unrelated URLs.

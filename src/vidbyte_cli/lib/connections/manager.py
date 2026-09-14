@@ -25,6 +25,10 @@ from ..errors.failures import (
     ConnectionNotFound,
     ConnectionProtocolError,
     ConnectionReauthenticationRequired,
+    ConnectionSaveFailed,
+    ConnectionStoreUnavailable,
+    StoredConnectionMetadataUnreadable,
+    StoredConnectionSecretUnreadable,
 )
 from .providers.base import AuthenticatedConnection, ConnectionProviderAdapter
 from .providers.github import GitHubConnectionAdapter
@@ -57,7 +61,14 @@ class ConnectionManager:
         authenticated = self._adapter(provider).login(self._context, scopes, client_secrets_path)
         profile = self._profile()
         metadata = self._metadata(profile, provider, name, authenticated)
-        self._store.save(profile, authenticated.token, metadata)
+        try:
+            self._store.save(profile, authenticated.token, metadata)
+        except (
+            ConnectionStoreUnavailable,
+            StoredConnectionSecretUnreadable,
+            StoredConnectionMetadataUnreadable,
+        ) as error:
+            raise ConnectionSaveFailed(provider.value) from error
         return metadata
 
     def list(self, profile: str) -> list[ConnectionMetadata]:

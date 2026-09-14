@@ -25,9 +25,13 @@ from ...errors.failures import (
     ConnectionConfigurationInvalid,
     ConnectionOAuthFailed,
     ConnectionProtocolError,
+    ConnectionRateLimited,
     ConnectionReauthenticationRequired,
     ConnectionResourceUnavailable,
     ConnectionScopeInsufficient,
+    SlackAccessDenied,
+    SlackClientInvalid,
+    SlackInvalidGrant,
 )
 from ..oauth import OAuthBrowser, OAuthCallbackServer, PkceChallenge
 from .base import AuthenticatedConnection, ProviderAdapterBase
@@ -132,7 +136,14 @@ class SlackConnectionAdapter(ProviderAdapterBase):
                 "refresh_token": refresh_token,
             },
         )
-        self._require_ok(payload)
+        try:
+            self._require_ok(payload)
+        except SlackClientInvalid:
+            raise
+        except ConnectionOAuthFailed as error:
+            raise ConnectionReauthenticationRequired(_SLACK_PROVIDER) from error
+        except SlackInvalidGrant as error:
+            raise ConnectionReauthenticationRequired(_SLACK_PROVIDER) from error
         return self._token_from_payload(
             payload,
             self._scopes(payload.get("scope")) or self._scopes(token.provider_data.get("scopes")),
@@ -172,6 +183,8 @@ class SlackConnectionAdapter(ProviderAdapterBase):
             from ...errors.failures import ConnectionOAuthStateInvalid
 
             raise ConnectionOAuthStateInvalid(_SLACK_PROVIDER)
+        if query.get("error") == "access_denied":
+            raise SlackAccessDenied()
         if query.get("error"):
             raise ConnectionOAuthFailed(_SLACK_PROVIDER)
 
@@ -179,12 +192,18 @@ class SlackConnectionAdapter(ProviderAdapterBase):
         # Converts Slack's HTTP-200 error envelope into a typed CLI failure.
         if payload.get("ok") is not True:
             error = payload.get("error")
+            if error in {"ratelimited", "rate_limited", "ratelimited_error"}:
+                raise ConnectionRateLimited(_SLACK_PROVIDER)
             if error == "missing_scope":
                 raise ConnectionScopeInsufficient(_SLACK_PROVIDER)
             if error in {"invalid_auth", "token_revoked", "account_inactive"}:
                 raise ConnectionAuthenticationRequired(_SLACK_PROVIDER)
             if error in {"channel_not_found", "not_in_channel", "is_archived"}:
                 raise ConnectionResourceUnavailable(_SLACK_PROVIDER)
+            if error in {"invalid_code", "code_expired", "bad_redirect_uri_code"}:
+                raise SlackInvalidGrant()
+            if error in {"invalid_client", "bad_redirect_uri", "invalid_redirect_uri"}:
+                raise SlackClientInvalid()
             raise ConnectionOAuthFailed(_SLACK_PROVIDER)
 
     def _token_from_payload(self, payload: dict[str, object], scopes: tuple[str, ...], old_refresh: str | None = None) -> ConnectionToken:  # fmt: skip  # noqa: E501

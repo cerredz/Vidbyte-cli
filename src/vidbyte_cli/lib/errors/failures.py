@@ -2341,3 +2341,264 @@ class ConnectionNotFound(CliError):
             trace="ConnectionManager looked up a profile-scoped provider/name pair and found none.",
             hint="Run 'vidbyte-cli connections list'.",
         )
+
+
+class GitHubAccessDenied(CliError):
+    """The GitHub device approval was denied by the user."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # The device outcome is a closed vocabulary word, never a response body.
+        super().__init__(
+            "The github login was denied at GitHub.",
+            description=(
+                "The user cancelled or denied the device authorization at GitHub. No token "
+                "was issued and nothing was persisted locally. Reusing the same user code "
+                "will not help because a denied grant is final."
+            ),
+            trace="GitHubConnectionAdapter polled the device endpoint and read access_denied.",
+            hint="Run 'vidbyte-cli connections login github' for a fresh code.",
+        )
+
+
+class GitHubDeviceCodeExpired(CliError):
+    """The GitHub device code expired before approval."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # Expiry is a time boundary, not a user choice, so the hint names a fresh code.
+        super().__init__(
+            "The github device code expired before approval.",
+            description=(
+                "GitHub retired the device code before the approval arrived. Device codes "
+                "live only a few minutes. No token was issued and nothing was persisted. "
+                "Retrying the same user code cannot succeed."
+            ),
+            trace="GitHubConnectionAdapter polled the device endpoint and read expired_token.",
+            hint="Run 'vidbyte-cli connections login github' for a new code.",
+        )
+
+
+class GitHubClientInvalid(CliError):
+    """The GitHub OAuth App client rejected the device request."""
+
+    code = CliErrorCode.CONNECTION_CONFIGURATION_INVALID
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # The client ID is public configuration, so naming its env var is safe.
+        super().__init__(
+            "The github OAuth client is invalid.",
+            description=(
+                "GitHub rejected the device or token request for this OAuth App. The client "
+                "ID is wrong, revoked, or mismatched with the device code in use. No browser "
+                "approval can fix this and nothing was persisted."
+            ),
+            trace="GitHubConnectionAdapter read a client rejection from the device token endpoint.",
+            hint="Check VIDBYTE_GITHUB_CLIENT_ID, then run 'vidbyte-cli connections login github'.",
+        )
+
+
+class SlackAccessDenied(CliError):
+    """The Slack workspace approval was denied."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # Denial covers user Cancel and admin restriction without quoting either.
+        super().__init__(
+            "The slack login was denied at Slack.",
+            description=(
+                "The Slack approval screen returned access_denied. The user pressed Cancel, "
+                "or the workspace restricts this app. No token was exchanged and nothing was "
+                "persisted. Reusing the same browser URL cannot succeed."
+            ),
+            trace="SlackConnectionAdapter rejected the loopback callback before token exchange.",
+            hint="Run 'vidbyte-cli connections login slack' and approve the workspace user scopes.",
+        )
+
+
+class SlackInvalidGrant(CliError):
+    """The Slack authorization code was expired, reused, or mismatched."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # Codes are single-use and short-lived, so only a fresh login helps.
+        super().__init__(
+            "The slack authorization code is no longer valid.",
+            description=(
+                "Slack rejected the authorization code. It expired, was already used, or the "
+                "PKCE verifier or redirect did not match the authorizing request. No token "
+                "was persisted. Retrying the same callback URL will fail the same way."
+            ),
+            trace="SlackConnectionAdapter exchanged one code and Slack refused it.",
+            hint="Run 'vidbyte-cli connections login slack' and finish the newest approval.",
+        )
+
+
+class SlackClientInvalid(CliError):
+    """The Slack client ID or redirect is not accepted by Slack."""
+
+    code = CliErrorCode.CONNECTION_CONFIGURATION_INVALID
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # The client ID is public configuration, so the hint can name it directly.
+        super().__init__(
+            "The slack OAuth client is invalid.",
+            description=(
+                "Slack rejected the client ID or redirect for this login. The app may not be "
+                "PKCE-enabled, the ID may be wrong, or localhost redirects may be missing. "
+                "No approval screen can succeed until this is fixed and nothing was persisted."
+            ),
+            trace="SlackConnectionAdapter received a client rejection before token exchange.",
+            hint="Check VIDBYTE_SLACK_CLIENT_ID, then run 'vidbyte-cli connections login slack'.",
+        )
+
+
+class GoogleAccessDenied(CliError):
+    """The Google consent screen was denied."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # Cancel and deny need the same fix, so one hint covers both.
+        super().__init__(
+            "The google-drive login was denied at Google.",
+            description=(
+                "The Google account picker returned access_denied. The user pressed Cancel "
+                "or declined consent for the requested scope. No code was exchanged and "
+                "nothing was persisted. Reusing the same browser URL cannot succeed."
+            ),
+            trace="GoogleDriveConnectionAdapter rejected the callback before token exchange.",
+            hint="Run 'vidbyte-cli connections login google-drive' and click Allow.",
+        )
+
+
+class GoogleInvalidGrant(CliError):
+    """The Google authorization code is expired, reused, or mismatched."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # Grant errors are final for that code, so the hint forces a fresh login.
+        super().__init__(
+            "The google-drive authorization code is no longer valid.",
+            description=(
+                "Google rejected the authorization code. It expired, was already redeemed, or "
+                "the PKCE verifier or redirect did not match the authorizing request. No token "
+                "was persisted. Exchanging the same code again will fail the same way."
+            ),
+            trace="GoogleDriveConnectionAdapter exchanged one code and Google refused it.",
+            hint="Run 'vidbyte-cli connections login google-drive' and finish approval.",
+        )
+
+
+class GoogleClientInvalid(CliError):
+    """The Google installed-app client is not accepted by Google."""
+
+    code = CliErrorCode.CONNECTION_CONFIGURATION_INVALID
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # File contents stay private; only the flag and env var are named.
+        super().__init__(
+            "The google-drive OAuth client is invalid.",
+            description=(
+                "Google rejected the installed-app client for this login. The client JSON may "
+                "be for the wrong app type, edited, or pointed at an untrusted endpoint. No "
+                "browser approval can succeed until this is fixed and nothing was persisted."
+            ),
+            trace="GoogleDriveConnectionAdapter received a client rejection from Google.",
+            hint="Check --client-secrets or VIDBYTE_GOOGLE_CLIENT_SECRETS, then retry.",
+        )
+
+
+class GoogleScopeInvalid(CliError):
+    """Google rejected a requested OAuth scope."""
+
+    code = CliErrorCode.CONNECTION_SCOPE_INSUFFICIENT
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self) -> None:
+        # Requested scope strings are caller input, but echoing them adds no repair value.
+        super().__init__(
+            "Google rejected the requested drive scope.",
+            description=(
+                "Google refused one of the requested scopes for this installed app. The login "
+                "stopped before any token was persisted. Requesting broader Gmail or Calendar "
+                "scopes from this Drive login cannot succeed."
+            ),
+            trace="GoogleDriveConnectionAdapter received invalid_scope from the token endpoint.",
+            hint="Retry without --scope or with the default drive.readonly scope.",
+        )
+
+
+class ConnectionLoopbackUnavailable(CliError):
+    """The local loopback listener could not start."""
+
+    code = CliErrorCode.CONNECTION_API_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, provider: str) -> None:
+        # Provider names are closed enum values and safe to include in this message.
+        super().__init__(
+            f"The {provider} login could not listen on localhost.",
+            description=(
+                "The one-shot loopback server could not bind 127.0.0.1. A firewall, sandbox "
+                "policy, permission, or conflicting listener is blocking it. No browser URL "
+                "was completed and nothing was persisted."
+            ),
+            trace="OAuthCallbackServer failed to bind its ephemeral loopback port.",
+            hint="Free localhost, allow loopback, or use 'vidbyte-cli connections login github'.",
+        )
+
+
+class ConnectionCallbackTimeout(CliError):
+    """The provider approval never arrived at the loopback server."""
+
+    code = CliErrorCode.CONNECTION_OAUTH_FAILED
+    exit_status = ExitCode.AUTHENTICATION
+
+    def __init__(self, provider: str) -> None:
+        # Timeout means abandonment, not denial, so the hint names completion.
+        super().__init__(
+            f"The {provider} approval did not arrive in time.",
+            description=(
+                "The loopback server waited but no provider approval arrived before the "
+                "deadline. The browser may never have opened or the approval was never "
+                "submitted. No token was exchanged and nothing was persisted. Old browser "
+                "URLs cannot be reused."
+            ),
+            trace="OAuthCallbackServer waited until its bounded deadline without a callback.",
+            hint="Run one fresh login and complete the approval in the opened browser.",
+        )
+
+
+class ConnectionSaveFailed(CliError):
+    """The verified OAuth grant could not be saved to the keyring."""
+
+    code = CliErrorCode.CONNECTION_STORE_UNAVAILABLE
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, provider: str) -> None:
+        # Stating the grant succeeded prevents the agent from blaming the provider.
+        super().__init__(
+            f"The {provider} grant succeeded but was not saved.",
+            description=(
+                "The provider approved access and identity was verified, but the token could "
+                "not be written to the OS keyring. Nothing is stored, so status and read "
+                "will still report no connection. The provider grant alone is not usable."
+            ),
+            trace="ConnectionManager verified identity and the keyring save did not read back.",
+            hint="Unlock or configure the OS keyring, then run the login command again.",
+        )

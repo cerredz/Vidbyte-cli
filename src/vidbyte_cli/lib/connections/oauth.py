@@ -20,6 +20,8 @@ from urllib.parse import parse_qs, urlparse
 from ..errors.failures import (
     ConnectionApiUnavailable,
     ConnectionAuthenticationRequired,
+    ConnectionCallbackTimeout,
+    ConnectionLoopbackUnavailable,
     ConnectionOAuthFailed,
     ConnectionProtocolError,
     ConnectionRateLimited,
@@ -113,7 +115,7 @@ class OAuthCallbackServer:
         try:
             self._server = _CallbackHTTPServer(("127.0.0.1", 0), _OAuthCallbackHandler)
         except OSError as error:
-            raise ConnectionOAuthFailed(provider, error) from error
+            raise ConnectionLoopbackUnavailable(provider) from error
         self._server.timeout = 0.25
         self.redirect_uri = f"http://{redirect_host}:{self._server.server_port}{_CALLBACK_PATH}"
 
@@ -133,7 +135,7 @@ class OAuthCallbackServer:
             with self._server.query_lock:
                 if self._server.query is not None:
                     return dict(self._server.query)
-        raise ConnectionOAuthFailed(self._provider, TimeoutError("callback timed out"))
+        raise ConnectionCallbackTimeout(self._provider)
 
 
 class OAuthBrowser:
@@ -148,6 +150,7 @@ class OAuthBrowser:
             opened = False
         if not opened:
             streams.write_error(f"Open this authorization URL manually: {url}")
+            streams.write_error("Headless agents must open the URL above and approve it there.")
 
 
 class OAuthHttpClient:
