@@ -19,6 +19,7 @@ from ...types.connection import (
     ConnectionRead,
     ConnectionResource,
     ConnectionToken,
+    ReadVia,
 )
 from ..errors.cli_error import CliError
 from ..errors.failures import (
@@ -30,8 +31,10 @@ from ..errors.failures import (
     StoredConnectionMetadataUnreadable,
     StoredConnectionSecretUnreadable,
 )
+from .native import NativeProbe
 from .providers.base import AuthenticatedConnection, ConnectionProviderAdapter
-from .providers.github import GitHubConnectionAdapter
+from .providers.github import GitHubDirectAdapter
+from .providers.github_native import GitHubNativeAdapter
 from .providers.google_drive import GoogleDriveConnectionAdapter
 from .providers.slack import SlackConnectionAdapter
 from .store import ConnectionStore
@@ -49,8 +52,10 @@ class ConnectionManager:
         # The manager receives the invocation graph but does not construct it eagerly.
         self._context = context
         self._store = ConnectionStore(context.paths())
+        self._native_probe = NativeProbe()
+        self._github_native = GitHubNativeAdapter(self._native_probe)
         self._adapters: dict[ConnectionProvider, ConnectionProviderAdapter] = {
-            ConnectionProvider.GITHUB: GitHubConnectionAdapter(),
+            ConnectionProvider.GITHUB: GitHubDirectAdapter(),
             ConnectionProvider.SLACK: SlackConnectionAdapter(),
             ConnectionProvider.GOOGLE_DRIVE: GoogleDriveConnectionAdapter(),
         }
@@ -87,11 +92,31 @@ class ConnectionManager:
         metadata = self._find_unique(profile, name)
         return self.status(profile, metadata.provider, metadata.name)
 
-    def read(self, profile: str, provider: ConnectionProvider, name: str, resource: ConnectionResource) -> ConnectionRead:  # fmt: skip  # noqa: E501
+    def read(self, profile: str, provider: ConnectionProvider, name: str, resource: ConnectionResource, via: ReadVia = ReadVia.AUTO) -> ConnectionRead:  # fmt: skip  # noqa: E501
         # Resolves a current token and dispatches one bounded resource read.
         token, _ = self._resolve(profile, provider, name)
         self._ensure_resource(resource, provider)
-        return self._adapter(provider).read(self._context, token, resource)
+        return self._read_with_transport(token, resource, via)
+
+    def plan_read(self, resource: ConnectionResource, via: ReadVia = ReadVia.AUTO) -> tuple[str, ...]:  # fmt: skip  # noqa: E501
+        # Returns the exact native argv or direct plan without running anything.
+        self._ensure_resource(resource, resource.provider)
+        if resource.provider is not ConnectionProvider.GITHUB and via is ReadVia.NATIVE:
+            raise ConnectionProtocolError("connection", ValueError("native read is github-only"))
+        if resource.provider is ConnectionProvider.GITHUB and via is not ReadVia.DIRECT:
+            return self._github_native.plan(resource)
+        return self._direct_plan(resource)
+
+    def native_availability(self, provider: ConnectionProvider) -> dict[str, object]:  # fmt: skip  # noqa: E501
+        # Reports native CLI presence best-effort without ever raising for callers.
+        if provider is not ConnectionProvider.GITHUB:
+            return {"found": False, "authenticated": False, "version": None}
+        available = self._github_native.availability()
+        return {
+            "found": available.found,
+            "authenticated": available.authenticated,
+            "version": available.version,
+        }
 
     def logout(self, profile: str, provider: ConnectionProvider, name: str) -> None:
         # Attempts provider revocation but always clears the local connection afterward.
@@ -182,6 +207,51 @@ class ConnectionManager:
         # Rejects a resource whose provider differs from the selected named connection.
         if resource.provider is not provider:
             raise ConnectionProtocolError(provider.value, ValueError("resource provider mismatch"))
+
+    def _read_with_transport(
+        self, token: ConnectionToken, resource: ConnectionResource, via: ReadVia
+    ) -> ConnectionRead:
+        # Routes GitHub between gh and httpx while Slack and Drive stay direct-only.
+        if resource.provider is not ConnectionProvider.GITHUB:
+            if via is ReadVia.NATIVE:
+                raise ConnectionProtocolError(
+                    "connection", ValueError("native read is github-only")
+                )
+            return self._adapter(resource.provider).read(self._context, token, resource)
+        if via is ReadVia.DIRECT:
+            return self._adapter(resource.provider).read(self._context, token, resource)
+        if via is ReadVia.NATIVE:
+            return self._github_native.read(self._context, resource)
+        try:
+            return self._github_native.read(self._context, resource)
+        except Exception as native_error:
+            from ..errors.failures import (
+                ConnectionAuthenticationRequired,
+                ConnectionNativeCliFailed,
+                ConnectionNativeCliMissing,
+            )
+
+            if isinstance(
+                native_error,
+                (
+                    ConnectionNativeCliMissing,
+                    ConnectionAuthenticationRequired,
+                    ConnectionNativeCliFailed,
+                ),
+            ):
+                try:
+                    return self._adapter(resource.provider).read(self._context, token, resource)
+                except Exception as direct_error:
+                    raise direct_error from native_error
+            raise
+
+    def _direct_plan(self, resource: ConnectionResource) -> tuple[str, ...]:
+        # Names the direct HTTP target without sending any request or reading secrets.
+        if resource.provider is ConnectionProvider.GITHUB:
+            return ("GET", "api.github.com")
+        if resource.provider is ConnectionProvider.SLACK:
+            return ("GET", "slack.conversations.history")
+        return ("GET", "drive.files")
 
     def _adapter(self, provider: ConnectionProvider) -> ConnectionProviderAdapter:
         # Returns the statically registered provider adapter.

@@ -22,6 +22,7 @@ from ....types.connection import (
     ConnectionRead,
     ConnectionResource,
     ConnectionToken,
+    ReadProvenance,
 )
 from ...errors.failures import (
     ConnectionAuthenticationRequired,
@@ -217,6 +218,7 @@ class GoogleDriveConnectionAdapter(ProviderAdapterBase):
             resource_type=resource.resource_type,
             identifier=file_id,
             data=data,
+            provenance=ReadProvenance(source="direct", plan=("GET", "drive.files")),
         )
 
     def revoke(self, context: ApplicationContext, token: ConnectionToken) -> None:

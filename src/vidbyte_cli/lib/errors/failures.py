@@ -2602,3 +2602,45 @@ class ConnectionSaveFailed(CliError):
             trace="ConnectionManager verified identity and the keyring save did not read back.",
             hint="Unlock or configure the OS keyring, then run the login command again.",
         )
+
+
+class ConnectionNativeCliMissing(CliError):
+    """The requested native provider CLI is not installed or not on PATH."""
+
+    code = CliErrorCode.CONNECTION_NATIVE_CLI_MISSING
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, binary: str) -> None:
+        # The binary name is a closed vocabulary word, never caller-supplied argv.
+        super().__init__(
+            f"The {binary} CLI is not available for this read.",
+            description=(
+                f"The read requested the native {binary} path, but no {binary} binary was "
+                "found on PATH or it could not be executed. No provider request was made "
+                "and no local state changed. Install the provider CLI or retry with the "
+                "direct transport instead."
+            ),
+            trace="NativeProbe searched PATH and could not execute the provider binary.",
+            hint="Install gh or retry with '--via direct'.",
+        )
+
+
+class ConnectionNativeCliFailed(CliError):
+    """The native provider CLI ran but did not return a usable read."""
+
+    code = CliErrorCode.CONNECTION_NATIVE_CLI_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, binary: str, excerpt: str = "") -> None:
+        # Only a bounded, control-char-stripped excerpt ever reaches the message.
+        super().__init__(
+            f"The {binary} CLI could not complete this read.",
+            description=(
+                f"The native {binary} command ran but exited without usable JSON. The "
+                "bounded excerpt below carries the provider's reason. No local connection "
+                "was changed. Retry with the direct transport or fix the native CLI state."
+                + (f" Excerpt: {excerpt}" if excerpt else "")
+            ),
+            trace="NativeRunner spawned the allowlisted provider command and read its result.",
+            hint="Retry with '--via direct' or fix the native CLI authentication.",
+        )

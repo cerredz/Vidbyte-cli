@@ -42,6 +42,7 @@ from vidbyte_cli.types.connection import (  # noqa: E402
     ConnectionProvider,
     ConnectionResource,
     ConnectionToken,
+    ReadVia,
 )
 
 
@@ -704,10 +705,15 @@ class VerificationSuite:
             ConnectionResource(
                 provider=ConnectionProvider.GITHUB, resource_type="repo", identifier="acme/api"
             ),
+            ReadVia.DIRECT,
         )
         self.results.check(
             "[Silent Failure] GitHub repository read returns selected data",
             github_read.data["full_name"] == "acme/api",
+        )
+        self.results.check(
+            "[Silent Failure] GitHub direct read stamps direct provenance",
+            github_read.provenance.source == "direct",
         )
         self._patch_slack(server)
         server.enqueue(
@@ -725,6 +731,7 @@ class VerificationSuite:
                 identifier="C123",
                 limit=25,
             ),
+            ReadVia.DIRECT,
         )
         self.results.check(
             "[Silent Failure] Slack history uses requested limit",
@@ -756,6 +763,7 @@ class VerificationSuite:
             ConnectionResource(
                 provider=ConnectionProvider.GOOGLE_DRIVE, resource_type="file", identifier="file-1"
             ),
+            ReadVia.DIRECT,
         )
         self.results.check(
             "[Silent Failure] Drive read returns content", google_read.data["content"] == "hello"

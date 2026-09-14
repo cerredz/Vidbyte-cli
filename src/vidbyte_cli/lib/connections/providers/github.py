@@ -19,6 +19,7 @@ from ....types.connection import (
     ConnectionRead,
     ConnectionResource,
     ConnectionToken,
+    ReadProvenance,
 )
 from ...errors.failures import (
     ConnectionOAuthFailed,
@@ -42,7 +43,7 @@ _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 _DEFAULT_SCOPES = ("read:user", "repo")
 
 
-class GitHubConnectionAdapter(ProviderAdapterBase):
+class GitHubDirectAdapter(ProviderAdapterBase):
     """Authenticates GitHub and reads repositories or pull requests."""
 
     provider = ConnectionProvider.GITHUB
@@ -176,6 +177,7 @@ class GitHubConnectionAdapter(ProviderAdapterBase):
             resource_type=resource.resource_type,
             identifier=resource.identifier,
             data=self._json_data(payload, _GITHUB_PROVIDER),
+            provenance=ReadProvenance(source="direct", plan=("GET", path)),
         )
 
     def revoke(self, context: ApplicationContext, token: ConnectionToken) -> None:
@@ -248,3 +250,6 @@ class GitHubConnectionAdapter(ProviderAdapterBase):
             self._path_component(parts[0], _GITHUB_PROVIDER),
             self._path_component(parts[1], _GITHUB_PROVIDER),
         )
+
+
+GitHubConnectionAdapter = GitHubDirectAdapter

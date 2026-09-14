@@ -30,6 +30,41 @@ class ConnectionProvider(StrEnum):
         return cls.GOOGLE_DRIVE if value == "google" else cls(value)
 
 
+class ReadVia(StrEnum):
+    """Transport selection for one bounded provider read."""
+
+    AUTO = "auto"
+    NATIVE = "native"
+    DIRECT = "direct"
+
+    @classmethod
+    def cli_choices(cls) -> tuple[str, ...]:
+        # Single vocabulary so Click and the manager cannot drift apart.
+        return tuple(item.value for item in cls)
+
+    @classmethod
+    def from_cli(cls, value: str) -> ReadVia:
+        # Converts the validated Click choice into the manager-owned enum.
+        return cls(value)
+
+
+class ReadProvenance(BaseModel):
+    """Where one bounded read was served from and the exact plan used."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["gh", "direct"]
+    plan: tuple[str, ...] = ()
+
+    @field_validator("plan")
+    @classmethod
+    def validate_plan(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        # A hostile native echo must not grow stored output without bound.
+        if len(value) > 32 or any(not 0 < len(token) <= 512 for token in value):
+            raise ValueError("read plan is invalid")
+        return value
+
+
 class ConnectionToken(BaseModel):
     """One OAuth token envelope stored only in the system keyring."""
 
@@ -180,3 +215,4 @@ class ConnectionRead(BaseModel):
     resource_type: str
     identifier: str
     data: dict[str, JsonValue]
+    provenance: ReadProvenance

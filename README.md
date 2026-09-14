@@ -65,7 +65,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 | `vidbyte-cli connections login <github\|slack\|google\|google-drive>` | Connect a context provider account |
 | `vidbyte-cli connections list\|status\|logout` | Inspect or remove named context connections |
-| `vidbyte-cli connections read ...` | Read one bounded repository, channel, or Drive file |
+| `vidbyte-cli connections read ... [--via auto\|native\|direct] [--show-plan]` | Read one bounded repository, channel, or Drive file |
 
 ### Context-provider connections
 
@@ -110,6 +110,12 @@ default Google scope so arbitrary readable document IDs can be fetched; Google m
 application verification for that restricted scope.
 
 `google` is accepted as a shorthand for the canonical `google-drive` provider name.
+
+GitHub reads prefer the provider `gh` CLI when it is installed and authenticated, and fall back
+to the direct GitHub API otherwise. Use `--via direct` to force the Vidbyte-authenticated API,
+`--via native` to require `gh`, or `--show-plan` to preview the exact argv without running it.
+Every read stamps `provenance.source` (`gh` or `direct`) so agents know which path served them.
+Slack and Drive always use the direct API because neither ships a stable official CLI.
 
 ### Research threads
 

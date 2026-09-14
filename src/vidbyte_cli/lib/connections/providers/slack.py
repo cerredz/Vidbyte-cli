@@ -19,6 +19,7 @@ from ....types.connection import (
     ConnectionRead,
     ConnectionResource,
     ConnectionToken,
+    ReadProvenance,
 )
 from ...errors.failures import (
     ConnectionAuthenticationRequired,
@@ -167,6 +168,7 @@ class SlackConnectionAdapter(ProviderAdapterBase):
             resource_type=resource.resource_type,
             identifier=channel_id,
             data=self._json_data(payload, _SLACK_PROVIDER),
+            provenance=ReadProvenance(source="direct", plan=("GET", _SLACK_HISTORY_URL)),
         )
 
     def revoke(self, context: ApplicationContext, token: ConnectionToken) -> None:
