@@ -1,9 +1,10 @@
-"""Sequential task-board execution over separate Codex agents with checkpointed handoffs.
+"""Task-board execution over separate Codex agents with checkpointed handoffs.
 
 The board owns ordering, context, and durability. The SDK owns each task turn. Raw prior
-results never reach the next agent unless the handoff mode asks for them; a windowed board
-forwards bounded entries and an isolated board forwards nothing at all. Every finished step
-is durably recorded before the next one starts, so a crash costs at most one step.
+results never reach the next agent unless the handoff mode asks for them; a linear board
+forwards windowed entries, a DAG board forwards only its direct dependencies' entries, and an
+isolated board forwards nothing at all. Every finished step is durably recorded before the
+next one starts, so a crash costs at most one step.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from ...types.runtime import (
     TaskBoardCheckpoint,
     TaskBoardCheckpointMode,
     TaskBoardContextMode,
+    TaskBoardExecutionType,
     TaskBoardHandoffMode,
     TaskBoardPrefix,
     TaskBoardResult,
@@ -33,6 +35,7 @@ from ..errors.cli_error import CliError
 from ..errors.failures import (
     LocalFileWriteFailed,
     TaskBoardCheckpointMismatch,
+    TaskBoardDependencyInvalid,
     TaskBoardHostFailed,
 )
 from .task_board_checkpoints import TaskBoardCheckpointer
@@ -151,36 +154,58 @@ class TaskBoardCodexSession:
         if index >= len(settings.tasks):
             raise TaskBoardCheckpointMismatch("replay-past-end")
         checkpointer.validate_manifest(settings)
+        order = self._order(settings)
         entries = self._empty_entries(settings)
-        self._seed(entries, [], checkpointer.load_prefix(index), settings)
+        self._seed(entries, [], checkpointer.load_prefix(order.index(index), order), settings)
         return self._build_prompt(settings.tasks[index], index, entries, settings)
 
     async def _run(
         self, plan: Plan, settings: TaskBoardSettings, admission_id: str
     ) -> TaskBoardResult:
-        # Runs the selected indices in board order, each in a fresh agent, recording every
-        # attempted step before the next one starts so board indices and the window stay aligned.
+        # Runs the selected indices in execution order, each in a fresh agent, recording every
+        # attempted step before the next one starts so board indices and handoff entries stay
+        # aligned. A linear board runs in board order; a DAG board runs parents first, and a
+        # task whose dependency failed is recorded failed without ever starting an agent.
         del plan
+        order = self._order(settings)
+        dag = settings.execution_type is TaskBoardExecutionType.DAG
+        parents = self._dag_parents(settings)
         entries = self._empty_entries(settings)
         steps: list[TaskBoardStepResult] = []
         self._progress(Progress.TASK_STARTING)
-        prefix = self._load_prefix(entries, steps, settings)
+        if dag:
+            self._progress(Progress.DAG_PLAN_READY)
+        prefix = self._load_prefix(entries, steps, settings, order)
         completed, failed = prefix.completed, prefix.failed
+        # A stored failure blocks its dependents exactly like a failure in this invocation.
+        blocked = {step.index for step in steps if step.status == "failed"}
         # `spent` is this invocation's usage and is what the budget guard reads, because a
         # resumed board would otherwise halt on the spend its earlier invocations already
         # made. `tokens` stays board-cumulative, since that is what the result reports.
         tokens, spent, started = prefix.total_tokens, 0, 0
         stopped: str | None = None
-        for index in self._indices(prefix, settings):
+        for index in self._indices(prefix, order):
             if stopped := self._halt_reason(started, spent):
                 break
-            started += 1
-            turn = await self._run_task(settings.tasks[index], index, entries, settings)
-            spent += 0 if turn is None else (turn.total_tokens or 0)
-            tokens += 0 if turn is None else (turn.total_tokens or 0)
-            step = self._step_of(settings.tasks[index], index, turn)
-            self._record(step, turn, entries, settings, admission_id, tokens)
+            blockers = sorted(parent for parent in parents[index] if parent in blocked)
+            if dag and blockers:
+                # A skip starts no agent, so it neither costs nor counts toward --stop-after.
+                turn, note = None, self._skip_detail(blockers)
+                self._progress(Progress.TASK_SKIPPED)
+            else:
+                started += 1
+                turn, note = await self._run_task(settings.tasks[index], index, entries, settings)
+                if turn is None and dag:
+                    self._progress(Progress.TASK_FAILED)
+            used = 0 if turn is None else (turn.total_tokens or 0)
+            spent, tokens = spent + used, tokens + used
+            # Only a DAG failure carries its note: the linear placeholder is what windowed
+            # prompts read, so it keeps its exact wording.
+            step = self._step_of(settings.tasks[index], index, turn, note if dag else "")
+            self._record(step, turn, entries, settings, admission_id, order)
             steps.append(step)
+            if turn is None:
+                blocked.add(index)
             completed, failed = completed + int(turn is not None), failed + int(turn is None)
             if turn is None and settings.stop_on_error:
                 stopped = "stop-on-error"
@@ -197,13 +222,15 @@ class TaskBoardCodexSession:
         if index >= len(settings.tasks):
             raise TaskBoardCheckpointMismatch("replay-past-end")
         checkpointer.validate_manifest(settings)
+        order = self._order(settings)
         entries = self._empty_entries(settings)
         self._progress(Progress.TASK_STARTING)
-        self._seed(entries, [], checkpointer.load_prefix(index), settings)
-        turn = await self._run_task(settings.tasks[index], index, entries, settings)
-        step = self._step_of(settings.tasks[index], index, turn)
+        self._seed(entries, [], checkpointer.load_prefix(order.index(index), order), settings)
+        turn, note = await self._run_task(settings.tasks[index], index, entries, settings)
+        dag = settings.execution_type is TaskBoardExecutionType.DAG
+        step = self._step_of(settings.tasks[index], index, turn, note if dag else "")
         tokens = 0 if turn is None else (turn.total_tokens or 0)
-        self._record(step, turn, entries, settings, admission_id, tokens)
+        self._record(step, turn, entries, settings, admission_id, order)
         self._progress(Progress.COMPLETE)
         return self._result(
             settings, admission_id, int(turn is not None), int(turn is None), [step], tokens, None
@@ -214,9 +241,12 @@ class TaskBoardCodexSession:
         entries: list[str | None],
         steps: list[TaskBoardStepResult],
         settings: TaskBoardSettings,
+        order: tuple[int, ...],
     ) -> TaskBoardPrefix:
-        # Seeds the window and the result list from stored steps; a fresh run only stamps the
-        # manifest, which is what makes this board addressable by id from then on.
+        # Seeds the handoff entries and the result list from stored steps; a fresh run only
+        # stamps the manifest, which is what makes this board addressable by id from then on.
+        # `--from N` counts positions in the execution order, so on a DAG board it skips the
+        # first N steps that ran rather than board indices 0 through N-1.
         if self._checkpointer is None:
             return TaskBoardPrefix(start_index=0, completed=0, failed=0, total_tokens=0)
         if self._controls.start_from > len(settings.tasks):
@@ -226,8 +256,8 @@ class TaskBoardCodexSession:
             return TaskBoardPrefix(start_index=0, completed=0, failed=0, total_tokens=0)
         self._checkpointer.validate_manifest(settings)
         if self._controls.retry_failed_only:
-            return self._repair_prefix(entries, steps, settings)
-        stored = self._checkpointer.load_prefix(self._controls.start_from)
+            return self._repair_prefix(entries, steps, settings, order)
+        stored = self._checkpointer.load_prefix(self._controls.start_from, order)
         self._seed(entries, steps, stored, settings)
         return TaskBoardPrefix(
             start_index=len(stored),
@@ -241,16 +271,16 @@ class TaskBoardCodexSession:
         entries: list[str | None],
         steps: list[TaskBoardStepResult],
         settings: TaskBoardSettings,
+        order: tuple[int, ...],
     ) -> TaskBoardPrefix:
         # A repair pass re-runs only the stored failures, so a board with 97 successes and 3
         # failures costs three turns rather than paying again for work that already landed.
+        # Failures re-run in execution order, so on a DAG board a repaired parent runs before
+        # the dependent it had blocked, and that dependent then gets a real attempt.
         checkpointer = self._require_checkpointer()
         stored = checkpointer.load_stored(len(settings.tasks))
-        failures = tuple(
-            record.index
-            for record in stored
-            if record.status == "failed" and record.index >= self._controls.start_from
-        )
+        failed = {record.index for record in stored if record.status == "failed"}
+        failures = tuple(index for index in order[self._controls.start_from :] if index in failed)
         # A failure about to be re-run seeds its window entry but contributes no step record
         # and no failed count, because the loop is about to produce both for that same index.
         self._seed(entries, steps, stored, settings, skip=frozenset(failures))
@@ -262,11 +292,11 @@ class TaskBoardCodexSession:
             replay_indices=failures,
         )
 
-    def _indices(self, prefix: TaskBoardPrefix, settings: TaskBoardSettings) -> tuple[int, ...]:
-        # The exact board positions this invocation will attempt, in board order.
+    def _indices(self, prefix: TaskBoardPrefix, order: tuple[int, ...]) -> tuple[int, ...]:
+        # The exact board positions this invocation will attempt, in execution order.
         if self._controls.retry_failed_only:
             return prefix.replay_indices
-        return tuple(range(prefix.start_index, len(settings.tasks)))
+        return order[prefix.start_index :]
 
     def _halt_reason(self, started: int, tokens: int) -> str | None:
         # Budgets and slicing are checked between steps, so at most one step can overshoot a
@@ -308,12 +338,11 @@ class TaskBoardCodexSession:
         entries: list[str | None],
         settings: TaskBoardSettings,
         admission_id: str,
-        tokens: int,
+        order: tuple[int, ...],
     ) -> None:
         # Fills this step's handoff entry, then applies the checkpoint policy. Order matters:
         # the entry has to exist before the next task builds its prompt, and the checkpoint has
         # to be written before the next task starts, or a crash loses a step that really ran.
-        del tokens
         result = "" if turn is None else turn.result_text
         entries[step.index] = self._summarizer.handoff(settings, step.task, step.summary, result)
         if self._checkpointer is None:
@@ -323,7 +352,7 @@ class TaskBoardCodexSession:
         record = TaskBoardCheckpoint(
             board_id=self._checkpointer.board_id,
             index=step.index,
-            parent_index=self._parent_index(entries, step.index),
+            parent_index=self._parent_index(entries, step.index, order),
             task=step.task,
             prompt=prompt,
             summary=step.summary,
@@ -365,10 +394,13 @@ class TaskBoardCodexSession:
             # OSError: resolving a configured export path can fail before the store is reached.
             self._progress(f"Checkpoint export failed for task {record.index}; continuing.")
 
-    def _parent_index(self, entries: list[str | None], index: int) -> int | None:
-        # The nearest filled position below this one: the step this step's prompt actually read.
-        below = [position for position in range(index) if entries[position] is not None]
-        return below[-1] if below else None
+    def _parent_index(
+        self, entries: list[str | None], index: int, order: tuple[int, ...]
+    ) -> int | None:
+        # The nearest filled step before this one in execution order, which links stored steps
+        # into the chain a resume walks. On a linear board that is the nearest lower index.
+        before = [other for other in order[: order.index(index)] if entries[other] is not None]
+        return before[-1] if before else None
 
     def _step_cost(self, turn: TaskBoardTurn | None) -> float | None:
         # Unknown usage stays None rather than 0.0, so a budget never treats it as free.
@@ -394,19 +426,40 @@ class TaskBoardCodexSession:
         # One slot per board position, so a sparse board keeps its real indices.
         return [None] * len(settings.tasks)
 
+    @staticmethod
+    def _order(settings: TaskBoardSettings) -> tuple[int, ...]:
+        # The settings validator already rejects cycles; this guard keeps a model built
+        # without validation from silently running nothing.
+        order = settings.execution_order()
+        if len(order) != len(settings.tasks):
+            raise TaskBoardDependencyInvalid()
+        return order
+
+    def _dag_parents(self, settings: TaskBoardSettings) -> dict[int, tuple[int, ...]]:
+        # Maps each task to its sorted direct parents for context selection and skipping.
+        grouped: dict[int, list[int]] = {index: [] for index in range(len(settings.tasks))}
+        for child, parent in settings.dependencies:
+            grouped[child].append(parent)
+        return {index: tuple(sorted(parents)) for index, parents in grouped.items()}
+
     async def _run_task(
         self, task: str, index: int, entries: list[str | None], settings: TaskBoardSettings
-    ) -> TaskBoardTurn | None:
+    ) -> tuple[TaskBoardTurn | None, str]:
         # One task start to finish. Every attempt builds its own agent and renders the same
         # prompt, so a retry recovers from a dead host rather than re-deciding the context.
-        for attempt in range(settings.max_retries_per_task + 1):
+        # A failure also returns the note a DAG step records: attempt count, failure kind, and
+        # any partial agent text, never task content.
+        attempts = settings.max_retries_per_task + 1
+        last_note = ""
+        for attempt in range(attempts):
             if attempt > 0:
                 self._progress(Progress.TASK_RETRYING)
+            reply: AgentMessage | None = None
             try:
                 prompt = self._build_prompt(task, index, entries, settings)
                 reply = await self._turn(self._build_agent(index, settings), prompt, settings)
                 result = self._completed_text(reply)
-                return TaskBoardTurn(
+                turn = TaskBoardTurn(
                     prompt=prompt,
                     summary=self._summarizer.summarize(
                         result, settings.summary_mode.value, settings.summary_max_chars
@@ -415,10 +468,53 @@ class TaskBoardCodexSession:
                     thread_id=self._thread_id(reply),
                     total_tokens=self._usage_of(reply),
                 )
-            except Exception:
-                # Attempt failures stay local: stop-on-error is the caller's policy.
+                return (turn, "")
+            except Exception as error:
+                # Attempt failures stay local: stop-on-error is the caller's policy, and
+                # only the final note survives so earlier attempts never leak stale causes.
+                last_note = self._attempt_note(error, reply, settings, attempt, attempts)
                 continue
-        return None
+        return (None, f"Ran {attempts} attempt(s), all exhausted. {last_note}")
+
+    def _attempt_note(
+        self,
+        error: Exception,
+        reply: AgentMessage | None,
+        settings: TaskBoardSettings,
+        attempt: int,
+        attempts: int,
+    ) -> str:
+        # Names what ended one attempt so the recorded failure explains itself: timeouts
+        # are told apart from dead hosts, and an incomplete turn keeps the partial text
+        # its agent left behind, bounded by the same summarizer prompts already use.
+        if isinstance(error.__cause__, TimeoutError):
+            kind = "the Codex turn timed out before returning"
+        elif reply is not None and self._partial_text(reply):
+            partial = self._summarizer.summarize(
+                self._partial_text(reply),
+                settings.summary_mode.value,
+                settings.summary_max_chars,
+            )
+            kind = f"the agent returned an incomplete turn, leaving: {partial}"
+        else:
+            kind = "the Codex host failed before returning a completed turn"
+        return f"Attempt {attempt + 1} of {attempts}: {kind}."
+
+    def _partial_text(self, reply: AgentMessage) -> str:
+        # Reads whatever text an incomplete turn left behind without validating it, so a
+        # failure note can carry the agent's own words even when the turn never completed.
+        try:
+            return str(reply.content or "").strip()
+        except Exception:
+            return ""
+
+    def _skip_detail(self, blockers: list[int]) -> str:
+        # Names the failed dependencies so a skip is actionable without re-reading the graph.
+        names = ", ".join(f"task {parent}" for parent in blockers)
+        return (
+            f"No agent was started because {names} did not complete. "
+            "Fix or re-run the failed dependencies, then re-run this task."
+        )
 
     def _usage_of(self, reply: AgentMessage) -> int | None:
         # Reads cumulative provider tokens when reported; unknown usage is None, never zero.
@@ -435,8 +531,22 @@ class TaskBoardCodexSession:
         # renders exactly the trailing slice the window admits and nothing older.
         if settings.context_mode is TaskBoardContextMode.ISOLATED:
             return self._summarizer.render_prompt(task, index, None)
+        if settings.execution_type is TaskBoardExecutionType.DAG:
+            return self._build_dag_prompt(task, index, entries, settings)
         windowed = self._summarizer.windowed(entries, index, settings.window)
         context = self._summarizer.render_context(windowed)
+        return self._summarizer.render_prompt(task, index, context)
+
+    def _build_dag_prompt(
+        self, task: str, index: int, entries: list[str | None], settings: TaskBoardSettings
+    ) -> str:
+        # Renders only direct dependencies' entries so unrelated context never leaks in.
+        selected: list[tuple[int, str]] = []
+        for parent in self._dag_parents(settings)[index]:
+            entry = entries[parent]
+            if entry:
+                selected.append((parent, entry))
+        context = self._summarizer.render_context(tuple(selected))
         return self._summarizer.render_prompt(task, index, context)
 
     def _build_agent(self, index: int, settings: TaskBoardSettings) -> CodexHarnessAgent:
@@ -503,14 +613,17 @@ class TaskBoardCodexSession:
             raise TaskBoardHostFailed()
         return thread
 
-    def _step_of(self, task: str, index: int, turn: TaskBoardTurn | None) -> TaskBoardStepResult:
+    def _step_of(
+        self, task: str, index: int, turn: TaskBoardTurn | None, detail: str = ""
+    ) -> TaskBoardStepResult:
         # One shape for both outcomes; a failure keeps a placeholder summary so board indices
         # and the window slice stay aligned with what a fully successful run would have built.
+        # A DAG failure appends its reason: the failed parents, or the final attempt note.
         if turn is None:
             return TaskBoardStepResult(
                 index=index,
                 task=task,
-                summary=f"Task {index} failed.",
+                summary=f"Task {index} failed. {detail}" if detail else f"Task {index} failed.",
                 status="failed",
                 thread_id=f"task-board-{index}-failed",
             )
@@ -534,7 +647,9 @@ class TaskBoardCodexSession:
     ) -> TaskBoardResult:
         # Joins step summaries into the board-level text and names where the board lives, so a
         # calling agent can address it later by absolute path rather than by remembering a run.
-        ordered = sorted(steps, key=lambda step: step.index)
+        # Steps are listed in execution order, which is board order unless the board is a DAG.
+        position = {index: rank for rank, index in enumerate(self._order(settings))}
+        ordered = sorted(steps, key=lambda step: position[step.index])
         text = "\n".join(f"[{step.index}] {step.summary}" for step in ordered)
         checkpointer = self._checkpointer
         return TaskBoardResult(
@@ -587,17 +702,17 @@ class TaskBoardCodexSession:
         # A ready-to-paste continuation, so a caller never reconstructs flags from help text.
         # It points at the first step that did not complete, which after a stop-on-error halt
         # is the failure itself rather than the step after it, and is omitted only when the
-        # whole board finished.
+        # whole board finished. The point is a position in execution order, as --from reads it.
         if checkpointer is None or not steps:
             return None
         done = {step.index for step in steps if step.status == "completed"}
         if any(step.status == "failed" for step in steps):
             return checkpointer.resume_command(0, repair=True)
+        order = self._order(settings)
         following = next(
-            (index for index in range(len(settings.tasks)) if index not in done),
-            len(settings.tasks),
+            (rank for rank, index in enumerate(order) if index not in done), len(order)
         )
-        if following >= len(settings.tasks):
+        if following >= len(order):
             return None
         return checkpointer.resume_command(following)
 

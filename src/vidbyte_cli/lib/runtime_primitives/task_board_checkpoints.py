@@ -24,6 +24,7 @@ from ...types.runtime import (
     TaskBoardSettings,
     TaskBoardUnreadableBoard,
 )
+from ..errors.cli_error import CliError
 from ..errors.failures import (
     LocalFileReadFailed,
     TaskBoardBoardNotFound,
@@ -40,6 +41,20 @@ _MANIFEST_NAME = "board.json"
 _MANIFEST_VERSION = 2
 _EXPORT_NAME = "progress.jsonl"
 _HOOK_TIMEOUT_SECONDS = 60
+# Fingerprint fields added after the first version-2 manifests were written. A manifest that
+# predates them was necessarily a linear board with no links, so it still resumes as one.
+_FINGERPRINT_DEFAULTS: dict[str, object] = {"execution_type": "linear", "dependencies": []}
+# The run flag each fingerprint field is set by, with the value that needs no flag. A resume
+# must repeat every non-default setting or validate_manifest rejects it, so the paste-able
+# resume command carries them.
+_RESUME_FLAGS: tuple[tuple[str, str, object], ...] = (
+    ("window", "--window", 10),
+    ("context_mode", "--context-mode", "windowed-summaries"),
+    ("summary_mode", "--summary-mode", "truncate-tail"),
+    ("summary_max_chars", "--summary-max-chars", 1200),
+    ("handoff_mode", "--handoff", "summary"),
+    ("execution_type", "--type", "linear"),
+)
 
 
 class TaskBoardCheckpointer:
@@ -124,7 +139,7 @@ class TaskBoardCheckpointer:
         except TaskBoardBoardNotFound as error:
             raise TaskBoardCheckpointMismatch("manifest-unreadable") from error
         for field, value in self._fingerprint(settings).items():
-            if manifest.get(field) != value:
+            if manifest.get(field, _FINGERPRINT_DEFAULTS.get(field)) != value:
                 raise TaskBoardCheckpointMismatch(field)
 
     def stored_tasks(self) -> tuple[str, ...]:
@@ -156,9 +171,18 @@ class TaskBoardCheckpointer:
                 self._board_id, index, "it does not hold a valid step record"
             ) from error
 
-    def load_prefix(self, count: int) -> tuple[TaskBoardCheckpoint, ...]:
-        # Loads steps 0..count-1 in order; any gap fails instead of re-executing.
-        return tuple(self.read_step(index) for index in range(count))
+    def load_prefix(
+        self, count: int, order: tuple[int, ...] | None = None
+    ) -> tuple[TaskBoardCheckpoint, ...]:
+        # Loads the first `count` steps of the execution order, which is board order unless a
+        # DAG order is given; any gap fails instead of re-executing.
+        indices = range(count) if order is None else order[:count]
+        return tuple(self.read_step(index) for index in indices)
+
+    def execution_order(self) -> tuple[int, ...]:
+        # The stored board's run order, rebuilt from its manifest exactly as TaskBoardSettings
+        # builds it, so status and fork count positions the same way a run does.
+        return self._order_of(self.read_manifest())
 
     def load_stored(self, task_count: int) -> tuple[TaskBoardCheckpoint, ...]:
         # Loads whatever exists without requiring a dense prefix, which is what a repair pass
@@ -232,9 +256,11 @@ class TaskBoardCheckpointer:
         # One rendering site for the paste-able continuation, so every verb that returns one
         # returns the same shape. A board holding failures is repaired rather than resumed
         # past, because --from would re-pay for the completed steps between them.
+        # `index` is a position in execution order, which for a DAG board is not a board index.
         base = (
             "vidbyte-cli runtime task-board run "
             f"--checkpoint-root {self.directory.parent} --checkpoint-id {self._board_id}"
+            f"{self._settings_flags()}"
         )
         return f"{base} --from 0 --retry-failed-only" if repair else f"{base} --from {index}"
 
@@ -254,17 +280,22 @@ class TaskBoardCheckpointer:
         return self._store.write_text(target, self._report_body(chain))
 
     def fork_into(self, target: TaskBoardCheckpointer, at_index: int) -> int:
-        # Copies steps 0..at_index-1 into a new board and records the edge back to this one, so
-        # both histories stay independently readable and neither can overwrite the other. The
-        # whole prefix is proven present before the first copy, so a bad --at creates nothing,
-        # and the manifest is written last, so a copy that dies partway is never a board.
+        # Copies the first at_index steps of the execution order into a new board and records
+        # the edge back to this one, so both histories stay independently readable and neither
+        # can overwrite the other. The whole prefix is proven present before the first copy, so
+        # a bad --at creates nothing, and the manifest is written last, so a copy that dies
+        # partway is never a board.
         settings_manifest = self.read_manifest()
         task_count = self._task_count(settings_manifest)
-        available = self._stored_prefix(task_count)
+        order = self._order_of(settings_manifest)
+        available = self._stored_prefix(order)
         if at_index > available:
-            raise TaskBoardForkPrefixIncomplete(self._board_id, at_index, available, task_count)
+            missing = order[available] if available < len(order) else available
+            raise TaskBoardForkPrefixIncomplete(
+                self._board_id, at_index, available, task_count, missing
+            )
         copied = 0
-        for index in range(at_index):
+        for index in order[:at_index]:
             self._store.copy_into(self.step_name(index), target.step_file(index))
             copied += 1
         forked: dict[str, object] = dict(settings_manifest)
@@ -306,13 +337,71 @@ class TaskBoardCheckpointer:
             return False
         return finished.returncode == 0
 
-    def _stored_prefix(self, limit: int) -> int:
-        # Length of the unbroken run of stored steps from step 0, which is the largest valid
-        # fork point: a fork copies a dense prefix, never one with a hole in it.
-        for index in range(limit):
+    def _stored_prefix(self, order: tuple[int, ...]) -> int:
+        # Length of the unbroken run of stored steps from the start of the execution order,
+        # which is the largest valid fork point: a fork copies a dense prefix, never one with a
+        # hole in it.
+        for position, index in enumerate(order):
             if not self._store.exists(self.step_name(index)):
-                return index
-        return limit
+                return position
+        return len(order)
+
+    def _order_of(self, manifest: dict[str, object]) -> tuple[int, ...]:
+        # A linear board runs in board order. A DAG board's links are re-validated here, since
+        # a hand-edited manifest could otherwise make fork copy a prefix no run ever produced.
+        count = self._task_count(manifest)
+        kind = manifest.get("execution_type", _FINGERPRINT_DEFAULTS["execution_type"])
+        if kind != "dag":
+            return tuple(range(count))
+        links = self._links_of(manifest, count)
+        order = None if links is None else TaskBoardSettings.topological_order(count, links)
+        if order is None:
+            raise TaskBoardManifestUnreadable(
+                self._board_id, "its dependency links are not a valid acyclic graph"
+            )
+        return order
+
+    @staticmethod
+    def _links_of(manifest: dict[str, object], count: int) -> tuple[tuple[int, int], ...] | None:
+        # Stored links are [child, parent] pairs inside the board; anything else is damage.
+        raw = manifest.get("dependencies", [])
+        if not isinstance(raw, list):
+            return None
+        links: list[tuple[int, int]] = []
+        for pair in raw:
+            if not isinstance(pair, list) or len(pair) != 2:
+                return None
+            child, parent = pair
+            if not all(
+                isinstance(value, int) and not isinstance(value, bool) and 0 <= value < count
+                for value in (child, parent)
+            ):
+                return None
+            links.append((child, parent))
+        return tuple(links)
+
+    def _settings_flags(self) -> str:
+        # Every stored setting that differs from its default, rendered as the run flag that
+        # sets it. A manifest that cannot be read yields no flags: the resume it belongs to
+        # fails validation with its own, better-worded error anyway.
+        try:
+            manifest = self.read_manifest()
+        except CliError:
+            return ""
+        flags = [
+            f" {flag} {manifest[field]}"
+            for field, flag, default in _RESUME_FLAGS
+            if field in manifest and manifest[field] != default
+        ]
+        links = self._links_of(manifest, self._task_count(manifest)) or ()
+        parents: dict[int, list[int]] = {}
+        for child, parent in links:
+            parents.setdefault(child, []).append(parent)
+        flags.extend(
+            f" --depends-on {child}:{','.join(str(parent) for parent in sorted(parents[child]))}"
+            for child in sorted(parents)
+        )
+        return "".join(flags)
 
     @staticmethod
     def _task_count(manifest: dict[str, object]) -> int:
@@ -340,6 +429,10 @@ class TaskBoardCheckpointer:
             "summary_mode": settings.summary_mode.value,
             "summary_max_chars": settings.summary_max_chars,
             "handoff_mode": settings.handoff_mode.value,
+            # A DAG step's prompt holds its dependencies' entries rather than a window, and
+            # the execution order decides which steps a resume or fork counts as the prefix.
+            "execution_type": settings.execution_type.value,
+            "dependencies": [[child, parent] for child, parent in settings.dependencies],
         }
 
     def _report_body(self, chain: TaskBoardCheckpointChain) -> str:

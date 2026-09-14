@@ -49,6 +49,7 @@ from vidbyte_cli.types.runtime import (  # noqa: E402
     RuntimeLaunchPlan,
     TaskBoardAgentSettings,
     TaskBoardCheckpointMode,
+    TaskBoardExecutionType,
     TaskBoardHandoffMode,
     TaskBoardReasoningEffort,
     TaskBoardRunControls,
@@ -802,6 +803,8 @@ def test_resume_bounds_rejected_before_admission() -> None:
             "summary_max_chars": 1200,
             "stop_on_error": True,
             "retries_per_task": 1,
+            "execution_type": "linear",
+            "depends_on": (),
             "model": "",
             "sandbox": "workspace-write",
             "reasoning_effort": "",
@@ -1055,6 +1058,144 @@ def test_export_failures_are_classified() -> None:
     record("export failures are classified", ok, detail)
 
 
+def _dag(
+    tasks: tuple[str, ...], links: tuple[tuple[int, int], ...], **overrides: object
+) -> TaskBoardSettings:
+    # Builds DAG board settings on top of the shared test-small defaults.
+    return _settings(
+        tasks, execution_type=TaskBoardExecutionType.DAG, dependencies=links, **overrides
+    )
+
+
+def test_dag_resume_counts_positions_in_execution_order() -> None:
+    # [Silent Failure] --from N on a DAG board skips the first N steps that ran, not 0..N-1.
+    async def go() -> tuple[bool, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = _dag(("a", "b", "c", "d"), ((0, 2),))  # runs 1, 2, 0, 3
+            first = _session_with_fakes([], ["r1", "r2"])
+            stored = _armed(first, root, "b-dag", stop_after=2)
+            sliced = await first._run(make_plan(), settings, "rta_dag1")
+            resume = sliced.resume_command or ""
+            status = TaskBoardCommand()._resume_command(stored, stored.chain())
+            preview = TaskBoardCodexSession({}, lambda _msg: None)
+            _armed(preview, root, "b-dag", replay_index=0)
+            previewed = preview.preview_prompt(settings, 0)
+            seen: list[str] = []
+            second = _session_with_fakes(seen, ["r0", "r3"])
+            _armed(second, root, "b-dag", start_from=2)
+            result = await second._run(make_plan(), settings, "rta_dag2")
+            ok = (
+                [step.index for step in sliced.steps] == [1, 2]
+                and "--from 2" in resume
+                and "--type dag --depends-on 0:2" in resume
+                and status == resume
+                and "[2] r2" in previewed
+                and [prompt.split(":")[0] for prompt in seen] == ["Task 0", "Task 3"]
+                and seen[0] == previewed
+                and "[1]" not in seen[0]
+                and [step.index for step in result.steps] == [1, 2, 0, 3]
+                and result.completed == 4
+                and result.resume_command is None
+                and stored.read_step(0).parent_index == 2
+            )
+            return ok, resume
+
+    ok, detail = asyncio.run(go())
+    record("dag resume counts positions in execution order", ok, detail)
+
+
+def test_dag_settings_are_fingerprinted() -> None:
+    # [Silent Failure] A DAG board resumed as linear or with other links is rejected before pay,
+    # while a manifest written before these fields existed still resumes as the linear board it was.
+    with tempfile.TemporaryDirectory() as directory:
+        tasks = ("a", "b", "c")
+        checkpointer = TaskBoardCheckpointer(Path(directory), "b-fp")
+        checkpointer.write_manifest(_dag(tasks, ((2, 0),)))
+        rejected: list[str] = []
+        for other in (_settings(tasks), _dag(tasks, ((2, 1),))):
+            try:
+                checkpointer.validate_manifest(other)
+            except TaskBoardCheckpointMismatch as error:
+                rejected.append(str(error.description))
+        checkpointer.validate_manifest(_dag(tasks, ((2, 0),)))
+        legacy = TaskBoardCheckpointer(Path(directory), "b-legacy-linear")
+        legacy.write_manifest(_settings(tasks))
+        manifest_file = legacy.directory / "board.json"
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        del manifest["execution_type"], manifest["dependencies"]
+        manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+        legacy.validate_manifest(_settings(tasks))
+        record(
+            "dag settings are fingerprinted",
+            len(rejected) == 2
+            and "execution_type" in rejected[0]
+            and "dependencies" in rejected[1],
+            str(rejected),
+        )
+
+
+def test_dag_repair_reruns_parent_before_its_skipped_dependent() -> None:
+    # [Hidden Failure] Repair re-runs a failed parent first, then gives the dependent it had
+    # blocked a real attempt instead of leaving it skipped forever.
+    async def go() -> bool:
+        with tempfile.TemporaryDirectory() as directory:
+            settings = _dag(("a", "b", "c"), ((2, 0),), stop_on_error=False, max_retries_per_task=0)
+            first_seen: list[str] = []
+            first = _session_with_fakes(first_seen, ["", "r1"])
+            checkpointer = _armed(first, Path(directory), "b-dag-repair")
+            broken = await first._run(make_plan(), settings, "rta_dag_r1")
+            skipped = checkpointer.read_step(2)
+            seen: list[str] = []
+            second = _session_with_fakes(seen, ["r0", "r2"])
+            _armed(second, Path(directory), "b-dag-repair", retry_failed_only=True)
+            result = await second._run(make_plan(), settings, "rta_dag_r2")
+            return (
+                len(first_seen) == 2
+                and skipped.status == "failed"
+                and "No agent was started" in skipped.summary
+                and "--retry-failed-only" in (broken.resume_command or "")
+                and [prompt.split(":")[0] for prompt in seen] == ["Task 0", "Task 2"]
+                and "[0] r0" in seen[1]
+                and result.completed == 3
+                and result.failed == 0
+            )
+
+    record("dag repair reruns parent before its skipped dependent", asyncio.run(go()))
+
+
+def test_dag_fork_copies_the_execution_order_prefix() -> None:
+    # [Silent Failure] fork --at N on a DAG board copies the first N steps that ran, and a gap
+    # is named by its real board index rather than by its position.
+    async def go() -> tuple[bool, str]:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = _dag(("a", "b", "c", "d"), ((0, 2),))
+            session = _session_with_fakes([], ["r1", "r2"])
+            source = _armed(session, root, "b-dag-src", stop_after=2)
+            await session._run(make_plan(), settings, "rta_dag_fork")
+            target = TaskBoardCheckpointer(root, "b-dag-fork")
+            copied = source.fork_into(target, 2)
+            names = {path.name for path in target.directory.iterdir()}
+            gap = ""
+            try:
+                source.fork_into(TaskBoardCheckpointer(root, "b-dag-gap"), 3)
+            except TaskBoardForkPrefixIncomplete as error:
+                gap = str(error)
+            ok = (
+                copied == 2
+                and {"step-1.json", "step-2.json"} <= names
+                and "step-0.json" not in names
+                and "step 0 has no stored checkpoint" in gap
+                and "--type dag --depends-on 0:2 --from 2" in target.resume_command(2)
+                and target.execution_order() == (1, 2, 0, 3)
+            )
+            return ok, gap
+
+    ok, detail = asyncio.run(go())
+    record("dag fork copies the execution order prefix", ok, detail)
+
+
 def main() -> int:
     # Runs every checkpoint, resume, replay, repair, slicing, and reporting case.
     for case in (
@@ -1099,6 +1240,10 @@ def main() -> int:
         test_show_step_tells_pending_from_out_of_range,
         test_fork_refusals_create_nothing,
         test_export_failures_are_classified,
+        test_dag_resume_counts_positions_in_execution_order,
+        test_dag_settings_are_fingerprinted,
+        test_dag_repair_reruns_parent_before_its_skipped_dependent,
+        test_dag_fork_copies_the_execution_order_prefix,
     ):
         case()
     passed = sum(1 for status, _, _ in RESULTS if status == PASS)

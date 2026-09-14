@@ -8,6 +8,7 @@ from .executor import RuntimeExecutor
 from .gate import RuntimeAdmissionGate
 from .hosts import RuntimeHostRegistry
 from .planner import RuntimeLaunchPlanner
+from .stages import StagesCodexSession
 from .task_board import TaskBoardCodexSession, TaskBoardSummarizer
 from .task_board_checkpoints import TaskBoardCheckpointer
 from .task_board_tasks import TaskBoardTaskFiles
@@ -19,6 +20,7 @@ __all__ = [
     "RuntimeGrantVerifier",
     "RuntimeHostRegistry",
     "RuntimeLaunchPlanner",
+    "StagesCodexSession",
     "TaskBoardCheckpointer",
     "TaskBoardCodexSession",
     "TaskBoardSummarizer",

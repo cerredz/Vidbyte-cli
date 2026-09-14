@@ -49,6 +49,7 @@ EXPECTED_RUNTIME = {
     "persistence",
     "same-host-ensemble",
     "task-board",
+    "stages",
 }
 # Every module that existed only to serve a backend route that was never built.
 DELETED_MODULES = (

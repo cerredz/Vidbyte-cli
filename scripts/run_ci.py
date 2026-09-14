@@ -79,6 +79,8 @@ class CiRunner:
                 "task board checkpoints",
                 (python, "scripts/test-task-board-checkpoints.py"),
             ),
+            # Offline: DAG parsing, topological order, and dep-only context, faked SDK turn.
+            ("task board dag", (python, "scripts/test-task-board-dag.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):

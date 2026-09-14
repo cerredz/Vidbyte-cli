@@ -23,6 +23,7 @@ from ...lib.errors.failures import (
     TaskBoardBoardIdInvalid,
     TaskBoardCheckpointMissing,
     TaskBoardCheckpointRootUnreadable,
+    TaskBoardDependencyInvalid,
     TaskBoardForkFailed,
     TaskBoardForkTargetExists,
     TaskBoardInputInvalid,
@@ -46,6 +47,7 @@ from ...types.runtime import (
     TaskBoardCheckpointChain,
     TaskBoardCheckpointMode,
     TaskBoardContextMode,
+    TaskBoardExecutionType,
     TaskBoardForkResult,
     TaskBoardHandoffMode,
     TaskBoardListing,
@@ -81,8 +83,31 @@ _COMMAND_HELP = (
     "one at a time, and each agent is thrown away when its task ends so no thread is ever "
     "reused. By default an agent also reads bounded summaries of the few tasks immediately "
     "before it, which you can narrow with --window or switch off entirely with --context-mode "
-    "isolated. Vidbyte charges two cents to admit the whole run and every model call is billed "
-    "to your own OpenAI account."
+    "isolated. Pass --type dag with repeatable --depends-on links when tasks have explicit "
+    "dependencies, so each agent reads only its own dependencies and runs after them instead "
+    "of after every earlier task. Vidbyte charges two cents to admit the whole run and every "
+    "model call is billed to your own OpenAI account."
+)
+_TYPE_HELP = (
+    "Which loop structure the board run follows. In linear mode, the default, tasks run "
+    "strictly in the order given and each agent reads bounded summaries of the immediately "
+    "preceding --window tasks, which preserves the original board behavior exactly. In dag "
+    "mode tasks run once each in deterministic topological order and each agent reads only "
+    "its direct dependencies' summaries, so a task that needs only task 2 never pays for "
+    "tasks 0, 1, or 3 through 7. Execution stays sequential in both modes with one fresh "
+    "agent per task, and dag mode ignores --window when selecting context while keeping "
+    "--handoff, --summary-mode, and --summary-max-chars for each dependency entry. The type "
+    "and links are stored with the board, so a resume must repeat them."
+)
+_DEPENDS_ON_HELP = (
+    "One dependency link of the form CHILD:PARENT[,PARENT...], using 0-based board positions "
+    "where the board order is the order of TASKS arguments, --task-file paths, or --task-list "
+    "entries. Repeat the option once per link, so --depends-on 8:2 --depends-on 5:2,3 means "
+    "task 8 reads task 2 and task 5 reads tasks 2 and 3; repeating a child across flags "
+    "accumulates its parents. Every child and parent must sit inside the board, self-links and "
+    "duplicate links are rejected, and the full link set must be acyclic. Links require --type "
+    "dag and are rejected with --type linear, and every link is validated before credentials, "
+    "payment, or host execution."
 )
 _LIST_HELP = (
     "List every checkpointed board stored under one checkpoint root, one line each. Each row "
@@ -313,11 +338,14 @@ _FROM_HELP = (
     "storage. Only INDEX through the end of the board execute, and nothing before it is "
     "rewritten. If no task source is given, the board's own stored task list is reused, which "
     "is what makes the returned resume command paste-able. Resuming still buys one fresh flat "
-    "admission, and the stored board and settings must match or the run is rejected before pay."
+    "admission, and the stored board and settings must match or the run is rejected before pay. "
+    "On a --type dag board INDEX counts steps in the topological order the board runs in, not "
+    "board positions, which is why the resume command a run returns is the one to paste."
 )
 _REPLAY_TASK_HELP = (
     "Re-run exactly one board step for debugging, rebuilding its prompt byte-identically from "
-    "the task text plus the stored entries its window would have held. Only the addressed step "
+    "the task text plus the stored entries its window, or on a dag board its dependencies, "
+    "would have held. Every step that runs before it must be stored. Only the addressed step "
     "executes, in a fresh agent with the normal retry policy, and only its checkpoint file is "
     "overwritten. The rest of the board is untouched, which is what makes replay safe to "
     "repeat while chasing a flaky step. It requires checkpoints from a prior run of the same "
@@ -386,7 +414,8 @@ _FORK_AT_HELP = (
     "The new board then continues from step 70 while the original keeps its own steps 70 "
     "onward untouched, which is what makes two endings comparable. Every step below this index "
     "must exist on disk, and the fork fails naming the first gap rather than copying a partial "
-    "prefix. Choose the index where the two experiments should diverge."
+    "prefix. Choose the index where the two experiments should diverge. On a --type dag board "
+    "the count follows the topological order the board runs in, matching what --from reads."
 )
 _FORK_INTO_HELP = (
     "The board id the copied prefix is written to, inside the same checkpoint root. It has to "
@@ -487,6 +516,17 @@ class TaskBoardCommand:
             default=1,
             show_default=True,
             help=_RETRIES_PER_TASK_HELP,
+        )
+        @click.option(
+            "--type",
+            "execution_type",
+            type=click.Choice(("linear", "dag")),
+            default="linear",
+            show_default=True,
+            help=_TYPE_HELP,
+        )
+        @click.option(
+            "--depends-on", "depends_on", multiple=True, default=(), help=_DEPENDS_ON_HELP
         )
         @click.option("--model", default="", help=_MODEL_HELP)
         @click.option(
@@ -949,11 +989,14 @@ class TaskBoardCommand:
         self, checkpointer: TaskBoardCheckpointer, chain: TaskBoardCheckpointChain
     ) -> str:
         # Points at the first unfinished step, or at repair when only failures remain, so the
-        # command a caller pastes back never re-pays for steps that already completed.
+        # command a caller pastes back never re-pays for steps that already completed. The
+        # point is a position in the board's execution order, which is what --from reads.
         if chain.failed_indices:
             return checkpointer.resume_command(0, repair=True)
-        pending = chain.pending_indices
-        return checkpointer.resume_command(pending[0] if pending else chain.task_count)
+        pending = set(chain.pending_indices)
+        order = checkpointer.execution_order()
+        following = next((rank for rank, index in enumerate(order) if index in pending), None)
+        return checkpointer.resume_command(chain.task_count if following is None else following)
 
     def _board_tasks(
         self,
@@ -980,7 +1023,12 @@ class TaskBoardCommand:
         raise TaskBoardInputInvalid()
 
     def _settings(self, board: tuple[str, ...], parsed: TaskBoardOptions) -> TaskBoardSettings:
-        # Constructs frozen board settings with validated context, handoff, and agent behavior.
+        # Constructs frozen board settings with validated context, handoff, agent, and
+        # dependency behavior. Links are parsed against the resolved board size, and a cycle
+        # is caught here, so every bad link fails before credentials, payment, or a host.
+        links = self._parse_dependencies(parsed.depends_on, parsed.execution_type, len(board))
+        if links and TaskBoardSettings.topological_order(len(board), links) is None:
+            raise TaskBoardDependencyInvalid()
         return TaskBoardSettings(
             tasks=board,
             window=parsed.window,
@@ -990,8 +1038,45 @@ class TaskBoardCommand:
             summary_max_chars=parsed.summary_max_chars,
             stop_on_error=parsed.stop_on_error,
             max_retries_per_task=parsed.retries_per_task,
+            execution_type=TaskBoardExecutionType(parsed.execution_type),
+            dependencies=links,
             agent=parsed.agent(),
         )
+
+    def _parse_dependencies(
+        self, raw: tuple[str, ...], execution_type: str, task_count: int
+    ) -> tuple[tuple[int, int], ...]:
+        # Normalizes every link flag into sorted unique child-parent pairs.
+        if execution_type != "dag" and raw:
+            raise TaskBoardDependencyInvalid()
+        pairs: list[tuple[int, int]] = []
+        for spec in raw:
+            pairs.extend(self._parse_single_link(spec, task_count))
+        if len(set(pairs)) != len(pairs):
+            raise TaskBoardDependencyInvalid()
+        return tuple(sorted(pairs))
+
+    def _parse_single_link(self, spec: str, task_count: int) -> tuple[tuple[int, int], ...]:
+        # Parses one CHILD:PARENT[,PARENT...] flag into its child-parent pairs.
+        halves = spec.split(":")
+        if len(halves) != 2:
+            raise TaskBoardDependencyInvalid()
+        child_text, parents_text = halves[0].strip(), halves[1].strip()
+        if not child_text.isdigit() or not parents_text:
+            raise TaskBoardDependencyInvalid()
+        child = int(child_text)
+        pairs: list[tuple[int, int]] = []
+        for parent_text in parents_text.split(","):
+            cleaned = parent_text.strip()
+            if not cleaned.isdigit():
+                raise TaskBoardDependencyInvalid()
+            parent = int(cleaned)
+            if child >= task_count or parent >= task_count or child == parent:
+                raise TaskBoardDependencyInvalid()
+            pairs.append((child, parent))
+        if not pairs:
+            raise TaskBoardDependencyInvalid()
+        return tuple(pairs)
 
     def _checkpointer(self, parsed: TaskBoardOptions) -> TaskBoardCheckpointer | None:
         # Derives the board directory without touching disk; resume flags require storage. The
@@ -1036,12 +1121,14 @@ class TaskBoardCommand:
         if parsed.retry_failed_only:
             checkpointer.validate_manifest(settings)
             return
+        # Both prefixes count steps in execution order, which on a DAG board is not board order.
+        order = settings.execution_order()
         if parsed.start_from:
             checkpointer.validate_manifest(settings)
-            checkpointer.load_prefix(parsed.start_from)
+            checkpointer.load_prefix(parsed.start_from, order)
         elif parsed.replay_task is not None:
             checkpointer.validate_manifest(settings)
-            checkpointer.load_prefix(parsed.replay_task)
+            checkpointer.load_prefix(order.index(parsed.replay_task), order)
 
     def _idempotency_key(self, key: str | None) -> str:
         # Validates the replay-safe admission key before any local planning.
@@ -1104,6 +1191,8 @@ class TaskBoardOptions:
         self.summary_max_chars = int(str(options["summary_max_chars"]))
         self.stop_on_error = bool(options["stop_on_error"])
         self.retries_per_task = int(str(options["retries_per_task"]))
+        self.execution_type = str(options["execution_type"])
+        self.depends_on = tuple(str(item) for item in self._items(options["depends_on"]))
         self.model = str(options["model"])
         self.sandbox = str(options["sandbox"])
         self.reasoning_effort = str(options["reasoning_effort"])
@@ -1167,6 +1256,10 @@ class TaskBoardOptions:
             if isinstance(value, tuple)
             else ()
         )
+
+    @staticmethod
+    def _items(value: object) -> tuple[object, ...]:
+        return value if isinstance(value, tuple) else ()
 
     @staticmethod
     def _path(value: object) -> Path | None:

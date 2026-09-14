@@ -328,17 +328,21 @@ class TaskBoardForkPrefixIncomplete(CliError):
     code = CliErrorCode.INVALID_ARGUMENT
     exit_status = ExitCode.USAGE
 
-    def __init__(self, board_id: str, at_index: int, available: int, task_count: int) -> None:
-        # `available` is the length of the unbroken stored prefix, i.e. the largest valid --at.
+    def __init__(
+        self, board_id: str, at_index: int, available: int, task_count: int, missing: int
+    ) -> None:
+        # `available` is the length of the unbroken stored prefix, i.e. the largest valid --at;
+        # `missing` is the board index of the first absent step, which differs on a DAG board.
         where = (
             f"the board only has {task_count} tasks"
             if at_index > task_count
-            else f"step {available} has no stored checkpoint"
+            else f"step {missing} has no stored checkpoint"
         )
         super().__init__(
             f"Board {board_id} cannot be forked at {at_index}: {where}.",
             description=(
-                "A fork copies steps 0 through --at minus one, and every one of them must "
+                "A fork copies the first --at steps in the order the board runs them, which is "
+                "board order unless the board is a DAG, and every one of them must "
                 f"already be stored, but {where}. Nothing was copied, written, or charged, so "
                 "no partial board was created. The largest --at this board supports right "
                 f"now is {available}; fork there, or finish the board first."
@@ -408,6 +412,28 @@ class TaskBoardExportDestinationInvalid(CliError):
             ),
             trace="TaskBoardTaskFiles.write_task_list chose a format from the suffix.",
             hint="Use --to board.md or --to board.json.",
+        )
+
+
+class TaskBoardDependencyInvalid(CliError):
+    """One supplied dependency link is malformed or the link set is not a DAG."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the accepted grammar, never the submitted indices or task text.
+        super().__init__(
+            "Dependency links must be CHILD:PARENT pairs forming an acyclic graph.",
+            description=(
+                "A link names 0-based board positions as CHILD:PARENT with comma-separated "
+                "parents, so --depends-on 8:2 means task 8 reads task 2 and runs after it. "
+                "Links need --type dag, must stay inside the board, allow no self-links, "
+                "duplicates, or cycles, and are rejected before credentials, payment, or "
+                "host execution. The board order and task text are never repeated here."
+            ),
+            trace="TaskBoardCommand parsed dependency links before building a launch plan.",
+            hint="Repeat --depends-on once per link, e.g. --type dag --depends-on 8:2.",
         )
 
 
@@ -2073,6 +2099,72 @@ class ResearchWatchTimedOut(CliError):
                 "--timeout bound without observing a terminal status."
             ),
             hint=f"Run 'vidbyte-cli research status {run_id}' to check on it.",
+        )
+
+
+class StagesHostFailed(CliError):
+    """A stages turn did not complete with a usable Codex reply."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self) -> None:
+        # Host diagnostics can quote task text, so this message stays static.
+        super().__init__(
+            "Codex did not complete the stages turn.",
+            description=(
+                "Codex failed, timed out, or returned an incomplete reply for one stage. "
+                "Execution stopped immediately and later stages never started. The admission "
+                "may already have been charged and completed local work remains in the "
+                "working directory."
+            ),
+            trace="StagesCodexSession checked the SDK turn status and reply identity.",
+            hint="Inspect local Codex configuration before retrying the stages run.",
+        )
+
+
+class StagesSettingsInvalid(CliError):
+    """The supplied stage options did not validate against the stages contract."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Reports only the contract, never the submitted stage text.
+        super().__init__(
+            "The run must describe 1 to 25 valid stages.",
+            description=(
+                "No stage was given, more than 25 were given, or a stage carried a blank "
+                "name, prompt, or system prompt. It was rejected before credentials, "
+                "payment, or host execution, so no credits were spent. Give each stage at "
+                "least a --stage-prompt and a --stage-system-prompt and retry."
+            ),
+            trace="StagesOptions validated the stage options before any launch plan was built.",
+            hint="Run 'vidbyte-cli runtime stages describe' for every accepted stage option.",
+        )
+
+
+class StagesOptionCountMismatch(CliError):
+    """Per-stage options were repeated a different number of times than the stages."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Names the alignment contract without quoting any submitted stage text.
+        super().__init__(
+            "Every repeated --stage-* option must be given once per stage, or not at all.",
+            description=(
+                "Stages are assembled by position: the first --stage-prompt, the first "
+                "--stage-system-prompt, and the first occurrence of every other --stage-* "
+                "option describe stage 1, the second occurrences describe stage 2, and so "
+                "on. One option repeated a different number of times than --stage-prompt "
+                "leaves the run ambiguous, so it is rejected before payment rather than "
+                "guessed at. An option omitted entirely is not a mismatch: every stage then "
+                "takes that setting's default."
+            ),
+            trace="StagesOptions compared each repeated option list against the prompt count.",
+            hint="Repeat each --stage-* option exactly as many times as --stage-prompt.",
         )
 
 
