@@ -41,6 +41,7 @@ class SourceCatalog:
         self.root = (root or self.repository_root()).resolve()
         self._tracked: tuple[str, ...] | None = None
         self._command_files: tuple[SourceFile, ...] | None = None
+        self._markdown_files: tuple[SourceFile, ...] | None = None
 
     @classmethod
     def repository_root(cls) -> Path:
@@ -58,6 +59,13 @@ class SourceCatalog:
             )
             self._command_files = tuple(self._build(rel) for rel in paths)
         return self._command_files
+
+    def markdown_files(self) -> tuple[SourceFile, ...]:
+        # Returns every tracked Markdown artifact; XML prompt sections can live anywhere.
+        if self._markdown_files is None:
+            paths = (rel for rel in self.tracked_paths() if rel.lower().endswith(".md"))
+            self._markdown_files = tuple(self._build(rel, parse_python=False) for rel in paths)
+        return self._markdown_files
 
     def tracked_paths(self) -> tuple[str, ...]:
         # Runs git without a shell and reports the exact repository on failure.
@@ -83,7 +91,7 @@ class SourceCatalog:
         )
         return self._tracked
 
-    def _build(self, rel: str) -> SourceFile:
+    def _build(self, rel: str, *, parse_python: bool = True) -> SourceFile:
         # Reads and parses one tracked path, recording a syntax error instead of raising.
         path = self.root / Path(rel)
         try:
@@ -94,6 +102,8 @@ class SourceCatalog:
                 f"Could not read tracked source {path} as UTF-8 while building the lint "
                 f"catalogue: {error}. Restore or re-encode the file."
             ) from error
+        if not parse_python:
+            return SourceFile(path=path, rel=rel, text=text)
         try:
             return SourceFile(path=path, rel=rel, text=text, tree=ast.parse(text, filename=rel))
         except SyntaxError as error:

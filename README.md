@@ -63,6 +63,9 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Run one Codex session with 6–100 additional improvement turns |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
+| `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate ranked next-action ideas with handoffs locally (free, no admission) |
+| `vidbyte-cli agents suggest categories` | List the 17 suggestion categories (no model, no credentials) |
+| `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
 
 ### Research threads
 
