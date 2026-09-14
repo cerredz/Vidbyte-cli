@@ -110,6 +110,8 @@ class RelocationContracts(unittest.TestCase):
                 "planner.py",
                 "stages.py",
                 "task_board.py",
+                "task_board_checkpoints.py",
+                "task_board_tasks.py",
                 "verification.py",
             },
         )

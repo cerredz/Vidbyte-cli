@@ -14,7 +14,10 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from vidbyte_cli.commands.runtime.task_board import TaskBoardCommand  # noqa: E402
+from vidbyte_cli.commands.runtime.task_board import (  # noqa: E402
+    TaskBoardCommand,
+    TaskBoardOptions,
+)
 from vidbyte_cli.lib.constants.runtime import TaskBoardProgress  # noqa: E402
 from vidbyte_cli.lib.errors.failures import (  # noqa: E402
     TaskBoardDependencyInvalid,
@@ -72,7 +75,7 @@ def _fake_session(prompts: list[str], turns: SimpleNamespace) -> TaskBoardCodexS
     # Builds a session whose agents and turns are fakes recording their prompts.
     session = TaskBoardCodexSession({}, lambda _msg: None)
     session.prepare(make_plan())
-    session._build_agent = lambda _i: object()
+    session._build_agent = lambda _i, _s: object()
     session._turn = turns.behavior(prompts)
     return session
 
@@ -85,7 +88,7 @@ class _ScriptedTurns:
 
     def behavior(self, prompts: list[str]):  # type: ignore[no-untyped-def]
         # Returns an async turn recording prompts and replaying the script.
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             prompts.append(prompt)
             action = self._script[min(self.calls, len(self._script) - 1)]
             self.calls += 1
@@ -94,6 +97,46 @@ class _ScriptedTurns:
             return _fake_reply(str(action), f"thread-{self.calls}")
 
         return fake_turn
+
+
+def _options(depends_on: tuple[str, ...]) -> TaskBoardOptions:
+    # Builds a parsed dag run invocation with every other option at its default.
+    return TaskBoardOptions(
+        {
+            "task_files": (),
+            "task_list": None,
+            "host": "codex",
+            "window": 10,
+            "context_mode": "windowed-summaries",
+            "handoff": "summary",
+            "summary_mode": "truncate-tail",
+            "summary_max_chars": 1200,
+            "stop_on_error": True,
+            "retries_per_task": 1,
+            "execution_type": "dag",
+            "depends_on": depends_on,
+            "model": "",
+            "sandbox": "workspace-write",
+            "reasoning_effort": "",
+            "turn_timeout": 600,
+            "key": None,
+            "checkpoint": True,
+            "checkpoint_root": Path(".vidbyte/task-board"),
+            "checkpoint_id": None,
+            "checkpoint_mode": "save-only",
+            "export_file": None,
+            "report_file": None,
+            "on_checkpoint": "",
+            "start_from": None,
+            "replay_task": None,
+            "print_prompt": False,
+            "stop_after": None,
+            "retry_failed_only": False,
+            "max_tokens": None,
+            "max_cost": None,
+            "usd_per_million_tokens": 10.0,
+        }
+    )
 
 
 def test_linear_default_preserved() -> None:
@@ -169,17 +212,7 @@ def test_cycles_rejected() -> None:
         except ValueError:
             pass
     try:
-        TaskBoardCommand()._settings(
-            ("a", "b"),
-            10,
-            "windowed-summaries",
-            "truncate-tail",
-            1200,
-            True,
-            1,
-            "dag",
-            ((0, 1), (1, 0)),
-        )
+        TaskBoardCommand()._settings(("a", "b"), _options(("0:1", "1:0")))
         ok = False
     except TaskBoardDependencyInvalid:
         pass
@@ -313,10 +346,10 @@ def test_dag_skips_dependents_continues_independent() -> None:
         prompts: list[str] = []
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()
+        session._build_agent = lambda _i, _s: object()
         calls = {"turns": 0}
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             prompts.append(prompt)
             calls["turns"] += 1
             if prompt.startswith("Task 0:"):
@@ -482,9 +515,9 @@ def test_dag_failure_keeps_partial_agent_text() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()
+        session._build_agent = lambda _i, _s: object()
 
-        async def incomplete_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def incomplete_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             return SimpleNamespace(
                 content="partial diagnosis: missing config file",
                 codex=SimpleNamespace(status="failed", final_response="", thread_id=""),
@@ -507,9 +540,9 @@ def test_dag_timeout_names_timeout_kind() -> None:
     async def go() -> bool:
         session = TaskBoardCodexSession({}, lambda _msg: None)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()
+        session._build_agent = lambda _i, _s: object()
 
-        async def slow_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def slow_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             # Mirrors _turn: the transport timeout surfaces as a chained host failure.
             try:
                 raise TimeoutError("timed out")
@@ -534,10 +567,10 @@ def test_dag_progress_milestones_are_product_facing() -> None:
         seen: list[str] = []
         session = TaskBoardCodexSession({}, seen.append)
         session.prepare(make_plan())
-        session._build_agent = lambda _i: object()
+        session._build_agent = lambda _i, _s: object()
         calls = {"turns": 0}
 
-        async def fake_turn(agent: object, prompt: str) -> SimpleNamespace:
+        async def fake_turn(agent: object, prompt: str, settings: object) -> SimpleNamespace:
             calls["turns"] += 1
             if prompt.startswith("Task 0:"):
                 raise RuntimeError("boom")
