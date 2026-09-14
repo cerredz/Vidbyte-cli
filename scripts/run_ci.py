@@ -28,12 +28,78 @@ _BUILD_COPY_EXCLUDES = (
     ".coverage*", ".mypy_cache", ".nox", ".pytest_cache", ".ruff_cache", ".tox",
 )  # fmt: skip
 
-# Prompts are data files, not modules, so no import smoke can catch a packaging miss; they now
-# live under two roots, since persistence moved to a service while task-board stayed in `lib/`.
-_WHEEL_RUNTIME_PROMPTS = (
+# Prompt and help assets are data files, so no import smoke can catch a packaging miss.
+_WHEEL_PROMPTS = (
     "vidbyte_cli/services/persistence/prompts/persistence_system.md",
     "vidbyte_cli/services/persistence/prompts/persistence_turn.md",
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
+    "vidbyte_cli/services/suggestions/prompts/critic.md",
+    "vidbyte_cli/services/suggestions/prompts/generator.md",
+    *(
+        f"vidbyte_cli/commands/agents/suggestion/prompts/{name}.md"
+        for name in (
+            "run",
+            "goal",
+            "input",
+            "context",
+            "context_file",
+            "handoff_file",
+            "completed",
+            "in_progress",
+            "decision",
+            "constraint",
+            "avoid",
+            "question",
+            "capability",
+            "success",
+            "artifact",
+            "previous_suggestions",
+            "count",
+            "category",
+            "all_categories",
+            "horizon",
+            "rounds",
+            "provider",
+            "model",
+            "critic_model",
+            "max_output_tokens",
+            "max_total_tokens",
+            "timeout",
+            "dry_run",
+            "mistakes",
+            "forbidden",
+            "approaches",
+            "outcomes",
+            "blockers",
+            "hypotheses",
+            "risks",
+            "trajectory",
+            "context_primitive",
+            "categories",
+        )
+    ),
+    *(
+        f"vidbyte_cli/services/suggestions/prompts/categories/{name}.md"
+        for name in (
+            "continuation",
+            "prerequisite",
+            "completion",
+            "bottleneck",
+            "verification",
+            "experiment",
+            "investigation",
+            "alternative",
+            "simplification",
+            "stop_or_defer",
+            "risk_prevention",
+            "leverage",
+            "strategy",
+            "adjacent_opportunity",
+            "cross_domain",
+            "preparation",
+            "coordination",
+        )
+    ),
 )
 
 
@@ -81,6 +147,8 @@ class CiRunner:
             ),
             # Offline: DAG parsing, topological order, and dep-only context, faked SDK turn.
             ("task board dag", (python, "scripts/test-task-board-dag.py")),
+            # Offline: deterministic suggestion agent with fakes only at the SDK turn.
+            ("suggestions", (python, "scripts/test_suggestions.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):
@@ -121,7 +189,7 @@ class CiRunner:
             sys.stderr.write(f"Expected one wheel, found {len(wheels)}.\n")
             return 1
         with zipfile.ZipFile(wheels[0]) as archive:
-            for prompt in _WHEEL_RUNTIME_PROMPTS:
+            for prompt in _WHEEL_PROMPTS:
                 if prompt not in archive.namelist() or not archive.read(prompt):
                     sys.stderr.write(f"The wheel is missing the runtime prompt {prompt}.\n")
                     return 1
