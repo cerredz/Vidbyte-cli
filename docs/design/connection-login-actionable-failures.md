@@ -114,8 +114,12 @@ Gives the device-poll loop three actionable outcomes instead of one generic fail
 ```python
 class GitHubAccessDenied(CliError):
     def __init__(self) -> None: ...
+
+
 class GitHubDeviceCodeExpired(CliError):
     def __init__(self) -> None: ...
+
+
 class GitHubClientInvalid(CliError):
     def __init__(self, detail: str) -> None: ...
 ```
@@ -149,8 +153,12 @@ Splits Slack's `ok:false` envelope and callback denial into agent-fixable failur
 ```python
 class SlackAccessDenied(CliError):
     def __init__(self) -> None: ...
+
+
 class SlackInvalidGrant(CliError):
     def __init__(self) -> None: ...
+
+
 class SlackClientInvalid(CliError):
     def __init__(self) -> None: ...
 ```
@@ -182,10 +190,16 @@ Makes Google's consent, code-exchange, and scope failures each explain their own
 ```python
 class GoogleAccessDenied(CliError):
     def __init__(self) -> None: ...
+
+
 class GoogleInvalidGrant(CliError):
     def __init__(self) -> None: ...
+
+
 class GoogleClientInvalid(CliError):
     def __init__(self) -> None: ...
+
+
 class GoogleScopeInvalid(CliError):
     def __init__(self) -> None: ...
 ```
@@ -217,8 +231,12 @@ Separates "could not listen" from "user never finished" from "grant succeeded bu
 ```python
 class ConnectionLoopbackUnavailable(CliError):
     def __init__(self, provider: str) -> None: ...
+
+
 class ConnectionCallbackTimeout(CliError):
     def __init__(self, provider: str) -> None: ...
+
+
 class ConnectionSaveFailed(CliError):
     def __init__(self, provider: str) -> None: ...
 ```
