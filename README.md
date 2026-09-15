@@ -73,7 +73,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 values. It does not accept a run-level JSON input file: callers pass argv values into one strict
 request dataclass, which keeps defaults and validation in one place. The generator always uses
 the configured provider default, while `--critic-model` is the only model override and applies
-only to independent review. `--count` accepts 2–15, `--rounds` accepts 1–3, and
+only to independent review. `--count` accepts 2–15, `--rounds` accepts 1–8, and
 `--extra-compute` runs one focused generator context per selected category before critique.
 The default run uses the configured provider through `vidbyte-sdk`; `--dry-run`, `categories`,
 and `handoff` are credential-free.
