@@ -17,6 +17,9 @@ shell pipelines, captured output, prompting, Windows console behavior, and every
 
 ## Files
 
+- `attachments.py` - `AttachmentResolver`, the bounded explicit-file snapshot resolver.
+- `codex_attachments.py` - `CodexAttachmentInputBuilder`, the lazy provider adapter.
+
 - `__init__.py` — the public I/O facade.
 - `streams.py` — `IOStreams`, the immutable stdin/stdout/stderr bundle and its write helpers.
 - `terminal.py` — `TerminalCapabilities.detect`: interaction, color, and cursor facts for one

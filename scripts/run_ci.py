@@ -165,6 +165,7 @@ class CiRunner:
             ),
             # Offline: DAG parsing, topological order, and dep-only context, faked SDK turn.
             ("task board dag", (python, "scripts/test-task-board-dag.py")),
+            ("agent attachments", (python, "scripts/test-agent-attachments.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):

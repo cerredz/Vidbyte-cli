@@ -31,6 +31,24 @@ class PersistenceLimit(IntEnum):
     TURN_TIMEOUT_SECONDS = 3600
 
 
+class AttachmentLimit(IntEnum):
+    """Boundaries for one explicit attachment bundle before an agent starts."""
+
+    MAX_FILES = 50
+    MAX_FILE_BYTES = 1_000_000
+    MAX_TOTAL_BYTES = 8_000_000
+
+
+class AttachmentImageSuffix(StrEnum):
+    """Image suffixes that the Codex adapter can pass as native local-image inputs."""
+
+    GIF = ".gif"
+    JPEG = ".jpeg"
+    JPG = ".jpg"
+    PNG = ".png"
+    WEBP = ".webp"
+
+
 class PersistenceCodexConfig(StrEnum):
     """Child-only provider configuration; no native login state is changed."""
 
