@@ -154,9 +154,7 @@ class FakeSdk:
                 candidate.pop("review_summary", None)
                 candidate.pop("handoff", None)
                 candidate["idea_id"] = "idea-001"
-                return SuggestionCandidateBatch(
-                    ideas=(SuggestionDraft.model_validate(candidate),)
-                )
+                return SuggestionCandidateBatch(ideas=(SuggestionDraft.model_validate(candidate),))
             return SuggestionCandidateBatch(
                 ideas=(
                     _draft(
