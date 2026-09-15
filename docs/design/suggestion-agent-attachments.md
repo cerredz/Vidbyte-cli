@@ -170,6 +170,7 @@ the root command or duplicating help and validation prose.
 ```python
 _ATTACHMENT_OPTIONS = AgentAttachmentOptions()
 
+
 def register(self, parent: click.Group) -> None: ...
 ```
 
@@ -207,6 +208,7 @@ before constructing the service request.
 @dataclass(frozen=True, slots=True)
 class SuggestionRunInput:
     attachments: tuple[Path, ...] = ()
+
 
 class SuggestionRequestBuilder:
     def build(self, raw: dict[str, object]) -> SuggestionRequest: ...
@@ -279,6 +281,7 @@ conversion to PR #53's lazy `CodexAttachmentInputBuilder`.
 class SuggestionTextInput:
     prompt: str
     attachments: AttachmentBundle = field(default_factory=AttachmentBundle)
+
 
 def run_input(self, request: SuggestionTextInput) -> Any: ...
 ```
