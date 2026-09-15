@@ -88,13 +88,26 @@ class SuggestionHandoffBuilder:
 
     def _warnings(self, request: SuggestionRequest) -> tuple[str, ...]:
         warning_kinds = {"mistake", "risk"}
-        warnings = [item.content for item in request.context_items if item.kind in warning_kinds]
+        warnings = [
+            self._warning_text(item.kind, item.content)
+            for item in request.context_items
+            if item.kind in warning_kinds
+        ]
         warnings.extend(
             item.content
             for item in request.context_items
             if item.kind == "hypothesis" and item.content.lower().startswith("low:")
         )
         return tuple(warnings)
+
+    def _warning_text(self, kind: str, content: str) -> str:
+        if kind != "mistake":
+            return content
+        parts = tuple(part.strip() for part in content.split("|"))
+        if len(parts) != 3 or not all(parts):
+            return content
+        failure, cause, lesson = parts
+        return f"Past mistake lesson: {lesson} (failure: {failure}; cause: {cause})"
 
     def _context_values(self, request: SuggestionRequest, kind: str) -> tuple[str, ...]:
         return tuple(item.content for item in request.context_items if item.kind == kind)
