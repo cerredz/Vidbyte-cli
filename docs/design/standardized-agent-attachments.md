@@ -396,6 +396,35 @@ Importing `vidbyte_cli.lib.io` must work in a clean environment without Codex in
 
 ---
 
+### 6.8 Future Agent Command Contract
+
+Every later agent command should implement the same ordered lifecycle, with attachment
+resolution as a shared preflight stage:
+
+| Phase | Owner | Contract |
+|-------|-------|----------|
+| Parse | Click command | Accept command-specific inputs plus the repeatable `--attach PATH` option. |
+| Resolve | `AgentAttachmentOptions` | Convert parsed paths into one immutable `AttachmentBundle`; fail closed before side effects. |
+| Prepare | Command service | Combine the task, bundle, and command settings into a typed provider request. |
+| Admit | Runtime/payment boundary | Read credentials or buy paid admission only after local attachment validation succeeds. |
+| Execute | Agent service | Pass the same bundle to each turn, continuation, or fan-out branch without rereading paths. |
+| Render | Output layer | Emit the result and body-free attachment manifest according to the command's output policy. |
+
+Commands fall into four integration shapes, each reusing the same attachment contract:
+
+- **Single-turn:** one task and one provider request.
+- **Continuation:** one immutable bundle reused across an ordered sequence of turns.
+- **Fan-out:** one root bundle shared with role-specific branches, with each branch's audience
+  declared explicitly.
+- **Task graph:** one bundle plus task-specific context, where graph inputs such as `--task-file`
+  retain their existing semantics and are not silently reinterpreted as attachments.
+
+A future integration PR must name the command shape, attachment audience, provider adapter, output
+manifest policy, and the point at which admission occurs. This keeps command-specific orchestration
+visible while the file plumbing remains centralized.
+
+---
+
 ## 7. Data Model Changes
 
 ### 7.1 AgentAttachment and AttachmentBundle
