@@ -421,8 +421,10 @@ the public contracts in this PR. The grouped result model is deliberately deferr
 | CREATE | `src/vidbyte_cli/services/suggestions/store.py` | Run-local validated store and bound tools |
 | MODIFY | `src/vidbyte_cli/services/suggestions/service.py` | Replace revision loop with tool-enabled generator |
 | MODIFY | `src/vidbyte_cli/services/suggestions/sdk.py` | Pass arbitrary tools and permission policy |
+| MODIFY | `src/vidbyte_cli/types/suggestions.py` | Add the curator completion receipt |
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/generator.md` | Document tool-driven curation |
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/library.py` | Render feedback-aware system prompt |
+| CREATE | `src/vidbyte_cli/services/suggestions/prompts/curation.md` | Curator turn instructions |
 | DELETE | `src/vidbyte_cli/services/suggestions/prompts/revision.md` | Remove host-controlled revision stage |
 | MODIFY | `scripts/run_ci.py` | Remove deleted revision asset from wheel manifest |
 | MODIFY | `scripts/test_suggestions.py` | Update fake SDK and verify tool-driven flow |

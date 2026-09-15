@@ -36,7 +36,7 @@ _WHEEL_RUNTIME_PROMPTS = (
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
     "vidbyte_cli/services/suggestions/prompts/critic.md",
     "vidbyte_cli/services/suggestions/prompts/generator.md",
-    "vidbyte_cli/services/suggestions/prompts/revision.md",
+    "vidbyte_cli/services/suggestions/prompts/curation.md",
     *(
         f"vidbyte_cli/commands/agents/suggestion/prompts/{name}.md"
         for name in (
@@ -145,6 +145,7 @@ class CiRunner:
             ("research-only surface", (python, "scripts/test_research_only_surface.py")),
             # Offline: verifies the typed suggestion boundary, context contract, and handoffs.
             ("suggestion agent", (python, "scripts/test_suggestions.py")),
+            ("suggestion generator tools", (python, "scripts/test-suggestion-generator-tools.py")),
             (
                 "runtime admission and persistence",
                 (python, "scripts/test-layered-runtime-admission-gate.py"),

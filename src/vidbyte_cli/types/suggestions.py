@@ -264,6 +264,14 @@ class SuggestionCandidateBatch(BaseModel):
     ideas: tuple[SuggestionDraft, ...] = Field(max_length=30)
 
 
+class SuggestionCompletion(BaseModel):
+    """Small completion receipt returned after the tool-enabled generator pass."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    completed: bool = True
+    summary: str = Field(min_length=1, max_length=1024)
+
+
 class SuggestionCritique(BaseModel):
     """The critic artifact for exactly one candidate ID."""
 
@@ -399,6 +407,7 @@ __all__ = [
     "SUGGESTIONS_RESULT_KIND",
     "StopReason",
     "SuggestionCandidateBatch",
+    "SuggestionCompletion",
     "SuggestionContextItem",
     "SuggestionContextPrimitive",
     "SuggestionCritique",

@@ -64,6 +64,8 @@ class SuggestionAgentSettingsInput:
     output_schema: type | Mapping[str, Any]
     provider: str | None = None
     model: str | None = None
+    tools: tuple[Any, ...] = ()
+    tool_permission_policy: Any | None = None
 
     def __post_init__(self) -> None:
         if self.role not in ("generator", "critic"):
@@ -74,6 +76,8 @@ class SuggestionAgentSettingsInput:
             raise TypeError("Suggestion agent context must be SuggestionContextPrimitive.")
         if not isinstance(self.output_schema, (type, Mapping)):
             raise TypeError("Suggestion agent output_schema must be a class or mapping.")
+        if not isinstance(self.tools, tuple) or any(not callable(tool) for tool in self.tools):
+            raise TypeError("Suggestion agent tools must be a tuple of callables.")
         for name, value in (("provider", self.provider), ("model", self.model)):
             if value is not None and (type(value) is not str or not value.strip()):
                 raise ValueError(f"Suggestion agent {name} must be None or non-empty.")
@@ -142,7 +146,7 @@ class SuggestionSdk:
         return isinstance(error, self._bindings.schema_error_type)
 
     def agent_settings(self, request: SuggestionAgentSettingsInput) -> Any:
-        """Build the exact read-only SDK settings for one independent context window."""
+        """Build one SDK agent with an optional narrowly permitted local tool set."""
         if not isinstance(request, SuggestionAgentSettingsInput):
             raise TypeError("agent_settings requires SuggestionAgentSettingsInput.")
         symbols = self._bindings.symbols
@@ -166,13 +170,30 @@ class SuggestionSdk:
         )
         manager = symbols["ContextManager"]()
         manager.place_after_system_prompt(request.context)
+        policy = request.tool_permission_policy
+        if request.tools and policy is None:
+            policy = self._local_tool_policy()
+        settings = {
+            "name": f"suggestion-{request.role}",
+            "system_prompt": request.system_prompt,
+            "codex": codex,
+            "context_manager": manager,
+            "output_schema": request.output_schema,
+        }
+        if request.tools:
+            settings.update(tools=request.tools, tool_permission_policy=policy)
         return symbols["CodexHarnessAgentSettings"](
-            name=f"suggestion-{request.role}",
-            system_prompt=request.system_prompt,
-            codex=codex,
-            context_manager=manager,
-            output_schema=request.output_schema,
+            **settings,
         )
+
+    def _local_tool_policy(self) -> Any:
+        """Allows safe, read, and write local tools while excluding execution authority."""
+        security = __import__("vidbyte.tools.security", fromlist=["PermissionPolicy"])
+        tools = __import__("vidbyte.tools", fromlist=["ToolPermission"])
+        allowed = frozenset(
+            (tools.ToolPermission.SAFE, tools.ToolPermission.READ, tools.ToolPermission.WRITE)
+        )
+        return security.PermissionPolicy(allowed=allowed)
 
 
 __all__ = [

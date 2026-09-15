@@ -1,4 +1,4 @@
-"""Runs the SDK-backed suggestion generation, critique, and revision workflow."""
+"""Runs the SDK-backed suggestion generation, critique, and tool-editing workflow."""
 
 from __future__ import annotations
 
@@ -16,15 +16,11 @@ from ...lib.errors.failures import (
     SuggestionSdkUnavailable,
 )
 from ...types.suggestions import (
-    CritiqueConfidence,
-    CritiqueConstraint,
-    CritiqueEvidenceCheck,
-    CritiqueVerdict,
     RunStatus,
     StopReason,
     SuggestionCandidateBatch,
+    SuggestionCompletion,
     SuggestionContextPrimitive,
-    SuggestionCritique,
     SuggestionCritiqueArtifact,
     SuggestionDraft,
     SuggestionHorizon,
@@ -38,6 +34,7 @@ from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
 from .sdk import SuggestionAgentSettingsInput, SuggestionSdk, SuggestionTextInput
 from .selection import SuggestionSelection
+from .store import SuggestionStore
 
 _POOL_MULTIPLE = 2
 _POOL_CAP = 40
@@ -52,7 +49,7 @@ class _WorkflowLimit(Exception):
 
 @dataclass(frozen=True, slots=True)
 class _WorkflowOutcome:
-    """Fully reviewed ideas plus accounting and the reason the loop stopped."""
+    """Committed ideas plus accounting and the reason the loop stopped."""
 
     ideas: tuple[SuggestionIdea, ...]
     usage: dict[str, int]
@@ -87,13 +84,20 @@ class SuggestionService:
         return self._result(request, outcome)
 
     async def _run(self, request: SuggestionRequest, sdk: Any) -> _WorkflowOutcome:
+        # Runs initial generation once, then lets the generator edit state for each review pass.
         started = time.monotonic()
-        usage = {"tokens": 0, "agent_calls": 0, "generation_calls": 0, "critique_calls": 0}
+        usage = {
+            "tokens": 0,
+            "agent_calls": 0,
+            "generation_calls": 0,
+            "critique_calls": 0,
+            "curation_calls": 0,
+        }
         categories = request.settings.categories or self._categories.ids()
         pool_size = min(request.settings.requested_count * _POOL_MULTIPLE, _POOL_CAP)
-        last_reviewed: tuple[SuggestionIdea, ...] = ()
         warnings: list[str] = list(request.context_warnings)
         drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...]
+        store: SuggestionStore | None = None
         try:
             if request.settings.extra_compute:
                 drafts = await ExtraComputeService(self._categories, self._prompts).generate(
@@ -120,33 +124,38 @@ class SuggestionService:
             if not current:
                 return _WorkflowOutcome((), usage, StopReason.COUNT_SHORTFALL, tuple(warnings))
 
+            store = SuggestionStore(request, categories)
+            store.seed(current)
             for round_index in range(request.settings.rounds):
                 self._check_limit(request, started, usage)
+                current = store.snapshot()
                 artifact = await self._critique(request, sdk, categories, current, started, usage)
-                kept, revisions = self._review(current, artifact)
-                last_reviewed = self._merge_reviewed(last_reviewed, self._finalize(kept, request))
-                if not revisions:
+                self._validate_critique(current, artifact)
+                working = store.working_copy()
+                before = working.mutation_count
+                self._check_limit(request, started, usage)
+                await self._curate(
+                    request, sdk, categories, current, artifact, working, started, usage
+                )
+                if working.mutation_count == before:
+                    finalized = self._finalize(store.snapshot(), request)
                     reason = (
                         StopReason.COMPLETED
-                        if len(last_reviewed) >= request.settings.requested_count
+                        if len(finalized) >= request.settings.requested_count
                         else StopReason.COUNT_SHORTFALL
                     )
-                    return _WorkflowOutcome(last_reviewed, usage, reason, tuple(warnings))
+                    return _WorkflowOutcome(finalized, usage, reason, tuple(warnings))
+                store.commit_from(working)
                 if round_index == request.settings.rounds - 1:
+                    finalized = self._finalize(store.snapshot(), request)
                     return _WorkflowOutcome(
-                        last_reviewed, usage, StopReason.ROUND_LIMIT, tuple(warnings)
-                    )
-                self._check_limit(request, started, usage)
-                current = await self._revise(
-                    request, sdk, categories, current, revisions, started, usage
-                )
-                if not current:
-                    return _WorkflowOutcome(
-                        last_reviewed, usage, StopReason.COUNT_SHORTFALL, tuple(warnings)
+                        finalized, usage, StopReason.ROUND_LIMIT, tuple(warnings)
                     )
         except _WorkflowLimit as limit:
-            return _WorkflowOutcome(last_reviewed, usage, limit.reason, tuple(warnings))
-        return _WorkflowOutcome(last_reviewed, usage, StopReason.ROUND_LIMIT, tuple(warnings))
+            committed = self._finalize(store.snapshot(), request) if store else ()
+            return _WorkflowOutcome(committed, usage, limit.reason, tuple(warnings))
+        committed = self._finalize(store.snapshot(), request) if store else ()
+        return _WorkflowOutcome(committed, usage, StopReason.ROUND_LIMIT, tuple(warnings))
 
     async def _generate(
         self,
@@ -205,67 +214,44 @@ class SuggestionService:
             ),
         )
 
-    async def _revise(
+    async def _curate(
         self,
         request: SuggestionRequest,
         sdk: Any,
         categories: tuple[str, ...],
         current: tuple[SuggestionIdea, ...],
-        revisions: tuple[tuple[SuggestionIdea, SuggestionCritique], ...],
+        artifact: SuggestionCritiqueArtifact,
+        store: SuggestionStore,
         started: float,
         usage: dict[str, int],
-    ) -> tuple[SuggestionIdea, ...]:
+    ) -> SuggestionCompletion:
+        # Gives a fresh generator the critic data and a transactionally isolated tool surface.
         context = self._agent_context(request, categories, current)
-        candidates = json.dumps(
-            [idea.model_dump(mode="json") for idea, _ in revisions], sort_keys=True
+        feedback = json.dumps(
+            artifact.model_dump(mode="json"),
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
         )
-        critiques = json.dumps(
-            [critique.model_dump(mode="json") for _, critique in revisions], sort_keys=True
+        feedback = feedback.replace("<", "\\u003c").replace(">", "\\u003e")
+        prompt = self._prompts.curator_turn(request.goal, len(current))
+        return cast(
+            SuggestionCompletion,
+            await self._call_agent(
+                sdk,
+                "generator",
+                self._prompts.generator_system(feedback),
+                prompt,
+                context,
+                None,
+                SuggestionCompletion,
+                request,
+                started,
+                usage,
+                "curation",
+                store.tools(),
+            ),
         )
-        prompt = self._prompts.revision_turn(request.goal, candidates, critiques, len(revisions))
-        batch = await self._call_agent(
-            sdk,
-            "generator",
-            self._prompts.revision_system(),
-            prompt,
-            context,
-            None,
-            SuggestionCandidateBatch,
-            request,
-            started,
-            usage,
-            "revision",
-        )
-        by_id = {idea.id: (idea, critique) for idea, critique in revisions}
-        revised: list[SuggestionIdea] = []
-        seen_ids: set[str] = set()
-        for draft in batch.ideas:
-            idea_id = draft.idea_id
-            if idea_id is None:
-                raise ValueError("revision output must preserve the candidate id")
-            if idea_id in seen_ids:
-                raise ValueError("revision output repeated a candidate id")
-            seen_ids.add(idea_id)
-            if idea_id not in by_id:
-                raise ValueError("revision output referenced an unknown candidate id")
-            original, critique = by_id[idea_id]
-            values = draft.model_dump(exclude={"idea_id"})
-            for field_name in critique.preserve:
-                if hasattr(original, field_name) and field_name in values:
-                    values[field_name] = getattr(original, field_name)
-            revised_draft = SuggestionDraft.model_validate(values)
-            revised.append(
-                self._idea_from_draft(
-                    revised_draft,
-                    request,
-                    idea_id,
-                    original.revision + 1,
-                    original.rank,
-                    critique.review_summary,
-                )
-            )
-        by_revision_id = {idea.id: idea for idea in revised}
-        return tuple(by_revision_id[idea.id] for idea, _ in revisions if idea.id in by_revision_id)
 
     async def _call_agent(
         self,
@@ -280,6 +266,7 @@ class SuggestionService:
         started: float,
         usage: dict[str, int],
         phase: str,
+        tools: tuple[Any, ...] = (),
     ) -> Any:
         self._check_limit(request, started, usage)
         prompt = self._with_output_budget(prompt, request)
@@ -291,6 +278,7 @@ class SuggestionService:
                 output_schema=schema,
                 provider=request.settings.provider,
                 model=model,
+                tools=tools,
             )
         )
         agent = sdk.agent(settings)
@@ -344,44 +332,14 @@ class SuggestionService:
             handoff=handoff,
         )
 
-    def _review(
+    def _validate_critique(
         self, ideas: tuple[SuggestionIdea, ...], artifact: SuggestionCritiqueArtifact
-    ) -> tuple[tuple[SuggestionIdea, ...], tuple[tuple[SuggestionIdea, SuggestionCritique], ...]]:
-        critiques = {item.idea_id: item for item in artifact.critiques}
-        if set(critiques) != {idea.id for idea in ideas} or len(critiques) != len(
-            artifact.critiques
-        ):
+    ) -> None:
+        # Checks exact candidate coverage without interpreting the critic's verdicts.
+        identifiers = tuple(item.idea_id for item in artifact.critiques)
+        expected = {idea.id for idea in ideas}
+        if set(identifiers) != expected or len(identifiers) != len(set(identifiers)):
             raise ValueError("critic artifact must contain exactly one review for every candidate")
-        kept: list[SuggestionIdea] = []
-        revisions: list[tuple[SuggestionIdea, SuggestionCritique]] = []
-        for idea in ideas:
-            critique = critiques[idea.id]
-            hard_reject = (
-                critique.constraint_hit is not CritiqueConstraint.NONE
-                or critique.evidence_check is CritiqueEvidenceCheck.CONTRADICTS
-                or (
-                    critique.verdict is CritiqueVerdict.REJECT
-                    and critique.confidence is not CritiqueConfidence.LOW
-                )
-            )
-            if critique.duplicate_of and critique.duplicate_of != idea.id:
-                continue
-            if hard_reject:
-                continue
-            needs_revision = (
-                critique.verdict is CritiqueVerdict.REVISE
-                or critique.evidence_check is CritiqueEvidenceCheck.MISSING
-                or (
-                    critique.verdict is CritiqueVerdict.REJECT
-                    and critique.confidence is CritiqueConfidence.LOW
-                )
-            )
-            if needs_revision:
-                revisions.append((idea, critique))
-                continue
-            if critique.verdict is CritiqueVerdict.KEEP:
-                kept.append(idea.model_copy(update={"review_summary": critique.review_summary}))
-        return tuple(kept), tuple(revisions)
 
     def _finalize(
         self, ideas: tuple[SuggestionIdea, ...], request: SuggestionRequest
@@ -405,14 +363,6 @@ class SuggestionService:
 
     def _handoff_refresh(self, idea: SuggestionIdea, request: SuggestionRequest) -> SuggestionIdea:
         return idea.model_copy(update={"handoff": self._handoffs.build(idea, request)})
-
-    def _merge_reviewed(
-        self, previous: tuple[SuggestionIdea, ...], current: tuple[SuggestionIdea, ...]
-    ) -> tuple[SuggestionIdea, ...]:
-        # Carries kept candidates across a revision round without changing stable order.
-        merged = {idea.id: idea for idea in previous}
-        merged.update({idea.id: idea for idea in current})
-        return tuple(merged.values())
 
     def _agent_context(
         self,

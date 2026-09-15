@@ -33,6 +33,7 @@ from vidbyte_cli.services.suggestions.sdk import (  # noqa: E402
     SuggestionTextInput,
 )
 from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: E402
+from vidbyte_cli.services.suggestions.store import SuggestionStore  # noqa: E402
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     MAX_CONTEXT_CHARS,
     SUGGESTIONS_HANDOFF_KIND,
@@ -42,6 +43,7 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     CritiqueEvidenceCheck,
     CritiqueVerdict,
     SuggestionCandidateBatch,
+    SuggestionCompletion,
     SuggestionContextItem,
     SuggestionContextPrimitive,
     SuggestionCritique,
@@ -104,6 +106,7 @@ class FakeSdk:
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
         self.critic_calls = 0
+        self.curation_calls = 0
 
     def agent_settings(self, request: SuggestionAgentSettingsInput) -> SuggestionAgentSettingsInput:
         self.settings.append(request)
@@ -137,18 +140,20 @@ class FakeSdk:
             return SuggestionCritiqueArtifact(critiques=tuple(critiques))
 
         self.generator_calls += 1
-        if "Suggestion revision" in settings.system_prompt:
-            return SuggestionCandidateBatch(
-                ideas=(
-                    _draft(
-                        "verification",
-                        idea_id="idea-001",
-                        title="Revised verification action",
-                        first_action="Clarify the first action and run the smallest safe check.",
-                        evidence_refs=tuple(item.ref for item in settings.context.items[:1]),
-                    ),
-                )
+        if settings.tools:
+            self.curation_calls += 1
+            if self.curation_calls > 1:
+                return SuggestionCompletion(summary="The active slate is already useful.")
+            draft = _draft(
+                "verification",
+                idea_id="idea-001",
+                title="Repaired verification action",
+                first_action="Clarify the first action and run the smallest safe check.",
+                evidence_refs=tuple(item.ref for item in settings.context.items[:1]),
             )
+            settings.tools[0]("verification", draft)
+            settings.tools[2]()
+            return SuggestionCompletion(summary="Applied the critic feedback through store tools.")
         categories = _categories_from_context(settings.context.selected_categories)
         count = 2 if self.extra_compute else 4
         return SuggestionCandidateBatch(
@@ -302,6 +307,7 @@ class SuggestionSuite:
         self.check_sdk_context_boundary()
         self.check_generation_and_revision()
         self.check_extra_compute()
+        self.check_store_contract()
         self.check_context_limits_and_handoff()
         self.check_cli_contracts()
 
@@ -325,10 +331,10 @@ class SuggestionSuite:
         )
         prompts = SuggestionPrompts()
         results.check(
-            "generator critic and revision prompts are distinct and loaded",
+            "generator critic and curation prompts are distinct and loaded",
             len(prompts.generator_system()) > 100
             and len(prompts.critic_system()) > 100
-            and len(prompts.revision_system()) > 100,
+            and len(prompts.curator_turn("goal", 2)) > 100,
         )
 
     def check_request_boundary(self) -> None:
@@ -422,10 +428,10 @@ class SuggestionSuite:
         )
         revised = next((idea for idea in result.ideas if idea.id == "idea-001"), None)
         results.check(
-            "revision preserves identity and increments revision",
+            "curation tool update preserves identity and increments revision",
             revised is not None
             and revised.revision == 2
-            and revised.title == "verification action 0",
+            and revised.title == "Repaired verification action",
         )
         results.check(
             "critic context carries candidate handoffs and selected categories",
@@ -452,7 +458,7 @@ class SuggestionSuite:
         generator_contexts = [
             settings.context.selected_categories
             for settings, _ in fake.turns
-            if settings.role == "generator"
+            if settings.role == "generator" and not settings.tools
         ]
         results.check(
             "extra compute fans out one generator context per selected category",
@@ -463,6 +469,39 @@ class SuggestionSuite:
         )
         results.check(
             "extra compute still returns the requested bounded slate", result.returned_count == 2
+        )
+
+    def check_store_contract(self) -> None:
+        results = self.results
+        request = _request(items=(_item(),))
+        store = SuggestionStore(request, ("verification", "experiment"))
+        idea = SuggestionService(sdk=FakeSdk())._ideas_from_drafts(
+            SuggestionCandidateBatch(ideas=(_draft("verification", evidence_refs=("ctx-001",)),)),
+            request,
+        )[0]
+        store.seed((idea,))
+        message = store.add_suggestion(
+            "verification",
+            _draft(
+                "verification",
+                idea_id=idea.id,
+                title="Updated store action",
+                evidence_refs=("ctx-001",),
+            ),
+        )
+        results.check(
+            "store tools expose typed stable mutations",
+            "idea-001" in message and store.snapshot()[0].revision == 2,
+        )
+        removed = store.remove_suggestion("idea-001")
+        results.check("store removal uses stable IDs", "Removed suggestion" in removed)
+        results.check(
+            "store removal does not renumber unknown IDs",
+            "No active suggestion" in store.remove_suggestion("idea-999"),
+        )
+        results.check(
+            "store working copies do not mutate committed state",
+            store.working_copy().snapshot() == store.snapshot(),
         )
 
     def check_context_limits_and_handoff(self) -> None:

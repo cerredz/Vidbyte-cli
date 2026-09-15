@@ -14,31 +14,28 @@ class SuggestionPrompts:
         # Immutable package data, so one per-run cache is sufficient.
         self._cache: dict[str, str] = {}
 
-    def generator_system(self) -> str:
-        # System prompt for generation and revision turns.
-        return self._read("generator")
+    def generator_system(self, critic_feedback: str = "") -> str:
+        # System prompt for initial generation and critique-guided curation turns.
+        prompt = self._read("generator")
+        if not critic_feedback:
+            return prompt
+        return f"{prompt}\n\n<critic_feedback>\n{critic_feedback}\n</critic_feedback>"
 
     def critic_system(self) -> str:
         # System prompt for independent review turns.
         return self._read("critic")
 
-    def revision_system(self) -> str:
-        # Revision remains on the generator history but uses a narrower algorithm.
-        return self._read("revision")
-
-    def generator_turn(self, goal: str, count: int, revision: str = "") -> str:
+    def generator_turn(self, goal: str, count: int) -> str:
         # The context manager carries the goal, categories, and caller records exactly once.
-        return self._render("generator", goal=goal, count=str(count), revision=revision)
+        return self._render("generator", goal=goal, count=str(count))
+
+    def curator_turn(self, goal: str, count: int) -> str:
+        # The curator reads candidates from context and changes only the bound store.
+        return self._render("curation", goal=goal, count=str(count))
 
     def critic_turn(self, goal: str, candidate_ids: str) -> str:
         # The critic receives candidate handoffs through its own context manager.
         return self._render("critic", goal=goal, candidate_ids=candidate_ids)
-
-    def revision_turn(self, goal: str, candidates: str, critiques: str, count: int) -> str:
-        # Revision instructions name exact IDs and preserve fields rather than rewriting a slate.
-        return self._render(
-            "revision", goal=goal, candidates=candidates, critiques=critiques, count=str(count)
-        )
 
     def category_prompt(self, name: str) -> str:
         # Category files are model-facing guidance, never command implementation details.
