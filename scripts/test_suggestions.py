@@ -11,6 +11,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -358,6 +359,31 @@ class SuggestionSuite:
             "context primitive includes the selected category block",
             "<Selected Categories>" in context_text and "# Verification" in context_text,
         )
+        with tempfile.TemporaryDirectory() as temporary:
+            attachment = Path(temporary) / "notes.md"
+            attachment.write_text("Captured attachment snapshot.", encoding="utf-8")
+            attached = SuggestionRequestBuilder().build(
+                {
+                    "goal": "Build with an explicit attachment",
+                    "count": 2,
+                    "attachments": (attachment,),
+                }
+            )
+        results.check(
+            "request builder resolves ordered attachment snapshots",
+            len(attached.attachments.items) == 1
+            and attached.attachments.items[0].name == "notes.md"
+            and attached.attachments.items[0].content == "Captured attachment snapshot.",
+        )
+        try:
+            SuggestionRunInput(goal="x", attachments=("notes.md",))  # type: ignore[arg-type]
+        except TypeError:
+            invalid_attachment_shape = True
+        else:
+            invalid_attachment_shape = False
+        results.check(
+            "request dataclass rejects non-Path attachment values", invalid_attachment_shape
+        )
         rejected = _run_cli(["agents", "suggest", "run", "--goal", "x", "--input", "request.json"])
         results.check("run no longer accepts a JSON input file", rejected.returncode == 2)
         bad_count = _run_cli(["agents", "suggest", "run", "--goal", "x", "--count", "1"])
@@ -502,6 +528,7 @@ class SuggestionSuite:
             and "--extra-compute" in help_result.stdout
             and "--trajectory" in help_result.stdout
             and "--files" in help_result.stdout
+            and "--attach" in help_result.stdout
             and "--context-file" not in help_result.stdout
             and "--handoff-file" not in help_result.stdout
             and "--artifact-file" not in help_result.stdout
