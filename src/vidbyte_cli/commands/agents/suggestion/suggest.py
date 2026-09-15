@@ -102,7 +102,7 @@ class SuggestRunCommand:
             help=_HORIZON_HELP,
         )
         @click.option(
-            "--rounds", type=click.IntRange(1, 3), default=2, show_default=True, help=_ROUNDS_HELP
+            "--rounds", type=click.IntRange(1, 8), default=2, show_default=True, help=_ROUNDS_HELP
         )
         @click.option(
             "--provider",

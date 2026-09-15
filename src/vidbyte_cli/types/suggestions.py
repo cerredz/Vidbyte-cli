@@ -194,7 +194,7 @@ class SuggestionSettings(BaseModel):
     all_categories: bool = False
     extra_compute: bool = False
     horizon: SuggestionHorizon = SuggestionHorizon.ANY
-    rounds: int = Field(ge=1, le=3, default=2)
+    rounds: int = Field(ge=1, le=8, default=2)
     provider: str | None = None
     critic_model: str | None = None
     max_output_tokens: int | None = Field(default=None, gt=0, le=5_000_000)

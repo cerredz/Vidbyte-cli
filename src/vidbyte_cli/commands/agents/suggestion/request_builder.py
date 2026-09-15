@@ -128,8 +128,8 @@ class SuggestionRunInput:
     def _validate_execution_settings(self) -> None:
         if type(self.horizon) is not str or self.horizon not in _HORIZONS:
             raise ValueError("horizon must be now, next, later, or any")
-        if type(self.rounds) is not int or not 1 <= self.rounds <= 3:
-            raise ValueError("rounds must be between 1 and 3")
+        if type(self.rounds) is not int or not 1 <= self.rounds <= 8:
+            raise ValueError("rounds must be between 1 and 8")
         if type(self.provider) is not str and self.provider is not None:
             raise TypeError("provider must be omitted or a string")
         if self.provider is not None and self.provider not in _PROVIDERS:
