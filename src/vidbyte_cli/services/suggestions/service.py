@@ -405,6 +405,11 @@ class SuggestionService:
             if item.kind == "approach"
             and item.content.partition(":")[0].strip().lower() in ("failed", "rejected")
         )
+        avoid.extend(
+            item.content.split("|", 1)[0].strip()
+            for item in request.context_items
+            if item.kind == "mistake" and "|" in item.content
+        )
         return tuple(avoid)
 
     def _missing(self, request: SuggestionRequest) -> tuple[str, ...]:

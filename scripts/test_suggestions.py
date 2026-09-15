@@ -291,7 +291,8 @@ class SuggestionSuite:
         packet = contextual.ideas[0].handoff
         results.check(
             "[Review Comment] final handoff preserves warnings and exact prohibitions",
-            "bad merge | stale base | target current main" in packet.warnings
+            "Past mistake lesson: target current main (failure: bad merge; cause: stale base)"
+            in packet.warnings
             and packet.forbidden_actions == ("force push main",)
             and bool(packet.suggested_actions)
             and bool(packet.decisions_along_way)
@@ -302,6 +303,17 @@ class SuggestionSuite:
             bool(packet.evidence)
             and packet.evidence[0].ref == contextual.ideas[0].evidence_refs[0]
             and packet.evidence[0].content == "bad merge | stale base | target current main",
+        )
+        repeated_mistake = self.service.run(
+            SuggestionRequest(
+                goal="bad merge",
+                context=_context("bad merge", expanded.items),
+                settings=SuggestionSettings(requested_count=1),
+            )
+        )
+        results.check(
+            "[Review Comment] a past failure is not suggested again",
+            not repeated_mistake.ideas,
         )
         generated = contextual.ideas[0]
         action_text = " ".join(generated.suggested_actions).lower()
