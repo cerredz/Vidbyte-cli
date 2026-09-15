@@ -1,6 +1,6 @@
 # Design Doc: Standardized Agent Attachments
 
-**Status:** Draft
+**Status:** Implemented
 **Author:** Codex
 **Created:** 2026-09-15
 **Last Updated:** 2026-09-15
