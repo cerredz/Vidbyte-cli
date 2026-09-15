@@ -1,7 +1,7 @@
 """Offline verification for the SDK-backed suggestion workflow.
 
 The fake lives at the local SDK adapter boundary, so the tests exercise request
-validation, context placement, structured artifacts, critique decisions, revision,
+validation, context placement, structured artifacts, critique decisions, curation,
 extra-compute fan-out, and deterministic handoff rendering without credentials.
 """
 
@@ -99,9 +99,18 @@ class FakeAgent:
 class FakeSdk:
     """A typed fake for the SuggestionSdk methods used by SuggestionService."""
 
-    def __init__(self, *, revision: bool = False, extra_compute: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        revision: bool = False,
+        extra_compute: bool = False,
+        curation_failure: bool = False,
+        incomplete_curation: bool = False,
+    ) -> None:
         self.revision = revision
         self.extra_compute = extra_compute
+        self.curation_failure = curation_failure
+        self.incomplete_curation = incomplete_curation
         self.settings: list[SuggestionAgentSettingsInput] = []
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
@@ -142,6 +151,10 @@ class FakeSdk:
         self.generator_calls += 1
         if settings.tools:
             self.curation_calls += 1
+            if self.curation_failure:
+                raise RuntimeError("simulated curation provider failure")
+            if self.incomplete_curation:
+                return SuggestionCompletion(completed=False, summary="Could not finish.")
             if self.curation_calls > 1:
                 return SuggestionCompletion(summary="The active slate is already useful.")
             draft = _draft(
@@ -449,6 +462,24 @@ class SuggestionSuite:
         dry = SuggestionService(sdk=dry_fake).run(dry_request)
         results.check(
             "dry run never constructs an agent", dry.returned_count == 0 and not dry_fake.turns
+        )
+        failed = SuggestionService(sdk=FakeSdk(curation_failure=True)).run(
+            _request(rounds=2, items=(_item(),))
+        )
+        results.check(
+            "curation provider failure returns the committed snapshot",
+            failed.stop_reason.value == "provider_failed"
+            and failed.returned_count == 4
+            and bool(failed.warnings),
+        )
+        incomplete = SuggestionService(sdk=FakeSdk(incomplete_curation=True)).run(
+            _request(rounds=2, items=(_item(),))
+        )
+        results.check(
+            "incomplete curation receipts are surfaced as partial results",
+            incomplete.stop_reason.value == "provider_failed"
+            and incomplete.returned_count == 4
+            and bool(incomplete.warnings),
         )
 
     def check_extra_compute(self) -> None:

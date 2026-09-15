@@ -134,9 +134,29 @@ class SuggestionService:
                 working = store.working_copy()
                 before = working.mutation_count
                 self._check_limit(request, started, usage)
-                await self._curate(
-                    request, sdk, categories, current, artifact, working, started, usage
-                )
+                try:
+                    completion = await self._curate(
+                        request, sdk, categories, current, artifact, working, started, usage
+                    )
+                except _WorkflowLimit:
+                    raise
+                except Exception:
+                    warnings.append(
+                        "Curation did not complete; returning the last committed suggestions."
+                    )
+                    finalized = self._finalize(store.snapshot(), request)
+                    return _WorkflowOutcome(
+                        finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings)
+                    )
+                if not completion.completed:
+                    warnings.append(
+                        "Curation returned an incomplete receipt; returning the last "
+                        "committed suggestions."
+                    )
+                    finalized = self._finalize(store.snapshot(), request)
+                    return _WorkflowOutcome(
+                        finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings)
+                    )
                 if working.mutation_count == before:
                     finalized = self._finalize(store.snapshot(), request)
                     reason = (
