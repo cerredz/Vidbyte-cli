@@ -242,7 +242,12 @@ class SuggestionSuite:
             {
                 "mistake": ("bad merge | stale base | target current main",),
                 "forbidden": ("force push main",),
-                "approach": ("worked: preserve additive registrations",),
+                "approach": (
+                    "worked: preserve additive registrations",
+                    "untried: isolate the package check",
+                    "failed: rewrite unrelated commands",
+                    "rejected: force a model call during help",
+                ),
                 "outcome": ("The earlier fix shipped but increased latency.",),
                 "blocker": ("Release waits on CI.",),
                 "hypothesis": ("low: the editable SDK is current",),
@@ -265,12 +270,23 @@ class SuggestionSuite:
                 "trajectory",
             },
         )
+        expanded_context = _context("Choose the next safe release step", expanded.items)
         contextual = self.service.run(
             SuggestionRequest(
                 goal="Choose the next safe release step",
-                context=_context("Choose the next safe release step", expanded.items),
+                context=expanded_context,
                 settings=SuggestionSettings(requested_count=1),
             )
+        )
+        from vidbyte.context import ContextManager
+
+        expanded_manager = ContextManager((expanded_context,))
+        managed_context = expanded_manager.to_context()
+        results.check(
+            "[Review Comment] full parent trajectory reaches the SDK context window",
+            managed_context.context_items[0] is expanded_context
+            and "User asked for review; parent inspected the PR."
+            in expanded_context.to_context_text(),
         )
         packet = contextual.ideas[0].handoff
         results.check(
@@ -287,6 +303,23 @@ class SuggestionSuite:
             and packet.evidence[0].ref == contextual.ideas[0].evidence_refs[0]
             and packet.evidence[0].content == "bad merge | stale base | target current main",
         )
+        generated = contextual.ideas[0]
+        action_text = " ".join(generated.suggested_actions).lower()
+        results.check(
+            "[Review Comment] approach, outcome, hypothesis, and risk context change actions",
+            "worked" in action_text
+            and "untried approach" in action_text
+            and "observed outcome" in action_text
+            and "confirm or refute" in action_text
+            and "mitigation" in action_text
+            and "low-confidence hypothesis" in generated.review_summary.lower()
+            and "rewrite unrelated commands" not in action_text
+            and "force a model call during help" not in action_text,
+        )
+        results.check(
+            "[Review Comment] hypothesis context prioritizes an investigative category",
+            generated.primary_category in ("experiment", "investigation"),
+        )
         prohibited = builder.build({"forbidden": ("force push main",)}, {})
         blocked_result = self.service.run(
             SuggestionRequest(
@@ -298,6 +331,25 @@ class SuggestionSuite:
         results.check(
             "[Review Comment] candidates requiring a forbidden action are cut",
             blocked_result.ideas == (),
+        )
+        blocker_context = builder.build({"blocker": ("Release waits on CI.",)}, {})
+        blocker_result = self.service.run(
+            SuggestionRequest(
+                goal="Choose a release step",
+                context=_context("Choose a release step", blocker_context.items),
+                settings=SuggestionSettings(requested_count=3),
+            )
+        )
+        results.check(
+            "[Review Comment] blockers produce unblocking ideas and defer dependent ideas",
+            any(
+                "clear or route around" in idea.first_action.lower()
+                for idea in blocker_result.ideas
+            )
+            and any(
+                idea.horizon.value == "later" and idea.readiness.value == "blocked"
+                for idea in blocker_result.ideas
+            ),
         )
         both = builder.build({"completed": ("same thing",), "in-progress": ("same thing",)}, {})
         results.check(
