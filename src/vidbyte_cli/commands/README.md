@@ -21,6 +21,8 @@ every invocation, including `--help` and `--version`.
 
 - `__init__.py` — registers every group. Keep it side-effect free: every help path executes
   it.
+- `agent_options.py` — reusable Click option and resolver facade for future agent `--attach`
+  integrations; it does not register a command by itself.
 
 ## Log
 

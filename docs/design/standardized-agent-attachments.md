@@ -334,6 +334,9 @@ description, trace, and hint text compatible with human and machine error output
 #### Interface / API
 
 ```python
+class AttachmentInputInvalid(CliError): ...
+
+
 class AttachmentFileNotFound(CliError): ...
 
 

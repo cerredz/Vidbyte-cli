@@ -626,6 +626,151 @@ class RuntimeTaskInvalid(CliError):
         )
 
 
+class _AttachmentFailure(CliError):
+    """Shared safe envelope for explicit attachment validation failures."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, message: str, description: str, hint: str) -> None:
+        # Keeps attachment paths, bodies, and provider details out of public error fields.
+        super().__init__(
+            message,
+            description=description,
+            trace="AttachmentResolver validated explicit files before agent execution.",
+            hint=hint,
+        )
+
+
+class AttachmentInputInvalid(_AttachmentFailure):
+    """The programmatic attachment option value was not a tuple of paths."""
+
+    def __init__(self) -> None:
+        # Tells library callers to pass the same shape Click produces.
+        super().__init__(
+            "Attachment values must be a tuple of paths.",
+            "The attachment option received a value outside its typed programmatic contract, "
+            "so resolution stopped before filesystem access or agent execution. Pass zero or "
+            "more pathlib.Path values as the command parser does. No credentials, payment, "
+            "or model call was started.",
+            "Use the repeatable --attach PATH option or pass a tuple of Path values.",
+        )
+
+
+class AttachmentFileNotFound(_AttachmentFailure):
+    """An explicit attachment path does not exist."""
+
+    def __init__(self) -> None:
+        # Reports the repair without echoing a private path.
+        super().__init__(
+            "An attached file was not found.",
+            "One explicit attachment path did not resolve to an existing file, so the bundle "
+            "was rejected before any agent work began. The missing path is not repeated because "
+            "it may identify a private project. Check each --attach value and retry.",
+            "Check that every --attach path exists, then retry.",
+        )
+
+
+class AttachmentDirectory(_AttachmentFailure):
+    """An explicit attachment path identifies a directory."""
+
+    def __init__(self) -> None:
+        # Directories are rejected because attachment expansion is intentionally explicit.
+        super().__init__(
+            "Attached paths must identify files, not directories.",
+            "An explicit attachment path identified a directory, and the shared resolver never "
+            "scans or expands directories implicitly. Resolution stopped before credentials, "
+            "payment, or model execution. Supply each file explicitly and retry.",
+            "Replace directory paths with explicit file paths.",
+        )
+
+
+class AttachmentUnreadable(_AttachmentFailure):
+    """An explicit attachment could not be read."""
+
+    def __init__(self) -> None:
+        # Distinguishes filesystem access failure from unsupported file content.
+        super().__init__(
+            "An attached file could not be read.",
+            "The resolver could not read one explicit attachment because the path or its "
+            "permissions prevented access. The bundle was rejected before any agent work began, "
+            "and no file body is included in this error. Fix the local permissions or path and "
+            "retry.",
+            "Verify local read permissions for every --attach path.",
+        )
+
+
+class AttachmentUnsupported(_AttachmentFailure):
+    """An attachment is neither a supported image nor UTF-8 text."""
+
+    def __init__(self) -> None:
+        # Rejects binary data instead of silently turning it into corrupted prompt text.
+        super().__init__(
+            "The attached file type is unsupported.",
+            "The resolver accepts UTF-8 text and the native local-image formats only. One "
+            "attachment was neither, so the bundle was rejected before agent execution rather "
+            "than being decoded incorrectly. Convert the file to a supported form and retry.",
+            "Use a UTF-8 text file or a supported local image.",
+        )
+
+
+class AttachmentDuplicate(_AttachmentFailure):
+    """Two attachment arguments resolve to the same file."""
+
+    def __init__(self) -> None:
+        # Duplicate paths would make manifests and downstream context ambiguous.
+        super().__init__(
+            "The same file was attached more than once.",
+            "Two explicit attachment arguments resolved to one file, so the bundle was rejected "
+            "instead of silently changing its order or multiplying its context. No agent work "
+            "started. Remove the duplicate path and retry.",
+            "Pass each resolved file only once with --attach.",
+        )
+
+
+class AttachmentEmpty(_AttachmentFailure):
+    """An attachment contains no bytes."""
+
+    def __init__(self) -> None:
+        # Empty context cannot provide evidence and usually indicates a caller mistake.
+        super().__init__(
+            "Attached files must not be empty.",
+            "One explicit attachment contained zero bytes, so it could not provide usable task "
+            "context. Resolution stopped before credentials, payment, or model execution. Add "
+            "content or remove the empty path and retry.",
+            "Attach a non-empty file or omit the empty path.",
+        )
+
+
+class AttachmentTooLarge(_AttachmentFailure):
+    """One attachment exceeds the per-file byte boundary."""
+
+    def __init__(self) -> None:
+        # Enforces the per-file bound before decoding or provider work.
+        super().__init__(
+            "An attached file exceeds the per-file size limit.",
+            "One explicit attachment is larger than the shared per-file byte boundary, so the "
+            "resolver rejected it before decoding or agent execution. This protects prompt size "
+            "and keeps the input contract predictable. Split or reduce the file and retry.",
+            "Reduce the file below the per-file attachment limit and retry.",
+        )
+
+
+class AttachmentLimitExceeded(_AttachmentFailure):
+    """The attachment bundle exceeds its file-count or total-byte boundary."""
+
+    def __init__(self) -> None:
+        # Enforces aggregate bounds before a future agent can multiply the context cost.
+        super().__init__(
+            "The attachment bundle exceeds its shared limit.",
+            "The explicit attachment set exceeded the maximum file count or total byte budget, "
+            "so resolution stopped before agent execution. Aggregate limits keep multi-agent "
+            "commands from multiplying an unbounded context snapshot. Remove files or reduce "
+            "their size and retry.",
+            "Attach fewer or smaller files and retry.",
+        )
+
+
 class RuntimeAdmissionNotVerified(CliError):
     """The layered admission gate did not admit the local runtime execution."""
 
