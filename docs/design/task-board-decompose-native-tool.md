@@ -228,6 +228,8 @@ No endpoint, capability, admission price, or payment behavior changes.
 | `src/vidbyte_cli/lib/runtime_primitives/task_board.py` | modify | Add capture/tool factory, native agent wiring, and mutable depth-one runner. |
 | `src/vidbyte_cli/lib/runtime_primitives/task_board_system.md` | modify | State the native-tool task contract without fenced syntax. |
 | `src/vidbyte_cli/types/runtime.py` | modify | Add settings fields and named task outcome type. |
+| `src/vidbyte_cli/services/persistence/session.py` | modify | Preserve the typed thread-id boundary under the synchronized SDK's strict type surface. |
+| `scripts/test-layered-runtime-admission-gate.py` | modify | Use the synchronized SDK's canonical failure-code values in existing fixtures. |
 | `scripts/test-task-board-decompose-native-tool.py` | add | Run the focused offline Section 10 verification pack. |
 | `scripts/run_ci.py` | modify | Register the focused verification in the canonical source gate. |
 
