@@ -165,6 +165,8 @@ class CiRunner:
             ),
             # Offline: DAG parsing, topological order, and dep-only context, faked SDK turn.
             ("task board dag", (python, "scripts/test-task-board-dag.py")),
+            # Offline: decompose parser plus in-place splice loop with a faked SDK turn.
+            ("task board decompose", (python, "scripts/test-task-board-decompose.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):

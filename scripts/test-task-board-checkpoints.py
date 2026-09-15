@@ -805,6 +805,8 @@ def test_resume_bounds_rejected_before_admission() -> None:
             "retries_per_task": 1,
             "execution_type": "linear",
             "depends_on": (),
+            "allow_decompose": False,
+            "max_subtasks": 5,
             "model": "",
             "sandbox": "workspace-write",
             "reasoning_effort": "",

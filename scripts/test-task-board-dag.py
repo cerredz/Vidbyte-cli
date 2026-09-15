@@ -115,6 +115,8 @@ def _options(depends_on: tuple[str, ...]) -> TaskBoardOptions:
             "retries_per_task": 1,
             "execution_type": "dag",
             "depends_on": depends_on,
+            "allow_decompose": False,
+            "max_subtasks": 5,
             "model": "",
             "sandbox": "workspace-write",
             "reasoning_effort": "",
