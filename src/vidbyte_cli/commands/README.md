@@ -23,6 +23,9 @@ every invocation, including `--help` and `--version`.
   it.
 - `agent_options.py` — reusable Click option and resolver facade for future agent `--attach`
   integrations; it does not register a command by itself.
+- `agents/` — the `agents suggest` family (`run`, `categories`, `handoff`). Local-only
+  specialized agents have no Vidbyte admission; model-backed runs may use the caller's
+  configured provider, while category inspection and dry-run remain credential-free.
 
 ## Log
 

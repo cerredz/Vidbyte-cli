@@ -32,6 +32,7 @@ from vidbyte_cli.lib.runtime.context import ApplicationContext  # noqa: E402
 from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
 EXPECTED_TOP_LEVEL = {
+    "agents",
     "config",
     "doctor",
     "login",
@@ -41,6 +42,8 @@ EXPECTED_TOP_LEVEL = {
     "runtime",
     "whoami",
 }
+EXPECTED_AGENTS = {"suggest"}
+EXPECTED_SUGGESTION = {"categories", "handoff", "run"}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
 EXPECTED_RUNTIME = {
     "adversarial-team",
@@ -196,9 +199,21 @@ class SurfaceSuite:
         results = self.results
         actual = set(self.program.commands)
         results.check(
-            "the CLI exposes exactly seven top-level commands",
+            "the CLI exposes exactly nine top-level commands",
             actual == EXPECTED_TOP_LEVEL,
             f"got {sorted(actual)}",
+        )
+        results.check(
+            "agents exposes exactly the suggestion group",
+            self._subcommands("agents") == EXPECTED_AGENTS,
+        )
+        agents = self.program.commands["agents"]
+        assert isinstance(agents, click.Group)
+        suggest = agents.commands["suggest"]
+        assert isinstance(suggest, click.Group)
+        results.check(
+            "suggest exposes exactly run, categories, and handoff",
+            set(suggest.commands) == EXPECTED_SUGGESTION,
         )
         research = self._subcommands("research")
         results.check(
