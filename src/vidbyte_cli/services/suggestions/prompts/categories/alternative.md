@@ -1,21 +1,14 @@
 # Alternative
 
 ## Description
-An alternative offers a materially different route to the same goal. It changes the mechanism or commitment structure rather than renaming the current plan.
+An alternative proposes a materially different route to the same meaningful goal. It changes a mechanism, sequence, audience, resource choice, or commitment rather than merely changing the wording. The comparison should expose a real tradeoff in speed, quality, cost, risk, or reversibility. An alternative is most useful before the current route becomes expensive to abandon. It should preserve the original outcome unless the caller is explicitly reconsidering that outcome. The suggestion should say what evidence would make switching worthwhile.
 
-## Goal
-Expose a credible option that improves cost, risk, speed, quality, or reversibility.
-
-## Intent
-Use this type when the current route has meaningful weaknesses or an important decision remains open.
-
-## Timeline
-Alternatives matter before lock-in or when new evidence undermines the current route. Later exploration should have a clear reconsideration trigger.
-
-## Checklist
-- Preserve the original goal.
-- Contrast mechanisms and tradeoffs directly.
-- Identify switching and recovery costs.
-
-## Cautions
-Do not reopen settled decisions without new evidence. Avoid cosmetic variants that add comparison cost without real choice.
+## Things to consider
+- What goal remains constant across the choices?
+- How does the alternative differ in mechanism?
+- Which weakness in the current route does it address?
+- What new costs or risks does it introduce?
+- What would switching require?
+- How reversible is the choice?
+- What evidence should trigger comparison or adoption?
+- What existing decisions must not be reopened without cause?

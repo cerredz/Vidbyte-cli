@@ -63,9 +63,24 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Run one Codex session with 6–100 additional improvement turns |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
-| `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate ranked next-action ideas with handoffs locally (free, no admission) |
-| `vidbyte-cli agents suggest categories` | List the 17 suggestion categories (no model, no credentials) |
+| `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate and independently critique ranked next-action ideas with handoffs |
+| `vidbyte-cli agents suggest categories [--view-all|--view ID]` | Inspect the 31 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
+
+### Suggestion agent
+
+`agents suggest run` takes one nonempty `--goal` plus repeated context and category flags. It
+does not accept a run-level JSON input file: callers pass argv values into one strict request
+model, which keeps defaults and validation in one place. `--count` accepts 2–15, `--rounds`
+accepts 1–3, and `--extra-compute` runs one focused generator context per selected category
+before the independent critic reviews the combined pool. The default run uses the configured
+provider through `vidbyte-sdk`; `--dry-run`, `categories`, and `handoff` are credential-free.
+
+Context is limited to 5,000,000 characters per item and in aggregate, with truncation or
+omission recorded in the result manifest. Category prompts are high-level guidance, and each
+surviving idea carries one primary category, evidence references, decisions, eight-to-ten
+considerations, completion checks, and a deterministic handoff whose authority is not granted
+by the handoff itself.
 
 ### Research threads
 

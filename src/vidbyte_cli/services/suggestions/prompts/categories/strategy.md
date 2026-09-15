@@ -1,21 +1,14 @@
 # Strategy
 
 ## Description
-A strategy suggestion chooses a broader direction, allocation, or sequence for reaching the goal. It coordinates several actions under one coherent rationale.
+A strategy suggestion chooses a broader direction that coordinates several later actions. It makes the important tradeoffs and opportunity costs visible. The direction should constrain choices enough to guide work without pretending that details are already known. A useful strategy connects its rationale to the caller's stated outcome and evidence. It names signs that would confirm or challenge the direction. Strategy is appropriate when local action is blocked by an unresolved allocation or path choice.
 
-## Goal
-Improve the long-run path by making tradeoffs and opportunity costs explicit.
-
-## Intent
-Use this type when local next steps depend on an unresolved direction or investment choice.
-
-## Timeline
-Strategy belongs before multiple downstream commitments diverge. Revisit it only when evidence, constraints, or goals materially change.
-
-## Checklist
-- Connect the direction to the goal.
-- Compare credible alternatives and opportunity costs.
-- Name leading indicators and a review point.
-
-## Cautions
-Do not substitute broad language for decisions. Keep strategy grounded enough to constrain actual next actions.
+## Things to consider
+- What outcome should the direction serve?
+- Which choices does the strategy bring together?
+- What alternatives deserve comparison?
+- What opportunity cost does it accept?
+- Which assumptions carry the most weight?
+- What leading signal would indicate progress?
+- What evidence would invalidate the direction?
+- Which immediate action would make the strategy testable?

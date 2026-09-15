@@ -1,5 +1,11 @@
-Approaches record directions already tried or considered together with their status. Each entry should identify the approach as worked, failed, rejected, or untried and explain what was learned.
+**Title**
+This input is called Approach History. Approach history records directions already tried, considered, or rejected. It gives the agent a named record to read. It keeps this signal separate from unrelated context. It is optional when the caller has no such information. Supply it when the signal could change the next action.
 
-Worked approaches can be extended, while failed and rejected approaches should not be proposed again without materially new evidence. Untried approaches remain legitimate candidates when they fit the goal and constraints.
+**Description**
+Approach history records directions already tried, considered, or rejected. The record should be concise enough to interpret without private history. It should describe the state that matters rather than every event around it. It may contain uncertainty when the caller has not confirmed a claim. It remains task information supplied for this run. Its wording should support a decision rather than advertise an implementation.
 
-Approach history helps distinguish novelty from renamed repetition. Omission means no comparison set was supplied, so the agent must state assumptions cautiously.
+**Why it matters**
+It helps the agent distinguish a genuinely different route from a renamed repetition. It helps the agent avoid a generic answer. It also gives the critic a reason to keep, revise, or reject a candidate. The value of the record depends on its accuracy and freshness. Omit it when it would only add noise. A clear reason makes later review more honest.
+
+**Influence on output**
+Worked directions may be extended, while failed and rejected directions require materially new evidence. The agent should connect a suggestion to this signal when the connection is material. The critic should call out unsupported or conflicting use of it. The final handoff should preserve any boundary that affects safe evaluation. It should not treat this input as permission to execute work. Uncertain signals should lower confidence rather than create false precision.

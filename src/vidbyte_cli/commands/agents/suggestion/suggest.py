@@ -1,8 +1,7 @@
-"""Parses and validates suggest-run options, then invokes the service.
+"""Parses suggest-run options, then invokes the validated suggestion service.
 
-The command validates everything a caller can get wrong before any model or
-provider work starts. Context flags are all optional; only the goal is
-required, either from `--goal` or from the structured `--input` document.
+The command owns only argv shape and Click choices. Request and settings
+validation complete before the service loads the provider or starts an agent.
 """
 
 from __future__ import annotations
@@ -12,6 +11,7 @@ from pathlib import Path
 import click
 
 from ....lib.runtime.context import ApplicationContext as Context
+from ....services.suggestions.categories import SuggestionCategories
 from ....services.suggestions.service import SuggestionService
 from .prompts.library import SuggestionHelpLibrary
 from .render import SuggestionRenderer
@@ -20,7 +20,6 @@ from .request_builder import SuggestionRequestBuilder
 _HELP = SuggestionHelpLibrary()
 _COMMAND_HELP = _HELP.load("run")
 _GOAL_HELP = _HELP.load("goal")
-_INPUT_HELP = _HELP.load("input")
 _CONTEXT_HELP = _HELP.load("context")
 _CONTEXT_FILE_HELP = _HELP.load("context_file")
 _HANDOFF_FILE_HELP = _HELP.load("handoff_file")
@@ -42,6 +41,7 @@ _ROUNDS_HELP = _HELP.load("rounds")
 _PROVIDER_HELP = _HELP.load("provider")
 _MODEL_HELP = _HELP.load("model")
 _CRITIC_MODEL_HELP = _HELP.load("critic_model")
+_EXTRA_COMPUTE_HELP = _HELP.load("extra_compute")
 _MAX_OUTPUT_TOKENS_HELP = _HELP.load("max_output_tokens")
 _MAX_TOTAL_TOKENS_HELP = _HELP.load("max_total_tokens")
 _TIMEOUT_HELP = _HELP.load("timeout")
@@ -63,7 +63,6 @@ class SuggestRunCommand:
         # Attaches run with goal, context, generation, and budget controls.
         @parent.command(name="run", help=_COMMAND_HELP)
         @click.option("--goal", default=None, help=_GOAL_HELP)
-        @click.option("--input", "input_path", default=None, help=_INPUT_HELP)
         @click.option("--context", "contexts", multiple=True, help=_CONTEXT_HELP)
         @click.option(
             "--context-file",
@@ -110,9 +109,15 @@ class SuggestRunCommand:
             help=_PREVIOUS_HELP,
         )
         @click.option(
-            "--count", type=click.IntRange(1, 20), default=5, show_default=True, help=_COUNT_HELP
+            "--count", type=click.IntRange(2, 15), default=5, show_default=True, help=_COUNT_HELP
         )
-        @click.option("--category", "categories", multiple=True, help=_CATEGORY_HELP)
+        @click.option(
+            "--category",
+            "categories",
+            multiple=True,
+            type=click.Choice(SuggestionCategories().ids()),
+            help=_CATEGORY_HELP,
+        )
         @click.option("--all-categories", is_flag=True, default=False, help=_ALL_CATEGORIES_HELP)
         @click.option(
             "--horizon",
@@ -124,23 +129,29 @@ class SuggestRunCommand:
         @click.option(
             "--rounds", type=click.IntRange(1, 3), default=2, show_default=True, help=_ROUNDS_HELP
         )
-        @click.option("--provider", default=None, help=_PROVIDER_HELP)
+        @click.option(
+            "--provider",
+            type=click.Choice(("openai",)),
+            default=None,
+            help=_PROVIDER_HELP,
+        )
         @click.option("--model", "model", default=None, help=_MODEL_HELP)
         @click.option("--critic-model", "critic_model", default=None, help=_CRITIC_MODEL_HELP)
+        @click.option("--extra-compute", is_flag=True, default=False, help=_EXTRA_COMPUTE_HELP)
         @click.option(
             "--max-output-tokens",
-            type=click.IntRange(1, 1000000),
+            type=click.IntRange(1, 5000000),
             default=None,
             help=_MAX_OUTPUT_TOKENS_HELP,
         )
         @click.option(
             "--max-total-tokens",
-            type=click.IntRange(1, 10000000),
+            type=click.IntRange(1, 20000000),
             default=None,
             help=_MAX_TOTAL_TOKENS_HELP,
         )
         @click.option(
-            "--timeout-seconds", type=click.IntRange(1, 3600), default=None, help=_TIMEOUT_HELP
+            "--timeout-seconds", type=click.IntRange(1, 86400), default=None, help=_TIMEOUT_HELP
         )
         @click.option("--dry-run", is_flag=True, default=False, help=_DRY_RUN_HELP)
         @click.pass_obj

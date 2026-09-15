@@ -1,21 +1,14 @@
 # Simplification
 
 ## Description
-A simplification removes scope, components, coordination, or cognitive load while preserving essential value. It makes the work easier to complete and maintain.
+A simplification removes avoidable scope, components, coordination, or cognitive load. It protects the essential result while making the path easier to complete and maintain. The suggestion should name what is removed instead of praising simplicity in the abstract. It should distinguish optional machinery from a requirement that downstream users rely on. A good simplification also notices what new limitation the reduction creates. The proposal is worthwhile when the saved effort or clarity exceeds the value of what is discarded.
 
-## Goal
-Reduce complexity without sacrificing the outcome that makes the task worthwhile.
-
-## Intent
-Use this type when the current design contains optional machinery, duplicated effort, or avoidable coupling.
-
-## Timeline
-Simplify before complexity becomes embedded in dependent work. Retrospective simplification belongs later when immediate change would destabilize delivery.
-
-## Checklist
-- Name what will be removed.
-- State what value remains protected.
-- Verify affected dependencies and behaviors.
-
-## Cautions
-Do not call missing requirements simplicity. Preserve contracts that downstream users already rely on.
+## Things to consider
+- What part of the current work is optional?
+- Which essential value must remain intact?
+- What dependency disappears with the reduction?
+- Who could be affected by the removed scope?
+- What new limitation or tradeoff appears?
+- Can the change be reversed if the premise is wrong?
+- How will the simpler result be verified?
+- What future expansion should remain possible without building it now?

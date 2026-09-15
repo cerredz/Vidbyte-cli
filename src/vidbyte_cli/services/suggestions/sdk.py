@@ -1,11 +1,16 @@
-"""Strict, lazy binding between the suggestion service and the Vidbyte SDK."""
+"""Lazily binds the suggestion service to Vidbyte SDK Codex agents.
+
+This is the only module that imports SDK symbols. It constructs read-only,
+structured-output agents and places one validated custom context primitive in
+each fresh context manager.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 from ...lib.errors.failures import SuggestionSdkUnavailable
 from ...types.suggestions import SuggestionContextPrimitive
@@ -15,17 +20,14 @@ _CONTEXT_MODULE = "vidbyte.context"
 _ERRORS_MODULE = "vidbyte.lib.errors"
 _REQUIRED = (
     "CodexAgentSettings",
-    "CodexForkSettings",
+    "CodexApprovalMode",
     "CodexHarnessAgentSettings",
     "CodexRunInput",
+    "CodexSandbox",
     "CodexThreadSettings",
+    "CodexTurnSettings",
 )
-_BINDING_NAMES = frozenset((*_REQUIRED, "ContextManager"))
-
-
-def _optional_text(owner: str, field_name: str, value: str | None) -> None:
-    if value is not None and (type(value) is not str or not value.strip()):
-        raise ValueError(f"{owner} {field_name} must be None or a non-empty string.")
+_PROVIDER_MAP = {"openai": "openai"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,73 +40,68 @@ class SuggestionSdkBindings:
     schema_error_type: type[Exception]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.symbols, Mapping) or set(self.symbols) != _BINDING_NAMES:
-            raise ValueError(
-                "Suggestion SDK symbols must contain exactly the required Codex and context "
-                "bindings."
-            )
+        expected = frozenset((*_REQUIRED, "ContextManager"))
+        if frozenset(self.symbols) != expected:
+            raise ValueError("Suggestion SDK bindings do not match the required surface.")
         if any(not callable(symbol) for symbol in self.symbols.values()):
-            raise TypeError("Every suggestion SDK symbol must be callable.")
+            raise TypeError("Every suggestion SDK binding must be callable.")
         if not isinstance(self.agent_type, type):
             raise TypeError("Suggestion SDK agent_type must be a class.")
         for field_name in ("provider_error_type", "schema_error_type"):
-            error_type = getattr(self, field_name)
-            if not isinstance(error_type, type) or not issubclass(error_type, Exception):
+            value = getattr(self, field_name)
+            if not isinstance(value, type) or not issubclass(value, Exception):
                 raise TypeError(f"Suggestion SDK {field_name} must be an Exception class.")
         object.__setattr__(self, "symbols", MappingProxyType(dict(self.symbols)))
 
 
 @dataclass(frozen=True, slots=True)
 class SuggestionAgentSettingsInput:
-    """Strict local input used to construct one SDK generator or critic configuration."""
+    """Strict local input for one generator or critic Codex configuration."""
 
     role: Literal["generator", "critic"]
     system_prompt: str
     context: SuggestionContextPrimitive
-    output_schema: type | Mapping[str, Any] | None = None
+    output_schema: type | Mapping[str, Any]
     provider: str | None = None
     model: str | None = None
 
     def __post_init__(self) -> None:
         if self.role not in ("generator", "critic"):
-            raise ValueError("Suggestion agent role must be 'generator' or 'critic'.")
+            raise ValueError("Suggestion agent role must be generator or critic.")
         if type(self.system_prompt) is not str or not self.system_prompt.strip():
-            raise ValueError("Suggestion agent system_prompt must be a non-empty string.")
+            raise ValueError("Suggestion agent system_prompt must be non-empty.")
         if not isinstance(self.context, SuggestionContextPrimitive):
             raise TypeError("Suggestion agent context must be SuggestionContextPrimitive.")
-        if self.output_schema is not None and not isinstance(self.output_schema, (type, Mapping)):
-            raise TypeError("Suggestion agent output_schema must be a class, mapping, or None.")
-        _optional_text("Suggestion agent", "provider", self.provider)
-        _optional_text("Suggestion agent", "model", self.model)
+        if not isinstance(self.output_schema, (type, Mapping)):
+            raise TypeError("Suggestion agent output_schema must be a class or mapping.")
+        for name, value in (("provider", self.provider), ("model", self.model)):
+            if value is not None and (type(value) is not str or not value.strip()):
+                raise ValueError(f"Suggestion agent {name} must be None or non-empty.")
 
 
 @dataclass(frozen=True, slots=True)
 class SuggestionTextInput:
-    """Strict local input for the single text-turn modality used by this workflow."""
+    """Strict local input for the single text turn used by this workflow."""
 
     prompt: str
 
     def __post_init__(self) -> None:
         if type(self.prompt) is not str or not self.prompt.strip():
-            raise ValueError("Suggestion text prompt must be a non-empty string.")
+            raise ValueError("Suggestion text prompt must be non-empty.")
 
 
 class SuggestionAgent(Protocol):
-    """Subset of the SDK agent surface the suggestion workflow drives."""
+    """Subset of CodexHarnessAgent driven by the suggestion workflow."""
 
     thread_id: str
 
     async def arun(self, request: Any) -> Any: ...
 
-    async def afork(self, settings: Any) -> SuggestionAgent: ...
-
 
 class SuggestionSdk:
-    """Hold validated SDK bindings and translate strict local inputs at one boundary."""
+    """Translates strict local values into fresh, read-only Codex agents."""
 
     def __init__(self, bindings: SuggestionSdkBindings) -> None:
-        if not isinstance(bindings, SuggestionSdkBindings):
-            raise TypeError("SuggestionSdk requires validated SuggestionSdkBindings.")
         self._bindings = bindings
 
     @classmethod
@@ -127,40 +124,61 @@ class SuggestionSdk:
         return cls(bindings)
 
     def agent(self, settings: Any) -> SuggestionAgent:
-        """Construct a root SDK agent from already translated SDK settings."""
-        created: SuggestionAgent = self._bindings.agent_type(settings)
-        return created
+        """Construct one new SDK agent from already validated settings."""
+        return cast(SuggestionAgent, self._bindings.agent_type(settings))
 
     def run_input(self, request: SuggestionTextInput) -> Any:
-        """Translate one validated local text request into the SDK input type."""
+        """Translate one local text request into the SDK's typed input."""
         if not isinstance(request, SuggestionTextInput):
             raise TypeError("run_input requires SuggestionTextInput.")
         return self._bindings.symbols["CodexRunInput"].text(request.prompt)
 
     def is_provider_error(self, error: Exception) -> bool:
+        """Identify SDK transport/host failures without importing SDK types elsewhere."""
         return isinstance(error, self._bindings.provider_error_type)
 
     def is_schema_error(self, error: Exception) -> bool:
+        """Identify a provider reply that violated the declared output schema."""
         return isinstance(error, self._bindings.schema_error_type)
 
     def agent_settings(self, request: SuggestionAgentSettingsInput) -> Any:
-        """Translate one validated local settings object into pinned SDK dataclasses."""
+        """Build the exact read-only SDK settings for one independent context window."""
         if not isinstance(request, SuggestionAgentSettingsInput):
             raise TypeError("agent_settings requires SuggestionAgentSettingsInput.")
-        thread = self._bindings.symbols["CodexThreadSettings"](
-            model=request.model or "",
-            model_provider=request.provider or "",
+        symbols = self._bindings.symbols
+        provider = "" if request.provider is None else _PROVIDER_MAP.get(request.provider)
+        if request.provider is not None and provider is None:
+            raise ValueError(f"Unsupported suggestion provider: {request.provider}")
+        sandbox = symbols["CodexSandbox"].READ_ONLY
+        deny = symbols["CodexApprovalMode"].DENY_ALL
+        codex = symbols["CodexAgentSettings"](
+            thread=symbols["CodexThreadSettings"](
+                model=request.model or "",
+                model_provider=provider or "",
+                sandbox=sandbox,
+                approval_mode=deny,
+            ),
+            turn=symbols["CodexTurnSettings"](
+                model=request.model or "",
+                sandbox=sandbox,
+                approval_mode=deny,
+            ),
         )
-        codex = self._bindings.symbols["CodexAgentSettings"](thread=thread)
-        return self._bindings.symbols["CodexHarnessAgentSettings"](
+        manager = symbols["ContextManager"]()
+        manager.place_after_system_prompt(request.context)
+        return symbols["CodexHarnessAgentSettings"](
             name=f"suggestion-{request.role}",
             system_prompt=request.system_prompt,
             codex=codex,
-            context_manager=self._context_manager(request.context),
+            context_manager=manager,
             output_schema=request.output_schema,
         )
 
-    def _context_manager(self, context: SuggestionContextPrimitive) -> Any:
-        manager = self._bindings.symbols["ContextManager"]()
-        manager.place_after_system_prompt(context)
-        return manager
+
+__all__ = [
+    "SuggestionAgent",
+    "SuggestionAgentSettingsInput",
+    "SuggestionSdk",
+    "SuggestionSdkBindings",
+    "SuggestionTextInput",
+]

@@ -2419,15 +2419,15 @@ class SuggestionInputInvalid(CliError):
     def __init__(self) -> None:
         # Never echoes goal text or file bodies, which can carry private task data.
         super().__init__(
-            "Supply a nonempty goal or a valid --input document, not both.",
+            "Supply a nonempty goal and valid suggestion settings.",
             description=(
-                "A suggestion run needs exactly one goal source: --goal or a JSON --input "
-                "document, with --input mutually exclusive from individual goal and context "
-                "flags. An empty goal, a non-object document, or an unknown idea id also "
-                "fails here. Nothing was read from providers and no model was called."
+                "A suggestion run receives its goal and settings from the declared command "
+                "flags, and those values must form one strict request. An empty goal, an "
+                "out-of-range setting, or a malformed value fails here. Nothing was read "
+                "from providers and no model was called."
             ),
             trace="SuggestRunCommand validated the request before building context.",
-            hint="Run with --goal 'outcome' or --input request.json, not both.",
+            hint="Run with --goal 'outcome' and keep --count between 2 and 15.",
         )
 
 
@@ -2490,7 +2490,7 @@ class SuggestionLimitExceeded(CliError):
                 "provider work started."
             ),
             trace="SuggestRunCommand validated generation controls before the service.",
-            hint="Use --count 1-20, --rounds 1-3, and positive token/timeout values.",
+            hint="Use --count 2-15, --rounds 1-3, and positive token/timeout values.",
         )
 
 
@@ -2511,7 +2511,9 @@ class SuggestionProviderFailed(CliError):
                 "Partial reviewed batches are preserved where the service kept them."
             ),
             trace="SuggestionService drove one generator or critic turn via the SDK.",
-            hint="Retry, or rerun without provider flags for the offline path.",
+            hint=(
+                "Retry the provider run, or use --dry-run to validate the request without a model."
+            ),
             cause=cause,
         )
 
@@ -2529,8 +2531,8 @@ class SuggestionSdkUnavailable(CliError):
             description=(
                 "Suggestion SDK symbols resolve lazily so help and category listing work "
                 "without them. A run that explicitly requires provider execution fails here "
-                "when the pinned SDK revision is absent or predates the integration. The "
-                "deterministic offline path remains available without provider flags."
+                "when the pinned SDK revision is absent or predates the integration. Category "
+                "inspection and request validation remain available without provider flags."
             ),
             trace="SuggestionSdk resolved Codex agent symbols at call time.",
             hint="Install the SDK revision pinned in pyproject.toml.",

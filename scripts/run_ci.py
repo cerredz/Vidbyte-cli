@@ -35,6 +35,7 @@ _WHEEL_PROMPTS = (
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
     "vidbyte_cli/services/suggestions/prompts/critic.md",
     "vidbyte_cli/services/suggestions/prompts/generator.md",
+    "vidbyte_cli/services/suggestions/prompts/revision.md",
     *(
         f"vidbyte_cli/commands/agents/suggestion/prompts/{name}.md"
         for name in (
@@ -62,6 +63,7 @@ _WHEEL_PROMPTS = (
             "provider",
             "model",
             "critic_model",
+            "extra_compute",
             "max_output_tokens",
             "max_total_tokens",
             "timeout",
@@ -76,6 +78,8 @@ _WHEEL_PROMPTS = (
             "trajectory",
             "context_primitive",
             "categories",
+            "view_all",
+            "view",
         )
     ),
     *(
@@ -98,6 +102,20 @@ _WHEEL_PROMPTS = (
             "cross_domain",
             "preparation",
             "coordination",
+            "goal_clarification",
+            "creative_exploration",
+            "delegation",
+            "learning",
+            "feedback",
+            "reframing",
+            "prioritization",
+            "immediate_next_steps",
+            "quick_wins",
+            "long_term_directions",
+            "big_bets",
+            "business_growth",
+            "product_experience",
+            "technical_possibilities",
         )
     ),
 )

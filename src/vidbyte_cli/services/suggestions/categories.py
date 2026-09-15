@@ -1,150 +1,270 @@
-"""Loads the suggestion agent's versioned category definitions.
+"""Owns the single versioned vocabulary of suggestion categories.
 
-Each category is authored as a reviewable Markdown prompt asset and parsed
-into one immutable definition. The registry is the shared source for caller
-inspection, multi-category selection, prompt context, and result validation.
+The registry maps each accepted identifier to exactly one authored prompt asset.
+Commands, agent context, and result validation all consume this same mapping.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib import resources
 
 SCHEMA_VERSION = 1
-
-_CATEGORY_IDS = (
-    "continuation",
-    "prerequisite",
-    "completion",
-    "bottleneck",
-    "verification",
-    "experiment",
-    "investigation",
-    "alternative",
-    "simplification",
-    "stop_or_defer",
-    "risk_prevention",
-    "leverage",
-    "strategy",
-    "adjacent_opportunity",
-    "cross_domain",
-    "preparation",
-    "coordination",
-)
-_REQUIRED_SECTIONS = ("Description", "Goal", "Intent", "Timeline", "Checklist", "Cautions")
-_CATEGORY_PACKAGE = "vidbyte_cli.services.suggestions.prompts.categories"
 
 
 @dataclass(frozen=True, slots=True)
 class CategoryDefinition:
-    """One fully authored suggestion category and its model-facing source."""
+    """One category identifier and its high-level caller-facing summary."""
 
     category_id: str
     title: str
-    description: str
-    goal: str
-    intent: str
-    timeline: str
-    checklist: tuple[str, ...]
-    cautions: str
-    prompt: str
+    summary: str
+    prompt_name: str
 
-    def __post_init__(self) -> None:
-        scalar_fields = (
-            self.category_id,
-            self.title,
-            self.description,
-            self.goal,
-            self.intent,
-            self.timeline,
-            self.cautions,
-            self.prompt,
-        )
-        if any(not isinstance(value, str) or not value.strip() for value in scalar_fields):
-            raise ValueError("Category definition fields must be non-empty strings.")
-        if not self.checklist or any(not item.strip() for item in self.checklist):
-            raise ValueError("Category definitions require a non-empty checklist.")
-
-
-class CategoryDefinitionLibrary:
-    """Parses detailed category Markdown from installed package resources."""
-
-    def load(self, category_id: str) -> CategoryDefinition:
-        source = resources.files(_CATEGORY_PACKAGE).joinpath(f"{category_id}.md")
-        prompt = source.read_text(encoding="utf-8").strip()
-        title, sections = self._sections(prompt)
-        missing = tuple(name for name in _REQUIRED_SECTIONS if not sections.get(name))
-        if missing:
-            names = ", ".join(missing)
-            raise ValueError(f"Category {category_id!r} is missing sections: {names}.")
-        checklist = tuple(
-            line.removeprefix("- ").strip()
-            for line in sections["Checklist"].splitlines()
-            if line.strip().startswith("- ")
-        )
-        return CategoryDefinition(
-            category_id=category_id,
-            title=title,
-            description=sections["Description"],
-            goal=sections["Goal"],
-            intent=sections["Intent"],
-            timeline=sections["Timeline"],
-            checklist=checklist,
-            cautions=sections["Cautions"],
-            prompt=prompt,
-        )
-
-    def _sections(self, prompt: str) -> tuple[str, dict[str, str]]:
-        title = ""
-        active = ""
-        sections: dict[str, list[str]] = {}
-        for line in prompt.splitlines():
-            if line.startswith("# ") and not title:
-                title = line[2:].strip()
-                continue
-            if line.startswith("## "):
-                active = line[3:].strip()
-                sections.setdefault(active, [])
-                continue
-            if active:
-                sections[active].append(line)
-        normalized = {name: "\n".join(lines).strip() for name, lines in sections.items()}
-        return title, normalized
+    @property
+    def description(self) -> str:
+        """Keep the public description name readable to existing consumers."""
+        return self.summary
 
 
 class SuggestionCategories:
-    """Registry of the 17 v1 categories in stable presentation order."""
+    """Provides the ordered category registry and one-to-one prompt mapping."""
 
     def __init__(self) -> None:
-        library = CategoryDefinitionLibrary()
-        self._definitions = tuple(library.load(category_id) for category_id in _CATEGORY_IDS)
+        self._definitions = (
+            CategoryDefinition(
+                "continuation",
+                "Continuation",
+                "Advance an accepted plan with its next bounded step.",
+                "continuation",
+            ),
+            CategoryDefinition(
+                "prerequisite",
+                "Prerequisite",
+                "Create or secure a condition required by intended work.",
+                "prerequisite",
+            ),
+            CategoryDefinition(
+                "completion",
+                "Completion",
+                "Close a specific unfinished obligation in the current task.",
+                "completion",
+            ),
+            CategoryDefinition(
+                "bottleneck",
+                "Bottleneck",
+                "Relieve the constraint that limits useful progress.",
+                "bottleneck",
+            ),
+            CategoryDefinition(
+                "verification",
+                "Verification",
+                "Test a consequential claim before relying on it.",
+                "verification",
+            ),
+            CategoryDefinition(
+                "experiment",
+                "Experiment",
+                "Run a bounded test that can change a decision.",
+                "experiment",
+            ),
+            CategoryDefinition(
+                "investigation",
+                "Investigation",
+                "Gather the smallest reliable evidence needed for a decision.",
+                "investigation",
+            ),
+            CategoryDefinition(
+                "alternative",
+                "Alternative",
+                "Compare a materially different route to the same goal.",
+                "alternative",
+            ),
+            CategoryDefinition(
+                "simplification",
+                "Simplification",
+                "Remove complexity while preserving essential value.",
+                "simplification",
+            ),
+            CategoryDefinition(
+                "stop_or_defer",
+                "Stop or Defer",
+                "Stop or postpone work whose present value is insufficient.",
+                "stop_or_defer",
+            ),
+            CategoryDefinition(
+                "risk_prevention",
+                "Risk Prevention",
+                "Prevent a plausible failure with a proportionate guard.",
+                "risk_prevention",
+            ),
+            CategoryDefinition(
+                "leverage",
+                "Leverage",
+                "Create one asset that benefits several credible future tasks.",
+                "leverage",
+            ),
+            CategoryDefinition(
+                "strategy",
+                "Strategy",
+                "Choose a broader direction that coordinates several actions.",
+                "strategy",
+            ),
+            CategoryDefinition(
+                "adjacent_opportunity",
+                "Adjacent Opportunity",
+                "Capture nearby value enabled by current work.",
+                "adjacent_opportunity",
+            ),
+            CategoryDefinition(
+                "cross_domain",
+                "Cross-Domain",
+                "Transfer a useful mechanism from another field.",
+                "cross_domain",
+            ),
+            CategoryDefinition(
+                "preparation",
+                "Preparation",
+                "Build readiness for an anticipated event or demand.",
+                "preparation",
+            ),
+            CategoryDefinition(
+                "coordination",
+                "Coordination",
+                "Resolve ownership, sequencing, or dependency alignment.",
+                "coordination",
+            ),
+            CategoryDefinition(
+                "goal_clarification",
+                "Goal Clarification",
+                "Define the intended outcome and how success will be recognized.",
+                "goal_clarification",
+            ),
+            CategoryDefinition(
+                "creative_exploration",
+                "Creative Exploration",
+                "Generate concrete possibilities outside current assumptions.",
+                "creative_exploration",
+            ),
+            CategoryDefinition(
+                "delegation",
+                "Delegation",
+                "Move work to the person or agent best placed to carry it.",
+                "delegation",
+            ),
+            CategoryDefinition(
+                "learning",
+                "Learning",
+                "Build the smallest useful skill or knowledge for an upcoming task.",
+                "learning",
+            ),
+            CategoryDefinition(
+                "feedback",
+                "Feedback",
+                "Seek a specific reaction that could change the work.",
+                "feedback",
+            ),
+            CategoryDefinition(
+                "reframing",
+                "Reframing",
+                "Interpret the problem differently to unlock a better next move.",
+                "reframing",
+            ),
+            CategoryDefinition(
+                "prioritization",
+                "Prioritization",
+                "Choose what deserves attention among competing commitments.",
+                "prioritization",
+            ),
+            CategoryDefinition(
+                "immediate_next_steps",
+                "Immediate Next Steps",
+                "Identify what can be acted on now from the current state.",
+                "immediate_next_steps",
+            ),
+            CategoryDefinition(
+                "quick_wins",
+                "Quick Wins",
+                "Find a small, inexpensive action with useful near-term payoff.",
+                "quick_wins",
+            ),
+            CategoryDefinition(
+                "long_term_directions",
+                "Long-Term Directions",
+                "Consider capabilities or directions worth pursuing over time.",
+                "long_term_directions",
+            ),
+            CategoryDefinition(
+                "big_bets",
+                "Big Bets",
+                "Examine ambitious changes with high upside and meaningful uncertainty.",
+                "big_bets",
+            ),
+            CategoryDefinition(
+                "business_growth",
+                "Business and Growth",
+                "Improve reach, sustainability, revenue, or customer value.",
+                "business_growth",
+            ),
+            CategoryDefinition(
+                "product_experience",
+                "Product and Experience",
+                "Improve what people can use and how it feels to use it.",
+                "product_experience",
+            ),
+            CategoryDefinition(
+                "technical_possibilities",
+                "Technical Possibilities",
+                "Explore what technology could make materially better or possible.",
+                "technical_possibilities",
+            ),
+        )
         self._by_id = {item.category_id: item for item in self._definitions}
 
     def ids(self) -> tuple[str, ...]:
+        """Return identifiers in stable display and selection order."""
         return tuple(item.category_id for item in self._definitions)
 
     def definitions(self) -> tuple[CategoryDefinition, ...]:
+        """Return the immutable registry entries."""
         return self._definitions
 
     def is_known(self, category_id: str) -> bool:
+        """Accept only exact registry identifiers."""
         return category_id in self._by_id
 
     def require_known(self, category_ids: tuple[str, ...]) -> tuple[str, ...]:
+        """Validate selected identifiers without adding inferred categories."""
         unknown = [item for item in category_ids if item not in self._by_id]
         if unknown:
             raise ValueError(f"unknown suggestion categories: {', '.join(sorted(unknown))}")
+        if len(set(category_ids)) != len(category_ids):
+            raise ValueError("suggestion categories must not contain duplicates")
         return category_ids
 
     def describe(self, category_id: str) -> CategoryDefinition:
+        """Return one already-validated category definition."""
         return self._by_id[category_id]
 
+    def category_prompt_exists(self, prompt_name: str) -> bool:
+        """Check that one registry entry resolves to a packaged prompt asset."""
+        from .prompts.library import SuggestionPrompts
+
+        try:
+            return bool(SuggestionPrompts().category_prompt(prompt_name))
+        except (FileNotFoundError, OSError):
+            return False
+
     def prompt_section(self, category_ids: tuple[str, ...] | None = None) -> str:
+        """Render exactly the selected prompt assets in the selected order."""
+        from .prompts.library import SuggestionPrompts
+
         selected = (
             self._definitions
             if not category_ids
             else tuple(self._by_id[item] for item in category_ids)
         )
-        return "\n\n".join(item.prompt for item in selected)
+        prompts = SuggestionPrompts()
+        return "\n\n".join(prompts.category_prompt(item.prompt_name) for item in selected)
 
 
-__all__ = ["CategoryDefinition", "CategoryDefinitionLibrary", "SuggestionCategories"]
+__all__ = ["SCHEMA_VERSION", "CategoryDefinition", "SuggestionCategories"]

@@ -1,21 +1,14 @@
 # Verification
 
 ## Description
-A verification tests a consequential claim about requirements, implementation, assumptions, or results. It turns plausible confidence into inspectable evidence.
+A verification suggestion tests a claim that matters to the caller's next decision. The claim may concern requirements, evidence, behavior, readiness, or the result of earlier work. The check should be narrower than the entire goal while still being relevant to the risk of proceeding. A useful verification states what would count as support and what would change if the claim failed. It should rely on an observable or authoritative source rather than repeating an assumption. Verification protects both delivery and the honesty of the final status.
 
-## Goal
-Resolve whether a claim is true and state what changes when the check fails.
-
-## Intent
-Use this type when proceeding without evidence could conceal a meaningful defect or mistaken premise.
-
-## Timeline
-Verify before irreversible decisions and before claiming completion. Lower-impact checks may follow the primary delivery when recovery remains easy.
-
-## Checklist
-- State the exact claim under test.
-- Choose a deterministic or authoritative check.
-- Define pass, fail, and follow-up outcomes.
-
-## Cautions
-Do not substitute a narrow check for a broad claim. Avoid tests that merely repeat the implementation's own assumptions.
+## Things to consider
+- What exact claim needs checking?
+- Why would being wrong matter now?
+- Which source or observation is authoritative?
+- What counts as support, failure, or uncertainty?
+- What decision follows each possible result?
+- Is the check broad enough for the claim?
+- Can it be performed without creating new risk?
+- What evidence should be retained for later review?

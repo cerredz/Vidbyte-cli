@@ -1,16 +1,15 @@
-"""Builds one validated suggestion request from parsed command values.
+"""Builds one strict suggestion request from parsed command values.
 
-The command adapter delegates all source selection, JSON loading, context
-grouping, and settings normalization to this collaborator. File reads and
-model-independent validation finish before the service can begin reasoning.
+The adapter owns source grouping and settings normalization. It completes all
+file reads and model-independent validation before the service loads a provider.
 """
 
 from __future__ import annotations
 
-import json
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from ....lib.errors.failures import (
     SuggestionCategoryUnknown,
@@ -70,19 +69,6 @@ _HELP_ASSET_BY_KIND = {
     "handoff-file": "handoff_file",
     "previous-suggestions": "previous_suggestions",
 }
-_MIXED_SOURCE_FIELDS = (
-    "goal",
-    *tuple(spec.input_name for spec in _CONTEXT_FIELDS),
-    "context_files",
-    "handoff_file",
-    "artifacts",
-    "previous_suggestions",
-)
-_INPUT_SETTING_DEFAULTS: tuple[tuple[str, object], ...] = (
-    ("count", 5),
-    ("rounds", 2),
-    ("horizon", "any"),
-)
 _HELP = SuggestionHelpLibrary()
 
 
@@ -90,12 +76,6 @@ class SuggestionRequestBuilder:
     """Resolves one authoritative input source into a service request."""
 
     def build(self, raw: dict[str, object]) -> SuggestionRequest:
-        input_path = raw.get("input_path")
-        if isinstance(input_path, str) and input_path:
-            return self._from_input(input_path, raw)
-        return self._from_fields(raw)
-
-    def _from_fields(self, raw: dict[str, object]) -> SuggestionRequest:
         goal = self._goal(raw.get("goal"))
         categories = self._categories(raw.get("categories"))
         try:
@@ -104,72 +84,41 @@ class SuggestionRequestBuilder:
             )
         except ValueError as error:
             raise SuggestionContextUnreadable(str(error)) from error
-        settings = SuggestionSettings(
-            requested_count=self._required_int(raw.get("count"), 5),
-            categories=categories,
-            all_categories=bool(raw.get("all_categories")),
-            horizon=SuggestionHorizon(str(raw.get("horizon") or "any")),
-            rounds=self._required_int(raw.get("rounds"), 2),
-            provider=self._optional_str(raw.get("provider")),
-            model=self._optional_str(raw.get("model")),
-            critic_model=self._optional_str(raw.get("critic_model")),
-            max_output_tokens=self._optional_int(raw.get("max_output_tokens")),
-            max_total_tokens=self._optional_int(raw.get("max_total_tokens")),
-            timeout_seconds=self._optional_int(raw.get("timeout_seconds")),
-            dry_run=bool(raw.get("dry_run")),
-        )
+        try:
+            settings = SuggestionSettings(
+                requested_count=self._required_int(raw.get("count"), 5),
+                categories=categories,
+                all_categories=bool(raw.get("all_categories")),
+                extra_compute=bool(raw.get("extra_compute")),
+                horizon=SuggestionHorizon(str(raw.get("horizon") or "any")),
+                rounds=self._required_int(raw.get("rounds"), 2),
+                provider=self._optional_str(raw.get("provider")),
+                model=self._optional_str(raw.get("model")),
+                critic_model=self._optional_str(raw.get("critic_model")),
+                max_output_tokens=self._optional_int(raw.get("max_output_tokens")),
+                max_total_tokens=self._optional_int(raw.get("max_total_tokens")),
+                timeout_seconds=self._optional_int(raw.get("timeout_seconds")),
+                dry_run=bool(raw.get("dry_run")),
+            )
+        except (ValidationError, ValueError) as error:
+            raise SuggestionInputInvalid() from error
         items = self._describe(snapshot.items)
         context = SuggestionContextPrimitive(
             goal=goal,
             description=_HELP.load("context_primitive"),
             items=items,
+            selected_categories=SuggestionCategories().prompt_section(categories),
         )
-        return SuggestionRequest(goal=goal, context=context, settings=settings)
-
-    def _from_input(self, input_path: str, raw: dict[str, object]) -> SuggestionRequest:
-        self._reject_mixed_sources(raw)
-        document = self._read_document(input_path)
-        return self._from_fields(self._merge_document(document, raw))
-
-    def _reject_mixed_sources(self, raw: dict[str, object]) -> None:
-        if any(bool(raw.get(name)) for name in _MIXED_SOURCE_FIELDS):
-            raise SuggestionInputInvalid()
-
-    def _read_document(self, input_path: str) -> dict[str, object]:
         try:
-            document = (
-                json.load(sys.stdin)
-                if input_path == "-"
-                else json.loads(Path(input_path).read_text(encoding="utf-8"))
+            return SuggestionRequest(
+                goal=goal,
+                context=context,
+                context_manifest=snapshot.manifest,
+                context_warnings=snapshot.warnings,
+                settings=settings,
             )
-        except (OSError, json.JSONDecodeError) as error:
-            raise SuggestionContextUnreadable(str(error)) from error
-        if not isinstance(document, dict):
-            raise SuggestionInputInvalid()
-        if document.get("schema_version", 1) != 1:
-            raise SuggestionContextUnreadable("unsupported schema version")
-        self._goal(document.get("goal"))
-        return document
-
-    def _merge_document(
-        self, document: dict[str, object], raw: dict[str, object]
-    ) -> dict[str, object]:
-        merged = dict(raw)
-        merged["goal"] = self._goal(document.get("goal"))
-        settings = self._mapping_section(document, "settings")
-        for name, default in _INPUT_SETTING_DEFAULTS:
-            if merged.get(name) in (None, default) and name in settings:
-                merged[name] = settings[name]
-        context = self._mapping_section(document, "context")
-        for spec in _CONTEXT_FIELDS:
-            value = context.get(spec.input_name)
-            if isinstance(value, list) and not merged.get(spec.input_name):
-                merged[spec.input_name] = tuple(str(item) for item in value)
-        return merged
-
-    def _mapping_section(self, document: dict[str, object], name: str) -> dict[str, object]:
-        section = document.get(name, {})
-        return section if isinstance(section, dict) else {}
+        except ValidationError as error:
+            raise SuggestionInputInvalid() from error
 
     def _context_fields(self, raw: dict[str, object]) -> dict[str, tuple[str, ...]]:
         fields: dict[str, tuple[str, ...]] = {}
@@ -191,7 +140,7 @@ class SuggestionRequestBuilder:
         self, items: tuple[SuggestionContextItem, ...]
     ) -> tuple[SuggestionContextItem, ...]:
         return tuple(
-            item.model_copy(update={"description": _HELP.summary(_HELP_ASSET_BY_KIND[item.kind])})
+            item.model_copy(update={"description": _HELP.load(_HELP_ASSET_BY_KIND[item.kind])})
             for item in items
         )
 

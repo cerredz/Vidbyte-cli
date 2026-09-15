@@ -1,21 +1,14 @@
 # Continuation
 
 ## Description
-A continuation is the next concrete action in an already accepted plan. It advances the current route without reopening settled strategy.
+A continuation advances a plan that the caller has already accepted. It focuses on the next concrete movement rather than reopening the whole direction. The action should use what is already known and available. Its value comes from reducing delay between one completed step and the next. A continuation is different from a new strategy because it preserves the current route. The suggestion should make progress visible without creating unnecessary new commitments.
 
-## Goal
-Preserve momentum by identifying the smallest unblocked step that produces visible progress.
-
-## Intent
-Use this type when the plan is sound and the main question is what should happen next.
-
-## Timeline
-Continuation work normally belongs in the now or next horizon. It should start as soon as its prerequisites are available.
-
-## Checklist
-- Name the current plan and active stage.
-- Identify one bounded next action.
-- State the observable completion signal.
-
-## Cautions
-Do not disguise a strategy change as continuation. Avoid repeating completed or in-progress work.
+## Things to consider
+- Which accepted plan or commitment is this continuing?
+- What is the smallest unblocked action?
+- What evidence shows that the current route still makes sense?
+- What observable result will mark this step complete?
+- Which known dependency must be checked first?
+- What prior decision should remain undisturbed?
+- What could make this continuation premature?
+- What should the caller do if the step reveals a changed direction?

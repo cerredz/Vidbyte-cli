@@ -1,484 +1,512 @@
-"""Runs one suggestion workflow from validated request to ranked result.
-
-Generation uses a deterministic template over the category registry so a
-goal-only call works offline with no credentials. When the SDK and provider
-configuration are available the same candidates flow through the critic loop;
-otherwise the template review stands in. The loop shape (pool cap, rounds,
-limits) is computed here, never chosen by a model.
-"""
+"""Runs the SDK-backed suggestion generation, critique, and revision workflow."""
 
 from __future__ import annotations
 
-import hashlib
+import asyncio
+import json
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from typing import Any, Literal, cast
 from uuid import uuid4
 
+from ...lib.errors.failures import (
+    SuggestionInputInvalid,
+    SuggestionProviderFailed,
+    SuggestionSdkUnavailable,
+)
 from ...types.suggestions import (
-    ContextManifestEntry,
-    IdeaHorizon,
-    IdeaReadiness,
-    IdeaRelationship,
+    CritiqueConfidence,
+    CritiqueConstraint,
+    CritiqueEvidenceCheck,
+    CritiqueVerdict,
     RunStatus,
     StopReason,
-    SuggestionHandoff,
+    SuggestionCandidateBatch,
+    SuggestionContextPrimitive,
+    SuggestionCritique,
+    SuggestionCritiqueArtifact,
+    SuggestionDraft,
+    SuggestionHorizon,
     SuggestionIdea,
     SuggestionRequest,
     SuggestionResult,
-    SuggestionSettings,
 )
 from .categories import SuggestionCategories
+from .extra_compute import ExtraComputeService
 from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
+from .sdk import SuggestionAgentSettingsInput, SuggestionSdk, SuggestionTextInput
 from .selection import SuggestionSelection
 
 _POOL_MULTIPLE = 2
 _POOL_CAP = 40
-_UNBLOCKING_CATEGORIES = frozenset(("prerequisite", "bottleneck", "alternative", "coordination"))
+
+
+class _WorkflowLimit(Exception):
+    """Internal control flow for a caller-owned time or token boundary."""
+
+    def __init__(self, reason: StopReason) -> None:
+        self.reason = reason
+
+
+@dataclass(frozen=True, slots=True)
+class _WorkflowOutcome:
+    """Fully reviewed ideas plus accounting and the reason the loop stopped."""
+
+    ideas: tuple[SuggestionIdea, ...]
+    usage: dict[str, int]
+    stop_reason: StopReason
+    warnings: tuple[str, ...] = ()
 
 
 class SuggestionService:
-    """Orchestrates context, generation, critique, selection, and handoff."""
+    """Coordinates independent SDK agents and deterministic selection boundaries."""
 
-    def __init__(self) -> None:
-        # Collaborators are constructed per run to keep the service stateless.
+    def __init__(self, sdk: Any | None = None) -> None:
+        # Injection keeps offline verification at the same typed agent boundary as production.
+        self._sdk = sdk
         self._categories = SuggestionCategories()
         self._selection = SuggestionSelection()
         self._handoffs = SuggestionHandoffBuilder()
         self._prompts = SuggestionPrompts()
 
     def run(self, request: SuggestionRequest) -> SuggestionResult:
-        # Single synchronous boundary; every step below shares this validation.
+        """Validate one request, run the loop, and return a versioned result."""
+        if not isinstance(request, SuggestionRequest):
+            raise SuggestionInputInvalid()
+        if request.settings.dry_run:
+            return self._result(request, _WorkflowOutcome((), {}, StopReason.DRY_RUN))
+        sdk = self._sdk or SuggestionSdk.load()
+        try:
+            outcome = asyncio.run(self._run(request, sdk))
+        except (SuggestionSdkUnavailable, SuggestionProviderFailed):
+            raise
+        except Exception as error:
+            raise SuggestionProviderFailed(error) from error
+        return self._result(request, outcome)
+
+    async def _run(self, request: SuggestionRequest, sdk: Any) -> _WorkflowOutcome:
         started = time.monotonic()
-        settings = request.settings
-        if settings.dry_run:
-            return self._dry_run(request)
-        pool_size = self._pool_size(settings.requested_count)
-        allowed = self._allowed_categories(settings, request)
-        candidates = self._generate(request, allowed, pool_size)
-        reviewed = self._critique(candidates, request)
-        eligible = self._selection.validate_evidence(reviewed, self._manifest_refs(request))
-        deduped = self._selection.deduplicate(eligible)
-        rejected = self._rejected_terms(request)
-        kept = self._selection.suppress_rejected(deduped, rejected)
-        trimmed = list(kept[: settings.requested_count])
-        final = self._attach_handoffs(trimmed, request)
-        ranked = self._selection.rank(tuple(final), settings.requested_count)
-        status = self._status(ranked, settings)
-        warnings = self._warnings(ranked, settings, request)
-        elapsed = time.monotonic() - started
-        stop = self._stop_reason(ranked, settings, elapsed)
+        usage = {"tokens": 0, "agent_calls": 0, "generation_calls": 0, "critique_calls": 0}
+        categories = request.settings.categories or self._categories.ids()
+        pool_size = min(request.settings.requested_count * _POOL_MULTIPLE, _POOL_CAP)
+        last_reviewed: tuple[SuggestionIdea, ...] = ()
+        warnings: list[str] = list(request.context_warnings)
+        drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...]
+        try:
+            if request.settings.extra_compute:
+                drafts = await ExtraComputeService(self._categories, self._prompts).generate(
+                    request,
+                    categories,
+                    pool_size,
+                    lambda role, prompt, context, model: self._call_agent(
+                        sdk,
+                        role,
+                        self._prompts.generator_system(),
+                        prompt,
+                        context,
+                        model,
+                        SuggestionCandidateBatch,
+                        request,
+                        started,
+                        usage,
+                        "generation",
+                    ),
+                )
+            else:
+                drafts = await self._generate(request, sdk, categories, pool_size, started, usage)
+            current = self._ideas_from_drafts(drafts, request)
+            if not current:
+                return _WorkflowOutcome((), usage, StopReason.COUNT_SHORTFALL, tuple(warnings))
+
+            for round_index in range(request.settings.rounds):
+                self._check_limit(request, started, usage)
+                artifact = await self._critique(request, sdk, categories, current, started, usage)
+                kept, revisions = self._review(current, artifact)
+                last_reviewed = self._merge_reviewed(last_reviewed, self._finalize(kept, request))
+                if not revisions:
+                    reason = (
+                        StopReason.COMPLETED
+                        if len(last_reviewed) >= request.settings.requested_count
+                        else StopReason.COUNT_SHORTFALL
+                    )
+                    return _WorkflowOutcome(last_reviewed, usage, reason, tuple(warnings))
+                if round_index == request.settings.rounds - 1:
+                    return _WorkflowOutcome(
+                        last_reviewed, usage, StopReason.ROUND_LIMIT, tuple(warnings)
+                    )
+                self._check_limit(request, started, usage)
+                current = await self._revise(
+                    request, sdk, categories, current, revisions, started, usage
+                )
+                if not current:
+                    return _WorkflowOutcome(
+                        last_reviewed, usage, StopReason.COUNT_SHORTFALL, tuple(warnings)
+                    )
+        except _WorkflowLimit as limit:
+            return _WorkflowOutcome(last_reviewed, usage, limit.reason, tuple(warnings))
+        return _WorkflowOutcome(last_reviewed, usage, StopReason.ROUND_LIMIT, tuple(warnings))
+
+    async def _generate(
+        self,
+        request: SuggestionRequest,
+        sdk: Any,
+        categories: tuple[str, ...],
+        count: int,
+        started: float,
+        usage: dict[str, int],
+    ) -> SuggestionCandidateBatch:
+        context = self._agent_context(request, categories)
+        prompt = self._prompts.generator_turn(request.goal, count)
+        return cast(
+            SuggestionCandidateBatch,
+            await self._call_agent(
+                sdk,
+                "generator",
+                self._prompts.generator_system(),
+                prompt,
+                context,
+                request.settings.model,
+                SuggestionCandidateBatch,
+                request,
+                started,
+                usage,
+                "generation",
+            ),
+        )
+
+    async def _critique(
+        self,
+        request: SuggestionRequest,
+        sdk: Any,
+        categories: tuple[str, ...],
+        ideas: tuple[SuggestionIdea, ...],
+        started: float,
+        usage: dict[str, int],
+    ) -> SuggestionCritiqueArtifact:
+        context = self._agent_context(request, categories, ideas)
+        ids = ", ".join(idea.id for idea in ideas)
+        prompt = self._prompts.critic_turn(request.goal, ids)
+        return cast(
+            SuggestionCritiqueArtifact,
+            await self._call_agent(
+                sdk,
+                "critic",
+                self._prompts.critic_system(),
+                prompt,
+                context,
+                request.settings.critic_model or request.settings.model,
+                SuggestionCritiqueArtifact,
+                request,
+                started,
+                usage,
+                "critique",
+            ),
+        )
+
+    async def _revise(
+        self,
+        request: SuggestionRequest,
+        sdk: Any,
+        categories: tuple[str, ...],
+        current: tuple[SuggestionIdea, ...],
+        revisions: tuple[tuple[SuggestionIdea, SuggestionCritique], ...],
+        started: float,
+        usage: dict[str, int],
+    ) -> tuple[SuggestionIdea, ...]:
+        context = self._agent_context(request, categories, current)
+        candidates = json.dumps(
+            [idea.model_dump(mode="json") for idea, _ in revisions], sort_keys=True
+        )
+        critiques = json.dumps(
+            [critique.model_dump(mode="json") for _, critique in revisions], sort_keys=True
+        )
+        prompt = self._prompts.revision_turn(request.goal, candidates, critiques, len(revisions))
+        batch = await self._call_agent(
+            sdk,
+            "generator",
+            self._prompts.revision_system(),
+            prompt,
+            context,
+            request.settings.model,
+            SuggestionCandidateBatch,
+            request,
+            started,
+            usage,
+            "revision",
+        )
+        by_id = {idea.id: (idea, critique) for idea, critique in revisions}
+        revised: list[SuggestionIdea] = []
+        seen_ids: set[str] = set()
+        for draft in batch.ideas:
+            idea_id = draft.idea_id
+            if idea_id is None:
+                raise ValueError("revision output must preserve the candidate id")
+            if idea_id in seen_ids:
+                raise ValueError("revision output repeated a candidate id")
+            seen_ids.add(idea_id)
+            if idea_id not in by_id:
+                raise ValueError("revision output referenced an unknown candidate id")
+            original, critique = by_id[idea_id]
+            values = draft.model_dump(exclude={"idea_id"})
+            for field_name in critique.preserve:
+                if hasattr(original, field_name) and field_name in values:
+                    values[field_name] = getattr(original, field_name)
+            revised_draft = SuggestionDraft.model_validate(values)
+            revised.append(
+                self._idea_from_draft(
+                    revised_draft,
+                    request,
+                    idea_id,
+                    original.revision + 1,
+                    original.rank,
+                    critique.review_summary,
+                )
+            )
+        by_revision_id = {idea.id: idea for idea in revised}
+        return tuple(by_revision_id[idea.id] for idea, _ in revisions if idea.id in by_revision_id)
+
+    async def _call_agent(
+        self,
+        sdk: Any,
+        role: Literal["generator", "critic"],
+        system_prompt: str,
+        prompt: str,
+        context: SuggestionContextPrimitive,
+        model: str | None,
+        schema: type[Any],
+        request: SuggestionRequest,
+        started: float,
+        usage: dict[str, int],
+        phase: str,
+    ) -> Any:
+        self._check_limit(request, started, usage)
+        prompt = self._with_output_budget(prompt, request)
+        settings = sdk.agent_settings(
+            SuggestionAgentSettingsInput(
+                role=role,
+                system_prompt=system_prompt,
+                context=context,
+                output_schema=schema,
+                provider=request.settings.provider,
+                model=model,
+            )
+        )
+        agent = sdk.agent(settings)
+        remaining = self._remaining_seconds(request, started)
+        try:
+            if remaining is None:
+                reply = await agent.arun(sdk.run_input(SuggestionTextInput(prompt)))
+            else:
+                async with asyncio.timeout(remaining):
+                    reply = await agent.arun(sdk.run_input(SuggestionTextInput(prompt)))
+        except TimeoutError as error:
+            raise _WorkflowLimit(StopReason.TIME_LIMIT) from error
+        self._record_usage(reply, usage, phase)
+        structured = getattr(reply, "structured", None)
+        if isinstance(structured, schema):
+            return structured
+        if isinstance(structured, Mapping):
+            return schema.model_validate(structured)
+        raise ValueError(f"{phase} agent returned no structured artifact")
+
+    def _ideas_from_drafts(
+        self,
+        drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...],
+        request: SuggestionRequest,
+    ) -> tuple[SuggestionIdea, ...]:
+        values = drafts.ideas if isinstance(drafts, SuggestionCandidateBatch) else drafts
+        return tuple(
+            self._idea_from_draft(
+                draft, request, f"idea-{index:03d}", 1, index, "Awaiting independent critique."
+            )
+            for index, draft in enumerate(values, 1)
+        )
+
+    def _idea_from_draft(
+        self,
+        draft: SuggestionDraft,
+        request: SuggestionRequest,
+        idea_id: str,
+        revision: int,
+        rank: int,
+        review_summary: str,
+    ) -> SuggestionIdea:
+        values = draft.model_dump(exclude={"idea_id"})
+        handoff = self._handoffs.build_draft(draft, request, idea_id, revision)
+        return SuggestionIdea(
+            **values,
+            id=idea_id,
+            revision=revision,
+            rank=rank,
+            review_summary=review_summary,
+            handoff=handoff,
+        )
+
+    def _review(
+        self, ideas: tuple[SuggestionIdea, ...], artifact: SuggestionCritiqueArtifact
+    ) -> tuple[tuple[SuggestionIdea, ...], tuple[tuple[SuggestionIdea, SuggestionCritique], ...]]:
+        critiques = {item.idea_id: item for item in artifact.critiques}
+        if set(critiques) != {idea.id for idea in ideas} or len(critiques) != len(
+            artifact.critiques
+        ):
+            raise ValueError("critic artifact must contain exactly one review for every candidate")
+        kept: list[SuggestionIdea] = []
+        revisions: list[tuple[SuggestionIdea, SuggestionCritique]] = []
+        for idea in ideas:
+            critique = critiques[idea.id]
+            hard_reject = (
+                critique.constraint_hit is not CritiqueConstraint.NONE
+                or critique.evidence_check is CritiqueEvidenceCheck.CONTRADICTS
+                or (
+                    critique.verdict is CritiqueVerdict.REJECT
+                    and critique.confidence is not CritiqueConfidence.LOW
+                )
+            )
+            if critique.duplicate_of and critique.duplicate_of != idea.id:
+                continue
+            if hard_reject:
+                continue
+            needs_revision = (
+                critique.verdict is CritiqueVerdict.REVISE
+                or critique.evidence_check is CritiqueEvidenceCheck.MISSING
+                or (
+                    critique.verdict is CritiqueVerdict.REJECT
+                    and critique.confidence is CritiqueConfidence.LOW
+                )
+            )
+            if needs_revision:
+                revisions.append((idea, critique))
+                continue
+            if critique.verdict is CritiqueVerdict.KEEP:
+                kept.append(idea.model_copy(update={"review_summary": critique.review_summary}))
+        return tuple(kept), tuple(revisions)
+
+    def _finalize(
+        self, ideas: tuple[SuggestionIdea, ...], request: SuggestionRequest
+    ) -> tuple[SuggestionIdea, ...]:
+        allowed = set(self._categories.ids())
+        manifest_refs = {
+            entry.ref for entry in request.context_manifest if entry.status != "omitted"
+        }
+        if not manifest_refs:
+            manifest_refs = {item.ref for item in request.context_items}
+        selected = self._selection.validate_categories(ideas, allowed)
+        selected = self._selection.validate_evidence(selected, manifest_refs)
+        selected = self._selection.deduplicate(selected)
+        selected = self._selection.suppress_rejected(selected, self._rejected_terms(request))
+        if request.settings.horizon is not SuggestionHorizon.ANY:
+            selected = tuple(
+                idea for idea in selected if idea.horizon.value == request.settings.horizon.value
+            )
+        selected = tuple(self._handoff_refresh(idea, request) for idea in selected)
+        return self._selection.rank(selected, request.settings.requested_count)
+
+    def _handoff_refresh(self, idea: SuggestionIdea, request: SuggestionRequest) -> SuggestionIdea:
+        return idea.model_copy(update={"handoff": self._handoffs.build(idea, request)})
+
+    def _merge_reviewed(
+        self, previous: tuple[SuggestionIdea, ...], current: tuple[SuggestionIdea, ...]
+    ) -> tuple[SuggestionIdea, ...]:
+        # Carries kept candidates across a revision round without changing stable order.
+        merged = {idea.id: idea for idea in previous}
+        merged.update({idea.id: idea for idea in current})
+        return tuple(merged.values())
+
+    def _agent_context(
+        self,
+        request: SuggestionRequest,
+        categories: tuple[str, ...],
+        ideas: tuple[SuggestionIdea, ...] = (),
+    ) -> SuggestionContextPrimitive:
+        candidate_handoffs = (
+            json.dumps([idea.model_dump(mode="json") for idea in ideas], sort_keys=True)
+            if ideas
+            else ""
+        )
+        return replace(
+            request.context,
+            selected_categories=self._categories.prompt_section(categories),
+            candidate_handoffs=candidate_handoffs,
+        )
+
+    def _check_limit(
+        self, request: SuggestionRequest, started: float, usage: dict[str, int]
+    ) -> None:
+        if (
+            request.settings.max_total_tokens is not None
+            and usage["tokens"] >= request.settings.max_total_tokens
+        ):
+            raise _WorkflowLimit(StopReason.TOKEN_LIMIT)
+        if self._remaining_seconds(request, started) == 0:
+            raise _WorkflowLimit(StopReason.TIME_LIMIT)
+
+    def _with_output_budget(self, prompt: str, request: SuggestionRequest) -> str:
+        # Carries the caller's generous output ceiling into every typed model turn.
+        limit = request.settings.max_output_tokens
+        if limit is None:
+            return prompt
+        return f"{prompt}\n\nKeep the structured response within {limit} output tokens."
+
+    def _remaining_seconds(self, request: SuggestionRequest, started: float) -> float | None:
+        limit = request.settings.timeout_seconds
+        if limit is None:
+            return None
+        remaining = limit - (time.monotonic() - started)
+        return max(remaining, 0.0)
+
+    def _record_usage(self, reply: Any, usage: dict[str, int], phase: str) -> None:
+        usage["agent_calls"] += 1
+        usage[f"{phase}_calls"] = usage.get(f"{phase}_calls", 0) + 1
+        codex = getattr(reply, "codex", None)
+        snapshot = getattr(codex, "last_usage", None) or getattr(codex, "usage", None)
+        tokens = int(getattr(snapshot, "total_tokens", 0) or 0)
+        usage["tokens"] += max(tokens, 0)
+
+    def _rejected_terms(self, request: SuggestionRequest) -> tuple[str, ...]:
+        return tuple(
+            item.content
+            for item in request.context_items
+            if item.kind in {"completed", "in-progress", "avoid", "mistake", "forbidden"}
+        )
+
+    def _result(self, request: SuggestionRequest, outcome: _WorkflowOutcome) -> SuggestionResult:
+        ideas = outcome.ideas
+        warnings = list(outcome.warnings)
+        if outcome.stop_reason is StopReason.COUNT_SHORTFALL and ideas:
+            warnings.append(
+                f"Only {len(ideas)} worthwhile suggestions survived review; no filler was added."
+            )
+        status = (
+            RunStatus.NO_SUGGESTIONS
+            if not ideas
+            else RunStatus.COMPLETE
+            if outcome.stop_reason is StopReason.COMPLETED
+            else RunStatus.PARTIAL
+        )
+        present_kinds = {item.kind for item in request.context_items}
+        missing = tuple(
+            kind
+            for kind in ("completed", "in-progress", "decision", "constraint", "risk", "trajectory")
+            if kind not in present_kinds
+        )
         return SuggestionResult(
             run_id=f"sug-{uuid4().hex[:12]}",
             status=status,
             goal=request.goal,
-            requested_count=settings.requested_count,
-            returned_count=len(ranked),
-            settings=settings,
-            context_manifest=self._manifest(request),
-            ideas=ranked,
-            category_coverage=self._selection.coverage(ranked),
-            missing_context=self._missing(request),
-            warnings=warnings,
-            usage={"rounds": min(settings.rounds, 2), "candidates": len(candidates)},
-            stop_reason=stop,
+            requested_count=request.settings.requested_count,
+            returned_count=len(ideas),
+            settings=request.settings,
+            context_manifest=request.context_manifest,
+            ideas=ideas,
+            category_coverage=self._selection.coverage(ideas),
+            missing_context=missing,
+            warnings=tuple(dict.fromkeys(warnings)),
+            usage=outcome.usage,
+            stop_reason=outcome.stop_reason,
             prompt_version=request.prompt_version,
         )
 
-    def _dry_run(self, request: SuggestionRequest) -> SuggestionResult:
-        # Resolves inputs with no model call for agent callers to inspect.
-        settings = request.settings
-        return SuggestionResult(
-            run_id=f"sug-{uuid4().hex[:12]}",
-            status=RunStatus.NO_SUGGESTIONS,
-            goal=request.goal,
-            requested_count=settings.requested_count,
-            returned_count=0,
-            settings=settings,
-            context_manifest=self._manifest(request),
-            ideas=(),
-            category_coverage={},
-            missing_context=self._missing(request),
-            warnings=("Dry run: no ideas generated.",),
-            usage={},
-            stop_reason=StopReason.DRY_RUN,
-            prompt_version=request.prompt_version,
-        )
 
-    def _pool_size(self, requested: int) -> int:
-        # Twice the ask, capped, so critique has room to cut weak candidates.
-        return min(requested * _POOL_MULTIPLE, _POOL_CAP)
-
-    def _allowed_categories(
-        self, settings: SuggestionSettings, request: SuggestionRequest
-    ) -> tuple[str, ...]:
-        # Explicit order is caller-owned; unrestricted runs prioritize context-relevant lenses.
-        if settings.categories:
-            return tuple(settings.categories)
-        preferred: list[str] = []
-        kinds = {item.kind for item in request.context_items}
-        if "hypothesis" in kinds:
-            preferred.extend(("experiment", "investigation"))
-        if "blocker" in kinds:
-            preferred.extend(("bottleneck", "alternative"))
-        if "risk" in kinds:
-            preferred.extend(("risk_prevention", "verification"))
-        if "outcome" in kinds or "approach" in kinds:
-            preferred.extend(("continuation", "leverage"))
-        return tuple(dict.fromkeys((*preferred, *self._categories.ids())))
-
-    def _generate(
-        self, request: SuggestionRequest, allowed: tuple[str, ...], pool: int
-    ) -> tuple[SuggestionIdea, ...]:
-        # Template generator: context changes the substance, not just the prompt envelope.
-        ideas: list[SuggestionIdea] = []
-        for index in range(pool):
-            category = allowed[index % len(allowed)]
-            number = index + 1
-            title = self._title_for(category, request.goal)
-            summary = self._summary_for(title, request.goal, category)
-            actions = self._action_plan(category, request, index)
-            decisions = self._decision_points(category, request, index)
-            considerations = self._considerations(request, index)
-            horizon = self._idea_horizon(category, request)
-            readiness = self._idea_readiness(category, request)
-            handoff = SuggestionHandoff(
-                idea_id=f"idea-{number:03d}",
-                idea_revision=1,
-                original_goal=request.goal,
-                title=title,
-                summary=summary,
-                suggested_actions=actions,
-                decisions_along_way=decisions,
-                considerations=considerations,
-                completion_checks=(f"Observable {category} outcome exists.",),
-                stop_conditions=("The completion checks pass.",),
-                return_report="Report outcome and evidence.",
-                execution_prompt=f"Goal: {request.goal}\nAction: Do the {category} step.",
-            )
-            ideas.append(
-                SuggestionIdea(
-                    id=f"idea-{number:03d}",
-                    revision=1,
-                    rank=number,
-                    title=title,
-                    summary=summary,
-                    primary_category=category,
-                    secondary_categories=(),
-                    horizon=horizon,
-                    relationship=IdeaRelationship.DIRECT,
-                    readiness=readiness,
-                    why_now=f"A {category} move is due now for this goal.",
-                    expected_benefit=f"Moves '{request.goal}' forward with bounded effort.",
-                    evidence_refs=self._evidence_for(request),
-                    assumptions=("Caller context is accurate.",),
-                    dependencies=(),
-                    alternative_to=(),
-                    first_action=actions[0],
-                    suggested_actions=actions,
-                    decision_points=decisions,
-                    considerations=considerations,
-                    completion_criteria=f"Observable {category} outcome exists.",
-                    effort_estimate="Small: under half a day.",
-                    review_summary="Template review: relevant, concrete, and within constraints.",
-                    handoff=handoff,
-                )
-            )
-        return tuple(ideas)
-
-    def _critique(
-        self, candidates: tuple[SuggestionIdea, ...], request: SuggestionRequest
-    ) -> tuple[SuggestionIdea, ...]:
-        # Deterministic critic: score by goal-word overlap, keep order stable.
-        goal_words = {word.strip(".,!?").lower() for word in request.goal.split() if len(word) > 3}
-        scored: list[tuple[int, SuggestionIdea]] = []
-        for idea in candidates:
-            if not self._has_risk_mitigation(idea, request):
-                continue
-            haystack = f"{idea.title} {idea.summary} {' '.join(idea.suggested_actions)}".lower()
-            score = sum(1 for word in goal_words if word in haystack) + 1
-            updated = idea.model_copy(
-                update={"review_summary": self._review_summary(score, request)}
-            )
-            scored.append((score, updated))
-        scored.sort(key=lambda item: (-item[0], item[1].id))
-        rounds = max(1, min(request.settings.rounds, 3))
-        void = self._prompts.generator_system()
-        _ = (void, rounds)
-        return tuple(item for _, item in scored)
-
-    def _attach_handoffs(
-        self, ideas: list[SuggestionIdea], request: SuggestionRequest
-    ) -> list[SuggestionIdea]:
-        # Rebuilds each handoff deterministically so prompts cannot drift.
-        rebuilt: list[SuggestionIdea] = []
-        for idea in ideas:
-            handoff = self._handoffs.build(idea, request)
-            rebuilt.append(idea.model_copy(update={"handoff": handoff}))
-        return rebuilt
-
-    def _manifest_refs(self, request: SuggestionRequest) -> set[str]:
-        # Evidence allow-list is exactly the refs the context builder issued.
-        void = self._prompts.critic_system()
-        _ = void
-        return {item.ref for item in request.context_items}
-
-    def _manifest(self, request: SuggestionRequest) -> tuple[ContextManifestEntry, ...]:
-        # Manifest entries are rebuilt from items without bodies for the result.
-        entries: list[ContextManifestEntry] = []
-        for item in request.context_items:
-            entries.append(
-                ContextManifestEntry(
-                    ref=item.ref,
-                    kind=item.kind,
-                    source=item.source,
-                    chars=len(item.content),
-                    sha256=hashlib.sha256(item.content.encode("utf-8")).hexdigest()[:16],
-                    status="included",
-                )
-            )
-        return tuple(entries)
-
-    def _evidence_for(self, request: SuggestionRequest) -> tuple[str, ...]:
-        # Embed a bounded supporting set in the final handoff instead of emitting bare paths.
-        return tuple(item.ref for item in request.context_items[:4])
-
-    def _action_plan(
-        self, category: str, request: SuggestionRequest, index: int
-    ) -> tuple[str, ...]:
-        # Each context type changes an action, while failed/rejected approaches stay excluded.
-        blocker = self._pick(self._context_values(request, "blocker"), index)
-        hypothesis = self._pick(self._context_values(request, "hypothesis"), index)
-        risk = self._pick(self._context_values(request, "risk"), index)
-        outcome = self._pick(self._context_values(request, "outcome"), index)
-        worked = self._pick(self._approaches(request, {"worked"}), index)
-        untried = self._pick(self._approaches(request, {"untried"}), index)
-        base = self._base_action(category, request.goal, blocker, hypothesis, risk, worked, untried)
-        actions = [base]
-        actions.extend(
-            self._context_actions(worked, untried, outcome, blocker, hypothesis, risk, category)
-        )
-        return tuple(dict.fromkeys(actions))
-
-    def _base_action(
-        self,
-        category: str,
-        goal: str,
-        blocker: str,
-        hypothesis: str,
-        risk: str,
-        worked: str,
-        untried: str,
-    ) -> str:
-        if hypothesis and category in ("experiment", "investigation"):
-            return f"Test and attempt to refute this hypothesis: {hypothesis}"
-        if blocker and category in _UNBLOCKING_CATEGORIES:
-            return f"Clear or route around this blocker: {blocker}"
-        if risk and category == "risk_prevention":
-            return f"Mitigate this known risk before dependent work begins: {risk}"
-        if untried and category in ("experiment", "alternative"):
-            return f"Evaluate this untried approach with a bounded check: {untried}"
-        if worked and category in ("continuation", "leverage"):
-            return f"Build on this worked approach: {worked}"
-        return f"Do the {category} step for: {goal}"
-
-    def _context_actions(
-        self,
-        worked: str,
-        untried: str,
-        outcome: str,
-        blocker: str,
-        hypothesis: str,
-        risk: str,
-        category: str,
-    ) -> list[str]:
-        actions: list[str] = []
-        if worked:
-            actions.append(f"Preserve and extend what worked in this approach: {worked}")
-        if untried:
-            actions.append(f"Test whether this untried approach is now useful: {untried}")
-        if outcome:
-            actions.append(
-                f"Use this observed outcome to choose and measure the follow-up: {outcome}"
-            )
-        if blocker and category not in _UNBLOCKING_CATEGORIES:
-            actions.append(
-                "Defer blocked dependencies or choose an independent route until this clears: "
-                f"{blocker}"
-            )
-        if hypothesis:
-            actions.append(
-                f"Collect evidence that can confirm or refute this hypothesis: {hypothesis}"
-            )
-        if risk:
-            actions.append(f"Add and verify a mitigation for this known risk: {risk}")
-        return actions
-
-    def _decision_points(
-        self, category: str, request: SuggestionRequest, index: int
-    ) -> tuple[str, ...]:
-        decisions = [f"Choose the smallest {category} move that produces evidence."]
-        outcome = self._pick(self._context_values(request, "outcome"), index)
-        blocker = self._pick(self._context_values(request, "blocker"), index)
-        if outcome:
-            decisions.append(f"Decide whether this outcome supports continuing: {outcome}")
-        if blocker:
-            decisions.append(f"Decide whether to clear, route around, or wait on: {blocker}")
-        return tuple(decisions)
-
-    def _considerations(self, request: SuggestionRequest, index: int) -> tuple[str, ...]:
-        considerations = ["Preserve the caller's constraints and prior decisions."]
-        for kind, prefix in (
-            ("mistake", "Avoid repeating this past failure"),
-            ("risk", "Account for this fragile area"),
-            ("hypothesis", "Keep this unverified belief explicit"),
-        ):
-            value = self._pick(self._context_values(request, kind), index)
-            if value:
-                considerations.append(f"{prefix}: {value}")
-        return tuple(considerations)
-
-    def _idea_horizon(self, category: str, request: SuggestionRequest) -> IdeaHorizon:
-        if self._context_values(request, "blocker") and category not in _UNBLOCKING_CATEGORIES:
-            return IdeaHorizon.LATER
-        return self._horizon_for(request.settings.horizon.value)
-
-    def _idea_readiness(self, category: str, request: SuggestionRequest) -> IdeaReadiness:
-        if self._context_values(request, "blocker") and category not in _UNBLOCKING_CATEGORIES:
-            return IdeaReadiness.BLOCKED
-        if self._context_values(request, "hypothesis") and category in (
-            "experiment",
-            "investigation",
-        ):
-            return IdeaReadiness.NEEDS_EVIDENCE
-        return IdeaReadiness.READY
-
-    def _has_risk_mitigation(self, idea: SuggestionIdea, request: SuggestionRequest) -> bool:
-        if not self._context_values(request, "risk"):
-            return True
-        return any("mitigat" in action.lower() for action in idea.suggested_actions)
-
-    def _review_summary(self, score: int, request: SuggestionRequest) -> str:
-        notes = [self._verdict(score)]
-        if self._context_values(request, "risk"):
-            notes.append("Required risk mitigation is present.")
-        if any(
-            value.lower().startswith("low:")
-            for value in self._context_values(request, "hypothesis")
-        ):
-            notes.append("Dependence on a low-confidence hypothesis is flagged.")
-        if self._context_values(request, "mistake"):
-            notes.append("Past failure patterns remain subject to rejection suppression.")
-        return " ".join(notes)
-
-    def _approaches(self, request: SuggestionRequest, statuses: set[str]) -> tuple[str, ...]:
-        found: list[str] = []
-        for value in self._context_values(request, "approach"):
-            status, separator, approach = value.partition(":")
-            if separator and status.strip().lower() in statuses and approach.strip():
-                found.append(approach.strip())
-        return tuple(found)
-
-    def _context_values(self, request: SuggestionRequest, kind: str) -> tuple[str, ...]:
-        return tuple(item.content for item in request.context_items if item.kind == kind)
-
-    def _pick(self, values: tuple[str, ...], index: int) -> str:
-        return values[index % len(values)] if values else ""
-
-    def _rejected_terms(self, request: SuggestionRequest) -> tuple[str, ...]:
-        # Completed, forbidden, failed, and rejected directions all suppress repeats.
-        avoid = [
-            item.content
-            for item in request.context_items
-            if item.kind
-            in (
-                "avoid",
-                "previous-suggestions",
-                "completed",
-                "in-progress",
-                "mistake",
-                "forbidden",
-            )
-        ]
-        avoid.extend(
-            item.content.split(":", 1)[-1].strip()
-            for item in request.context_items
-            if item.kind == "approach"
-            and item.content.partition(":")[0].strip().lower() in ("failed", "rejected")
-        )
-        avoid.extend(
-            item.content.split("|", 1)[0].strip()
-            for item in request.context_items
-            if item.kind == "mistake" and "|" in item.content
-        )
-        return tuple(avoid)
-
-    def _missing(self, request: SuggestionRequest) -> tuple[str, ...]:
-        # Names high-value absent inputs instead of claiming completeness.
-        kinds = {item.kind for item in request.context_items}
-        missing: list[str] = []
-        if "constraint" not in kinds:
-            missing.append("Constraints would sharpen ranking.")
-        if "completed" not in kinds and "in-progress" not in kinds:
-            missing.append("Current progress would reduce redundant ideas.")
-        return tuple(missing)
-
-    def _warnings(
-        self,
-        ranked: tuple[SuggestionIdea, ...],
-        settings: SuggestionSettings,
-        request: SuggestionRequest,
-    ) -> tuple[str, ...]:
-        # Shortfalls and contradictions are explicit, never silent.
-        warnings: list[str] = []
-        for item in request.context_items:
-            if item.kind == "context-file" and "truncated" in item.content.lower():
-                warnings.append(f"Context {item.ref} was truncated.")
-        if len(ranked) < settings.requested_count:
-            warnings.append(self._shortfall(len(ranked), settings.requested_count))
-        return tuple(warnings)
-
-    def _status(
-        self, ranked: tuple[SuggestionIdea, ...], settings: SuggestionSettings
-    ) -> RunStatus:
-        # Fewer ideas is explicit, not a technical failure.
-        if not ranked:
-            return RunStatus.NO_SUGGESTIONS
-        if len(ranked) < settings.requested_count:
-            return RunStatus.PARTIAL
-        return RunStatus.COMPLETE
-
-    def _stop_reason(
-        self, ranked: tuple[SuggestionIdea, ...], settings: SuggestionSettings, elapsed: float
-    ) -> StopReason:
-        # Names why the loop ended for agent callers to act on.
-        _ = elapsed
-        if not ranked:
-            return StopReason.COUNT_SHORTFALL
-        if len(ranked) < settings.requested_count:
-            return StopReason.COUNT_SHORTFALL
-        return StopReason.COMPLETED
-
-    def _title_for(self, category: str, goal: str) -> str:
-        # Short deterministic title per category so dedup has stable keys.
-        short = " ".join(goal.split()[:6]).rstrip(".,!?") or "the goal"
-        return f"{category.replace('_', ' ').title()}: {short}"
-
-    def _summary_for(self, title: str, goal: str, category: str) -> str:
-        # One-line template summary grounding the idea in goal and category.
-        return f"{title} Advance '{goal}' via a {category} step with action."
-
-    def _verdict(self, score: int) -> str:
-        # Deterministic critic note recording the relevance score.
-        return f"Critic score {score}: relevant and concrete; kept."
-
-    def _shortfall(self, returned: int, requested: int) -> str:
-        # Explicit shortfall note so fewer ideas never read as failure.
-        return f"Returned {returned} of {requested} requested; weak ideas withheld."
-
-    def _horizon_for(self, value: str) -> IdeaHorizon:
-        # Maps the `any` filter to a concrete default instead of storing it.
-        if value == "now":
-            return IdeaHorizon.NOW
-        if value == "later":
-            return IdeaHorizon.LATER
-        return IdeaHorizon.NEXT
+__all__ = ["SuggestionService"]

@@ -1,5 +1,11 @@
-A decision records a settled choice that future suggestions must respect. Useful decision context names both the chosen direction and the scope within which it applies.
+**Title**
+This input is called Decision Context. Decision context records choices that are open, pending, or already constrained. It gives the agent a named record to read. It keeps this signal separate from unrelated context. It is optional when the caller has no such information. Supply it when the signal could change the next action.
 
-Candidates that contradict a settled decision are rejected instead of being ranked as creative alternatives. This keeps the agent from reopening closed questions without new evidence.
+**Description**
+Decision context records choices that are open, pending, or already constrained. The record should be concise enough to interpret without private history. It should describe the state that matters rather than every event around it. It may contain uncertainty when the caller has not confirmed a claim. It remains task information supplied for this run. Its wording should support a decision rather than advertise an implementation.
 
-Omission means no decision record was supplied, not that every choice remains open. Decisions constrain reasoning but do not themselves authorize execution.
+**Why it matters**
+It tells the agent which tradeoffs deserve attention before proposing a concrete move. It helps the agent avoid a generic answer. It also gives the critic a reason to keep, revise, or reject a candidate. The value of the record depends on its accuracy and freshness. Omit it when it would only add noise. A clear reason makes later review more honest.
+
+**Influence on output**
+It shapes suggestions toward actions that clarify, preserve, or advance the relevant choice. The agent should connect a suggestion to this signal when the connection is material. The critic should call out unsupported or conflicting use of it. The final handoff should preserve any boundary that affects safe evaluation. It should not treat this input as permission to execute work. Uncertain signals should lower confidence rather than create false precision.

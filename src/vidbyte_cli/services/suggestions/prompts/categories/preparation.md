@@ -1,21 +1,14 @@
 # Preparation
 
 ## Description
-Preparation creates readiness for an anticipated event, transition, or demand. It ties present work to a trigger and a future response.
+A preparation suggestion creates readiness for an anticipated event, transition, or demand. It connects present work to a credible trigger and a future response. Preparation may involve information, decisions, relationships, materials, or practice. The recommendation should finish before the trigger without relying on assumptions that will decay. It should include a readiness signal that can be checked near the event. Good preparation reduces expensive surprise without creating an endless rehearsal.
 
-## Goal
-Ensure the necessary people, information, tools, and decisions are ready when the event occurs.
-
-## Intent
-Use this type when foreseeable timing makes advance work cheaper or safer than reactive work.
-
-## Timeline
-Begin early enough to finish before the trigger but not so early that assumptions decay. Include a review point near the event.
-
-## Checklist
-- Name the anticipated event and trigger.
-- Identify readiness requirements.
-- Define a rehearsal or readiness check.
-
-## Cautions
-Do not prepare indefinitely for an event without credible likelihood. Keep reusable preparation separate from perishable assumptions.
+## Things to consider
+- What event or demand is anticipated?
+- How credible and consequential is the trigger?
+- What must be ready beforehand?
+- Which assumptions may change before then?
+- What is the latest safe completion point?
+- How will readiness be checked?
+- What can be reused across similar events?
+- When should preparation stop?

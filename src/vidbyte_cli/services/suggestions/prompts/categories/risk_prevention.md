@@ -1,21 +1,14 @@
 # Risk Prevention
 
 ## Description
-Risk prevention adds a guard against a plausible failure before it occurs. It connects one failure mode to a proportionate mitigation and detection signal.
+A risk-prevention suggestion reduces the likelihood or impact of a plausible failure. It connects a recognizable exposure to a proportionate guard, signal, or recovery plan. The suggestion should focus on risks that could change the caller's outcome rather than every imaginable concern. Prevention is strongest when the protection happens before the exposure begins. Detection and recovery still matter when prevention cannot be complete. The proposal should account for the cost and burden of the control itself.
 
-## Goal
-Reduce expected harm without overwhelming the main work with speculative safeguards.
-
-## Intent
-Use this type when known fragility, impact, or irreversibility makes prevention cheaper than recovery.
-
-## Timeline
-Prevent risks before the exposure begins. Lower-probability guards may follow after critical protections are established.
-
-## Checklist
-- Name the failure mode and exposure.
-- Estimate likelihood and impact qualitatively.
-- Define prevention, detection, and recovery.
-
-## Cautions
-Do not treat every imaginable problem as equally urgent. Avoid controls whose cost exceeds the risk they address.
+## Things to consider
+- What failure mode could occur?
+- What exposure makes it plausible?
+- How severe would the outcome be?
+- How likely is it given the supplied context?
+- What prevention is proportionate?
+- How would the failure be detected quickly?
+- What recovery remains possible afterward?
+- What burden does the safeguard add?

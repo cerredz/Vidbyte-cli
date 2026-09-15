@@ -23,6 +23,16 @@ class SuggestionSelection:
         # Drops ideas that cite refs the manifest never issued.
         return tuple(idea for idea in ideas if set(idea.evidence_refs) <= allowed)
 
+    def validate_categories(
+        self, ideas: tuple[SuggestionIdea, ...], allowed: set[str]
+    ) -> tuple[SuggestionIdea, ...]:
+        # Category ids are checked after model output so a provider cannot invent a lens.
+        return tuple(
+            idea
+            for idea in ideas
+            if idea.primary_category in allowed and set(idea.secondary_categories) <= allowed
+        )
+
     def deduplicate(self, ideas: tuple[SuggestionIdea, ...]) -> tuple[SuggestionIdea, ...]:
         # Keeps the first idea per normalized title so ordering stays stable.
         seen: set[str] = set()
@@ -44,7 +54,10 @@ class SuggestionSelection:
             return ideas
         kept: list[SuggestionIdea] = []
         for idea in ideas:
-            haystack = f"{idea.title} {idea.summary}".lower()
+            haystack = (
+                f"{idea.title} {idea.summary} {idea.first_action} "
+                f"{' '.join(idea.suggested_actions)}"
+            ).lower()
             if any(needle and needle in haystack for needle in needles):
                 continue
             kept.append(idea)

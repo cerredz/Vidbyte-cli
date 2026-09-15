@@ -22,7 +22,8 @@ every invocation, including `--help` and `--version`.
 - `__init__.py` — registers every group. Keep it side-effect free: every help path executes
   it.
 - `agents/` — the `agents suggest` family (`run`, `categories`, `handoff`). Local-only
-  specialized agents: free, no admission, results for another agent to consume.
+  specialized agents have no Vidbyte admission; model-backed runs may use the caller's
+  configured provider, while category inspection and dry-run remain credential-free.
 
 ## Log
 

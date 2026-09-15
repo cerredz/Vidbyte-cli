@@ -1,5 +1,11 @@
-A capability records something the eventual executor can reliably do. Concrete capability statements may name accessible tools, expertise, environments, or forms of inspection.
+**Title**
+This input is called Capabilities. Capabilities record resources, skills, access, or support available to the caller. It gives the agent a named record to read. It keeps this signal separate from unrelated context. It is optional when the caller has no such information. Supply it when the signal could change the next action.
 
-The agent uses capabilities to keep first actions realistic and to identify missing prerequisites. A capability can support an action without granting permission to take it.
+**Description**
+Capabilities record resources, skills, access, or support available to the caller. The record should be concise enough to interpret without private history. It should describe the state that matters rather than every event around it. It may contain uncertainty when the caller has not confirmed a claim. It remains task information supplied for this run. Its wording should support a decision rather than advertise an implementation.
 
-Final handoffs preserve relevant capabilities for the receiving agent. Omission means availability was not described, so suggestions should avoid assuming specialized access.
+**Why it matters**
+They help the agent distinguish a realistic action from one that assumes unavailable means. It helps the agent avoid a generic answer. It also gives the critic a reason to keep, revise, or reject a candidate. The value of the record depends on its accuracy and freshness. Omit it when it would only add noise. A clear reason makes later review more honest.
+
+**Influence on output**
+They affect dependencies, readiness, effort, and the range of actions the final slate can responsibly include. The agent should connect a suggestion to this signal when the connection is material. The critic should call out unsupported or conflicting use of it. The final handoff should preserve any boundary that affects safe evaluation. It should not treat this input as permission to execute work. Uncertain signals should lower confidence rather than create false precision.

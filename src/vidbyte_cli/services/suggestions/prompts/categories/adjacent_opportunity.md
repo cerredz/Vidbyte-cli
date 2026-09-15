@@ -1,21 +1,14 @@
 # Adjacent Opportunity
 
 ## Description
-An adjacent opportunity captures nearby value enabled by current work. It is not required for the original goal but is unusually cheap or timely because of present context.
+An adjacent opportunity captures nearby value enabled by current work. It is not required for the original goal, but present access, setup, attention, or information makes it unusually attractive. The suggestion should explain the connection without turning convenience into a new obligation. It should protect the primary commitment from being displaced. A reversible capture is often better than immediate expansion when the advantage may persist. The opportunity is worth suggesting when the incremental effort is bounded and the timing advantage is credible.
 
-## Goal
-Recognize worthwhile spillover without allowing it to derail the primary commitment.
-
-## Intent
-Use this type when shared setup, attention, data, or access makes a nearby result cheaper now than later.
-
-## Timeline
-Act now only when the temporary advantage is real and bounded. Otherwise record the opportunity for later review.
-
-## Checklist
-- Explain the connection to current work.
-- Quantify why timing changes cost or value.
-- Protect the original goal from displacement.
-
-## Cautions
-Do not label ordinary scope expansion as adjacency. Prefer reversible capture when immediate execution would distract.
+## Things to consider
+- What current work creates the opportunity?
+- How is the opportunity adjacent rather than central?
+- What temporary advantage exists now?
+- What incremental effort would it require?
+- Could it distract from the primary goal?
+- Can the value be captured reversibly?
+- What future cost would waiting create?
+- What stopping point protects scope?

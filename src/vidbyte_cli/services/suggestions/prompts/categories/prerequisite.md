@@ -1,21 +1,14 @@
 # Prerequisite
 
 ## Description
-A prerequisite creates something required before intended work can succeed. It makes a hidden dependency explicit and actionable.
+A prerequisite identifies a condition that intended work cannot safely or effectively proceed without. It can be evidence, access, capability, authority, preparation, or a prior result. The suggestion makes the dependency explicit instead of allowing it to remain a hidden source of delay. Its usefulness depends on naming the work that becomes possible afterward. A prerequisite is not merely a convenient improvement. The suggestion should distinguish a true requirement from a preference that can be deferred.
 
-## Goal
-Remove the earliest missing condition that prevents safe or effective execution.
-
-## Intent
-Use this type when progress depends on access, evidence, capability, approval, or prior work.
-
-## Timeline
-Prerequisites belong before the work they unlock. Urgency follows the blocked work's horizon rather than the prerequisite's size.
-
-## Checklist
-- Name the missing condition.
-- Identify the work it blocks.
-- Define how readiness will be verified.
-
-## Cautions
-Do not promote a convenient improvement into a false requirement. Separate missing authority from missing capability.
+## Things to consider
+- What exact condition is missing?
+- Which planned action does it unlock?
+- How can readiness be observed?
+- Who can provide or approve the condition?
+- What is the cheapest way to obtain it?
+- Can the main goal proceed through a safe alternative?
+- What evidence would show that the condition is only optional?
+- What should happen if the prerequisite remains unavailable?

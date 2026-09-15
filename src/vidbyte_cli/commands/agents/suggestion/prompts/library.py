@@ -1,8 +1,7 @@
-"""Loads suggestion-agent help descriptions from packaged Markdown assets.
+"""Loads caller-facing suggestion help from packaged Markdown assets.
 
-The loader keeps authored prose out of Python while preserving paragraph
-boundaries for Click rendering. It also fails fast when an asset violates the
-reviewed three-to-four paragraph shape or embeds command-option syntax.
+The loader keeps authored prose out of Python and leaves content standards to
+the repository lint suite, so help rendering never becomes a hidden validator.
 """
 
 from __future__ import annotations
@@ -19,17 +18,11 @@ class SuggestionHelpLibrary:
     def load(self, name: str) -> str:
         if name not in self._cache:
             source = resources.files(__package__).joinpath(f"{name}.md")
-            text = source.read_text(encoding="utf-8").strip()
-            paragraphs = tuple(part.strip() for part in text.split("\n\n") if part.strip())
-            if not 3 <= len(paragraphs) <= 4:
-                raise ValueError(f"Suggestion help {name!r} must contain three or four paragraphs.")
-            if "--" in text:
-                raise ValueError(f"Suggestion help {name!r} must not contain command syntax.")
-            self._cache[name] = "\n\n".join(paragraphs)
+            self._cache[name] = source.read_text(encoding="utf-8").strip()
         return self._cache[name]
 
     def summary(self, name: str) -> str:
-        """Return the first one-to-two-sentence paragraph for a context item."""
+        """Return the first authored help section for a context item."""
         return self.load(name).split("\n\n", 1)[0]
 
 

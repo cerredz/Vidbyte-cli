@@ -1,5 +1,11 @@
-A previous-suggestions result records ideas already offered during an earlier cycle. It gives the current agent enough history to avoid returning the same slate under new wording.
+**Title**
+This input is called Previous Suggestions. Previous suggestions record ideas already returned for the same or a related goal. It gives the agent a named record to read. It keeps this signal separate from unrelated context. It is optional when the caller has no such information. Supply it when the signal could change the next action.
 
-Titles and summaries become comparison material for deterministic and critic-driven overlap checks. Prior presence alone does not prove an idea succeeded or failed.
+**Description**
+Previous suggestions record ideas already returned for the same or a related goal. The record should be concise enough to interpret without private history. It should describe the state that matters rather than every event around it. It may contain uncertainty when the caller has not confirmed a claim. It remains task information supplied for this run. Its wording should support a decision rather than advertise an implementation.
 
-Outcome context should describe what happened after an earlier idea was attempted. Omission means this is the first supplied batch or that prior batches were unavailable.
+**Why it matters**
+They reduce the chance that a new run spends its scarce attention on familiar proposals. It helps the agent avoid a generic answer. It also gives the critic a reason to keep, revise, or reject a candidate. The value of the record depends on its accuracy and freshness. Omit it when it would only add noise. A clear reason makes later review more honest.
+
+**Influence on output**
+They give the critic a comparison set for identifying semantic repetition and useful revision. The agent should connect a suggestion to this signal when the connection is material. The critic should call out unsupported or conflicting use of it. The final handoff should preserve any boundary that affects safe evaluation. It should not treat this input as permission to execute work. Uncertain signals should lower confidence rather than create false precision.

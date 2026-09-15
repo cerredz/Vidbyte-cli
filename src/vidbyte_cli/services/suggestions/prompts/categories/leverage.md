@@ -1,21 +1,14 @@
 # Leverage
 
 ## Description
-A leverage suggestion creates an asset or change that benefits several future tasks. Its value compounds through reuse, automation, shared knowledge, or reduced coordination.
+A leverage suggestion creates one asset or improvement that benefits several credible future efforts. Its value comes from reuse, reduced coordination, accumulated knowledge, or avoided repeated cost. The suggestion should identify real downstream consumers rather than hypothetical scale. It should delay generalization until a shared pattern is visible. Maintenance, ownership, and adoption are part of the investment. A leverage move is strong when one bounded effort meaningfully improves more than one future decision or task.
 
-## Goal
-Invest once where at least two credible downstream consumers gain meaningful benefit.
-
-## Intent
-Use this type when recurring work can share a durable capability without premature generalization.
-
-## Timeline
-Build leverage before repeated costs accumulate, but after the common pattern is evidenced. Defer abstractions whose future consumers are hypothetical.
-
-## Checklist
-- Name at least two concrete consumers.
-- Compare investment with repeated local effort.
-- Define ownership and maintenance expectations.
-
-## Cautions
-Do not generalize a one-off need. Include adoption and upkeep in the value estimate.
+## Things to consider
+- Which repeated cost or pattern is visible?
+- Who are at least two credible future consumers?
+- What shared asset would help them?
+- What local work must prove the pattern first?
+- What maintenance will the asset require?
+- Who owns its continued usefulness?
+- What adoption effort could erase the benefit?
+- What is the smallest reusable form worth creating?
