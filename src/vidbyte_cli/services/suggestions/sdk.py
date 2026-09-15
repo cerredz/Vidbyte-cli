@@ -8,11 +8,13 @@ each fresh context manager.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Protocol, cast
 
 from ...lib.errors.failures import SuggestionSdkUnavailable
+from ...lib.io.codex_attachments import CodexAttachmentInputBuilder
+from ...types.attachments import AttachmentBundle
 from ...types.suggestions import SuggestionContextPrimitive
 
 _CODEX_MODULE = "vidbyte.agents.codex"
@@ -84,6 +86,7 @@ class SuggestionTextInput:
     """Strict local input for the single text turn used by this workflow."""
 
     prompt: str
+    attachments: AttachmentBundle = field(default_factory=AttachmentBundle)
 
     def __post_init__(self) -> None:
         if type(self.prompt) is not str or not self.prompt.strip():
@@ -131,7 +134,7 @@ class SuggestionSdk:
         """Translate one local text request into the SDK's typed input."""
         if not isinstance(request, SuggestionTextInput):
             raise TypeError("run_input requires SuggestionTextInput.")
-        return self._bindings.symbols["CodexRunInput"].text(request.prompt)
+        return CodexAttachmentInputBuilder().build(request.prompt, request.attachments)
 
     def is_provider_error(self, error: Exception) -> bool:
         """Identify SDK transport/host failures without importing SDK types elsewhere."""

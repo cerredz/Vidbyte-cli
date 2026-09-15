@@ -34,6 +34,11 @@ from vidbyte_cli.services.suggestions.sdk import (  # noqa: E402
     SuggestionTextInput,
 )
 from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: E402
+from vidbyte_cli.types.attachments import (  # noqa: E402
+    AgentAttachment,
+    AttachmentBundle,
+    AttachmentKind,
+)
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     MAX_CONTEXT_CHARS,
     SUGGESTIONS_HANDOFF_KIND,
@@ -89,6 +94,7 @@ class FakeAgent:
         self.settings = settings
 
     async def arun(self, request: SuggestionTextInput) -> FakeReply:
+        self.sdk.inputs.append(request)
         self.sdk.turns.append((self.settings, request.prompt))
         structured = self.sdk.next_artifact(self.settings, request.prompt)
         usage = SimpleNamespace(last_usage=SimpleNamespace(total_tokens=10))
@@ -102,6 +108,7 @@ class FakeSdk:
         self.revision = revision
         self.extra_compute = extra_compute
         self.settings: list[SuggestionAgentSettingsInput] = []
+        self.inputs: list[SuggestionTextInput] = []
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
         self.critic_calls = 0
@@ -238,6 +245,23 @@ def _item(
     )
 
 
+def _attachment_bundle() -> AttachmentBundle:
+    return AttachmentBundle(
+        items=(
+            AgentAttachment(
+                supplied_path=Path("notes.md"),
+                resolved_path=Path("notes.md").resolve(),
+                name="notes.md",
+                kind=AttachmentKind.TEXT,
+                size_bytes=18,
+                sha256=hashlib.sha256(b"attachment snapshot").hexdigest(),
+                content="attachment snapshot",
+            ),
+        ),
+        total_bytes=18,
+    )
+
+
 def _request(
     *,
     count: int = 4,
@@ -245,6 +269,7 @@ def _request(
     extra_compute: bool = False,
     rounds: int = 1,
     items: tuple[SuggestionContextItem, ...] = (),
+    attachments: AttachmentBundle | None = None,
 ) -> SuggestionRequest:
     goal = "Ship the first suggestion agent release"
     manifest = tuple(
@@ -272,6 +297,7 @@ def _request(
             extra_compute=extra_compute,
             rounds=rounds,
         ),
+        attachments=attachments or AttachmentBundle(),
     )
 
 
@@ -438,8 +464,15 @@ class SuggestionSuite:
 
     def check_generation_and_revision(self) -> None:
         results = self.results
+        bundle = _attachment_bundle()
         fake = FakeSdk(revision=True)
-        result = SuggestionService(sdk=fake).run(_request(rounds=2, items=(_item(),)))
+        result = SuggestionService(sdk=fake).run(
+            _request(rounds=2, items=(_item(),), attachments=bundle)
+        )
+        results.check(
+            "every suggestion stage receives the same attachment bundle",
+            bool(fake.inputs) and all(input_.attachments is bundle for input_ in fake.inputs),
+        )
         results.check(
             "generated ideas survive independent critique with deterministic handoffs",
             result.returned_count == 4
