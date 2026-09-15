@@ -20,9 +20,12 @@ The public command family is:
 ## Contracts
 
 Run input is argv-driven. The command does not accept a JSON request file or stdin document
-for the run verb, because one strict `SuggestionRequest` and one `SuggestionSettings` model
-must own defaults, ranges, categories, provider choices, and feature flags. The handoff verb
-retains `--input` because it reads a previously emitted result artifact.
+for the run verb, because one strict `SuggestionRunInput` dataclass and one strict
+`SuggestionSettings` model own defaults, ranges, categories, provider choices, and feature
+flags. Context values use one canonical destination name each, and all explicit file inputs use
+the repeated `--files` option. The generator uses the provider default; `--critic-model` is an
+optional override for independent review only. The handoff verb retains `--input` because it
+reads a previously emitted result artifact.
 
 `--count` defaults to 5 and accepts 2–15. `--rounds` defaults to 2 and accepts 1–3.
 `--extra-compute` fans out one fresh generator context for each selected category and combines
@@ -76,8 +79,12 @@ eight sentence Description, and eight-to-ten tailored Things to consider bullets
 the old generic checklist section are intentionally absent. C003 enforces XML section depth and
 C004 enforces category structure; the runtime loader does not duplicate those lint concerns.
 
-Caller-facing help assets explain what each input means, why it matters, and how it influences
-the output in titled high-level prose. Python contains no model-facing prompt sentences.
+Caller-facing help assets for dynamic text and path values use named headings for purpose,
+boundaries, inputs, defaults, output, usage, examples, related commands, failures, and
+authentication. Each section has six-to-eight sentences and a concrete brace-delimited command
+example. C005 checks this family mechanically while leaving numeric, enum, list, and flag help
+to C001. The help assets are only for the parent caller and are never added to the agent context;
+the context window receives the caller's actual values and model-facing category prompts.
 
 ## File ownership
 

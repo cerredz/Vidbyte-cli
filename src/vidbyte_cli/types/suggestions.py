@@ -150,14 +150,13 @@ class SuggestionContextPrimitive:
             raise TypeError("Suggestion context metadata must be a mapping.")
 
     def to_context_text(self) -> str:
-        sections = [self.description, "", f"Goal: {self.goal}", "", "<Selected Categories>"]
+        sections = [f"Goal: {self.goal}", "", "<Selected Categories>"]
         sections.append(self.selected_categories or "No category was selected.")
         sections.extend(("</Selected Categories>", ""))
         for item in self.items:
             sections.extend(
                 (
                     f"## [{item.ref}] {item.label} ({item.kind})",
-                    item.description,
                     f"Source: {item.source}",
                     item.content,
                     "",
@@ -197,7 +196,6 @@ class SuggestionSettings(BaseModel):
     horizon: SuggestionHorizon = SuggestionHorizon.ANY
     rounds: int = Field(ge=1, le=3, default=2)
     provider: str | None = None
-    model: str | None = None
     critic_model: str | None = None
     max_output_tokens: int | None = Field(default=None, gt=0, le=5_000_000)
     max_total_tokens: int | None = Field(default=None, gt=0, le=20_000_000)

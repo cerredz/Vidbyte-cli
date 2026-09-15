@@ -21,6 +21,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 
 from vidbyte_cli.commands.agents.suggestion.request_builder import (  # noqa: E402
     SuggestionRequestBuilder,
+    SuggestionRunInput,
 )
 from vidbyte_cli.services.suggestions.categories import SuggestionCategories  # noqa: E402
 from vidbyte_cli.services.suggestions.context import SuggestionContextBuilder  # noqa: E402
@@ -345,17 +346,29 @@ class SuggestionSuite:
             "request builder emits one strict settings object",
             built.settings.categories == ("verification", "experiment")
             and built.settings.extra_compute
-            and built.context_items[0].kind == "mistake",
+            and built.context_items[0].kind == "mistakes",
+        )
+        context_text = built.context.to_context_text()
+        results.check(
+            "agent context contains values without caller-facing help prose",
+            "bad merge | stale base | use current main" in context_text
+            and "Caller-supplied context value." not in context_text,
         )
         results.check(
             "context primitive includes the selected category block",
-            "<Selected Categories>" in built.context.to_context_text()
-            and "# Verification" in built.context.to_context_text(),
+            "<Selected Categories>" in context_text and "# Verification" in context_text,
         )
         rejected = _run_cli(["agents", "suggest", "run", "--goal", "x", "--input", "request.json"])
         results.check("run no longer accepts a JSON input file", rejected.returncode == 2)
         bad_count = _run_cli(["agents", "suggest", "run", "--goal", "x", "--count", "1"])
         results.check("count below 2 fails before model calls", bad_count.returncode == 2)
+        try:
+            SuggestionRunInput(goal="x", count=1)
+        except ValueError:
+            strict_rejection = True
+        else:
+            strict_rejection = False
+        results.check("request dataclass rejects invalid values at construction", strict_rejection)
 
     def check_sdk_context_boundary(self) -> None:
         results = self.results
@@ -368,7 +381,6 @@ class SuggestionSuite:
                 context=context,
                 output_schema=SuggestionCandidateBatch,
                 provider="openai",
-                model="gpt-test",
             )
         )
         critic = sdk.agent_settings(
@@ -388,7 +400,7 @@ class SuggestionSuite:
         results.check(
             "SDK settings enforce the read-only provider boundary",
             generator.codex.thread.model_provider == "openai"
-            and generator.codex.thread.model == "gpt-test"
+            and generator.codex.thread.model == ""
             and str(generator.codex.thread.sandbox) in ("CodexSandbox.READ_ONLY", "read-only")
             and str(generator.codex.thread.approval_mode)
             in ("CodexApprovalMode.DENY_ALL", "deny_all"),
@@ -456,7 +468,7 @@ class SuggestionSuite:
     def check_context_limits_and_handoff(self) -> None:
         results = self.results
         snapshot = SuggestionContextBuilder().build(
-            {"trajectory": ("x" * (MAX_CONTEXT_CHARS + 10),)}, {}
+            {"trajectory": ("x" * (MAX_CONTEXT_CHARS + 10),)}, ()
         )
         results.check(
             "oversized flag context is truncated and manifested",
@@ -489,6 +501,10 @@ class SuggestionSuite:
             help_result.returncode == 0
             and "--extra-compute" in help_result.stdout
             and "--trajectory" in help_result.stdout
+            and "--files" in help_result.stdout
+            and "--context-file" not in help_result.stdout
+            and "--handoff-file" not in help_result.stdout
+            and "--artifact-file" not in help_result.stdout
             and "--input" not in help_result.stdout,
         )
         categories = _run_cli(["--json", "agents", "suggest", "categories", "--view-all"])

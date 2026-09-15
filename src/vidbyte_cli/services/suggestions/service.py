@@ -167,7 +167,7 @@ class SuggestionService:
                 self._prompts.generator_system(),
                 prompt,
                 context,
-                request.settings.model,
+                None,
                 SuggestionCandidateBatch,
                 request,
                 started,
@@ -196,7 +196,7 @@ class SuggestionService:
                 self._prompts.critic_system(),
                 prompt,
                 context,
-                request.settings.critic_model or request.settings.model,
+                request.settings.critic_model,
                 SuggestionCritiqueArtifact,
                 request,
                 started,
@@ -229,7 +229,7 @@ class SuggestionService:
             self._prompts.revision_system(),
             prompt,
             context,
-            request.settings.model,
+            None,
             SuggestionCandidateBatch,
             request,
             started,
@@ -468,7 +468,7 @@ class SuggestionService:
         return tuple(
             item.content
             for item in request.context_items
-            if item.kind in {"completed", "in-progress", "avoid", "mistake", "forbidden"}
+            if item.kind in {"completed", "in_progress", "avoid", "mistakes", "forbidden"}
         )
 
     def _result(self, request: SuggestionRequest, outcome: _WorkflowOutcome) -> SuggestionResult:
@@ -488,7 +488,14 @@ class SuggestionService:
         present_kinds = {item.kind for item in request.context_items}
         missing = tuple(
             kind
-            for kind in ("completed", "in-progress", "decision", "constraint", "risk", "trajectory")
+            for kind in (
+                "completed",
+                "in_progress",
+                "decision",
+                "constraint",
+                "risks",
+                "trajectory",
+            )
             if kind not in present_kinds
         )
         return SuggestionResult(

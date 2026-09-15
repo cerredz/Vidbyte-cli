@@ -21,8 +21,7 @@ _HELP = SuggestionHelpLibrary()
 _COMMAND_HELP = _HELP.load("run")
 _GOAL_HELP = _HELP.load("goal")
 _CONTEXT_HELP = _HELP.load("context")
-_CONTEXT_FILE_HELP = _HELP.load("context_file")
-_HANDOFF_FILE_HELP = _HELP.load("handoff_file")
+_FILES_HELP = _HELP.load("files")
 _COMPLETED_HELP = _HELP.load("completed")
 _IN_PROGRESS_HELP = _HELP.load("in_progress")
 _DECISION_HELP = _HELP.load("decision")
@@ -31,15 +30,12 @@ _AVOID_HELP = _HELP.load("avoid")
 _QUESTION_HELP = _HELP.load("question")
 _CAPABILITY_HELP = _HELP.load("capability")
 _SUCCESS_HELP = _HELP.load("success")
-_ARTIFACT_HELP = _HELP.load("artifact")
-_PREVIOUS_HELP = _HELP.load("previous_suggestions")
 _COUNT_HELP = _HELP.load("count")
 _CATEGORY_HELP = _HELP.load("category")
 _ALL_CATEGORIES_HELP = _HELP.load("all_categories")
 _HORIZON_HELP = _HELP.load("horizon")
 _ROUNDS_HELP = _HELP.load("rounds")
 _PROVIDER_HELP = _HELP.load("provider")
-_MODEL_HELP = _HELP.load("model")
 _CRITIC_MODEL_HELP = _HELP.load("critic_model")
 _EXTRA_COMPUTE_HELP = _HELP.load("extra_compute")
 _MAX_OUTPUT_TOKENS_HELP = _HELP.load("max_output_tokens")
@@ -63,25 +59,18 @@ class SuggestRunCommand:
         # Attaches run with goal, context, generation, and budget controls.
         @parent.command(name="run", help=_COMMAND_HELP)
         @click.option("--goal", default=None, help=_GOAL_HELP)
-        @click.option("--context", "contexts", multiple=True, help=_CONTEXT_HELP)
+        @click.option("--context", "context", multiple=True, help=_CONTEXT_HELP)
         @click.option(
-            "--context-file",
-            "context_files",
+            "--files",
+            "files",
             multiple=True,
             type=click.Path(path_type=Path),
-            help=_CONTEXT_FILE_HELP,
-        )
-        @click.option(
-            "--handoff-file",
-            "handoff_file",
-            default=None,
-            type=click.Path(path_type=Path),
-            help=_HANDOFF_FILE_HELP,
+            help=_FILES_HELP,
         )
         @click.option("--completed", "completed", multiple=True, help=_COMPLETED_HELP)
         @click.option("--in-progress", "in_progress", multiple=True, help=_IN_PROGRESS_HELP)
-        @click.option("--decision", "decisions", multiple=True, help=_DECISION_HELP)
-        @click.option("--constraint", "constraints", multiple=True, help=_CONSTRAINT_HELP)
+        @click.option("--decision", "decision", multiple=True, help=_DECISION_HELP)
+        @click.option("--constraint", "constraint", multiple=True, help=_CONSTRAINT_HELP)
         @click.option("--avoid", "avoid", multiple=True, help=_AVOID_HELP)
         @click.option("--mistakes", "mistakes", multiple=True, help=_MISTAKES_HELP)
         @click.option("--forbidden", "forbidden", multiple=True, help=_FORBIDDEN_HELP)
@@ -91,23 +80,9 @@ class SuggestRunCommand:
         @click.option("--hypotheses", "hypotheses", multiple=True, help=_HYPOTHESES_HELP)
         @click.option("--risks", "risks", multiple=True, help=_RISKS_HELP)
         @click.option("--trajectory", "trajectory", multiple=True, help=_TRAJECTORY_HELP)
-        @click.option("--question", "questions", multiple=True, help=_QUESTION_HELP)
-        @click.option("--capability", "capabilities", multiple=True, help=_CAPABILITY_HELP)
-        @click.option("--success", "successes", multiple=True, help=_SUCCESS_HELP)
-        @click.option(
-            "--artifact",
-            "artifacts",
-            multiple=True,
-            type=click.Path(path_type=Path),
-            help=_ARTIFACT_HELP,
-        )
-        @click.option(
-            "--previous-suggestions",
-            "previous_suggestions",
-            default=None,
-            type=click.Path(path_type=Path),
-            help=_PREVIOUS_HELP,
-        )
+        @click.option("--question", "question", multiple=True, help=_QUESTION_HELP)
+        @click.option("--capability", "capability", multiple=True, help=_CAPABILITY_HELP)
+        @click.option("--success", "success", multiple=True, help=_SUCCESS_HELP)
         @click.option(
             "--count", type=click.IntRange(2, 15), default=5, show_default=True, help=_COUNT_HELP
         )
@@ -135,7 +110,6 @@ class SuggestRunCommand:
             default=None,
             help=_PROVIDER_HELP,
         )
-        @click.option("--model", "model", default=None, help=_MODEL_HELP)
         @click.option("--critic-model", "critic_model", default=None, help=_CRITIC_MODEL_HELP)
         @click.option("--extra-compute", is_flag=True, default=False, help=_EXTRA_COMPUTE_HELP)
         @click.option(

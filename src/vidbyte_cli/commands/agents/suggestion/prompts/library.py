@@ -10,7 +10,7 @@ from importlib import resources
 
 
 class SuggestionHelpLibrary:
-    """Reads and validates one named help description at a time."""
+    """Reads one named help description at a time."""
 
     def __init__(self) -> None:
         self._cache: dict[str, str] = {}

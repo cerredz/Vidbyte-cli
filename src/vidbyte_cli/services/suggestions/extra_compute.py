@@ -45,7 +45,7 @@ class ExtraComputeService:
                 selected_categories=self._categories.prompt_section((category_id,)),
             )
             prompt = self._prompts.generator_turn(request.goal, per_category)
-            return await call("generator", prompt, context, request.settings.model)
+            return await call("generator", prompt, context, None)
 
         batches = await asyncio.gather(*(run_one(category) for category in category_ids))
         drafts = tuple(draft for batch in batches for draft in batch.ideas)

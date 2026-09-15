@@ -58,14 +58,12 @@ class SuggestionContextBuilder:
         # No state across runs; the counter below is per-build and starts at zero.
         pass
 
-    def build(
-        self, fields: dict[str, tuple[str, ...]], files: dict[str, tuple[Path, ...]]
-    ) -> ContextSnapshot:
+    def build(self, fields: dict[str, tuple[str, ...]], files: tuple[Path, ...]) -> ContextSnapshot:
         # Resolves text fields first, then files, so refs stay deterministic per run.
         return self._assemble(fields, files)
 
     def _assemble(
-        self, fields: dict[str, tuple[str, ...]], files: dict[str, tuple[Path, ...]]
+        self, fields: dict[str, tuple[str, ...]], files: tuple[Path, ...]
     ) -> ContextSnapshot:
         # Keeps the orchestration small while each helper owns one input shape.
         state = _ContextAccumulator()
@@ -107,7 +105,7 @@ class SuggestionContextBuilder:
                 ref=ref,
                 kind=kind,
                 label=kind,
-                description=f"Caller-supplied {kind} context record.",
+                description="Caller-supplied context value.",
                 content=body,
                 source=f"flag:{kind}",
                 caller_supplied=True,
@@ -118,37 +116,36 @@ class SuggestionContextBuilder:
             state.warnings.append(note)
         state.total += len(body)
 
-    def _append_files(self, state: _ContextAccumulator, files: dict[str, tuple[Path, ...]]) -> None:
+    def _append_files(self, state: _ContextAccumulator, files: tuple[Path, ...]) -> None:
         # Reads files only after all repeated flag values have been accounted for.
-        for kind, paths in files.items():
-            for path in paths:
-                self._append_file(state, kind, path)
+        for path in files:
+            self._append_file(state, path)
 
-    def _append_file(self, state: _ContextAccumulator, kind: str, path: Path) -> None:
+    def _append_file(self, state: _ContextAccumulator, path: Path) -> None:
         # Rejects invalid files before adding an item or charging the total budget.
         ref = state.next_ref()
         body, status, note = self._read_one(path)
         if not body:
-            state.manifest.append(self._manifest_entry(ref, kind, str(path), body, "omitted"))
+            state.manifest.append(self._manifest_entry(ref, "file", str(path), body, "omitted"))
             state.warnings.append(f"Omitted empty context file: {path}.")
             return
         if not self._fits(state, len(body)):
-            state.manifest.append(self._manifest_entry(ref, kind, str(path), body, "omitted"))
+            state.manifest.append(self._manifest_entry(ref, "file", str(path), body, "omitted"))
             state.warnings.append(f"Omitted {path}: total context budget exceeded.")
             return
         state.items.append(
             SuggestionContextItem(
                 ref=ref,
-                kind=kind,
+                kind="file",
                 label=path.name,
-                description=f"Caller-supplied {kind} file record.",
+                description="Caller-supplied file content.",
                 content=body,
                 source=str(path),
                 caller_supplied=False,
             )
         )
         entry_status: ManifestStatus = "truncated" if status == "truncated" else "included"
-        state.manifest.append(self._manifest_entry(ref, kind, str(path), body, entry_status))
+        state.manifest.append(self._manifest_entry(ref, "file", str(path), body, entry_status))
         if status == "truncated":
             state.warnings.append(note)
         state.total += len(body)
@@ -217,7 +214,7 @@ class SuggestionContextBuilder:
             value.strip().lower() for value in fields.get("completed", ()) if value.strip()
         }
         in_progress = {
-            value.strip().lower() for value in fields.get("in-progress", ()) if value.strip()
+            value.strip().lower() for value in fields.get("in_progress", ()) if value.strip()
         }
         return bool(completed & in_progress)
 
