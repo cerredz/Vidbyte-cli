@@ -15,6 +15,9 @@ from lint.core.discovery import SourceCatalog
 _RULE_MODULES = (
     "lint.rules.c001_command_help_description_depth",
     "lint.rules.c002_paid_execute_comment_density",
+    "lint.rules.c003_markdown_xml_section_depth",
+    "lint.rules.c004_suggestion_category_prompt_structure",
+    "lint.rules.c005_suggestion_help_section_depth",
 )
 
 
