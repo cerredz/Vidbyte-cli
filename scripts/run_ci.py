@@ -112,6 +112,11 @@ _WHEEL_RUNTIME_PROMPTS = (
             "long_term_directions",
             "big_bets",
             "business_growth",
+            "customer_market",
+            "business_model_monetization",
+            "brand_positioning",
+            "distribution_sales",
+            "customer_relationship_service",
             "product_experience",
             "technical_possibilities",
         )

@@ -24,4 +24,5 @@ A business and growth suggestion improves reach, sustainability, revenue, custom
 - What bounded test can separate channel, offer, and execution effects?
 
 ## When not to use
+Do not use this umbrella when one commercial mechanism is the primary decision and a focused category can describe it more precisely. Use customer and market for audience or demand discovery, business model and monetization for value capture, brand and positioning for meaning and comparison, distribution and sales for route to purchase, and customer relationship and service for post-purchase value. Keep this category for cross-cutting growth plans or choices that intentionally combine several mechanisms.
 Do not use this category when the suggestion is about completing an internal task, clarifying an outcome, or improving a product interaction without a business-growth mechanism. Avoid it when “more users” or “more revenue” is the only stated rationale and customer value is unspecified. If the immediate issue is a limiting operational constraint, use bottleneck; if the proposal is a long-range direction without a near-term growth mechanism, use long-term directions or strategy.
