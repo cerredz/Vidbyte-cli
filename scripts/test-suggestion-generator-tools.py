@@ -151,6 +151,12 @@ def main() -> int:
     results.check(
         "uncommitted working copy cannot remove active state", store.snapshot()[0].id == "idea-002"
     )
+    numbered = store.working_copy()
+    results.check(
+        "model-facing removal accepts the displayed number",
+        "Removed suggestion idea-002" in numbered.tools()[1](1)
+        and store.snapshot()[0].id == "idea-002",
+    )
 
     # [Edge Case] More-suggestions guidance reports a bounded capacity and category gap.
     results.check(
