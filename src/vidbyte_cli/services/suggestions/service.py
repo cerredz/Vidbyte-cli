@@ -332,6 +332,7 @@ class SuggestionService:
         revision: int,
         rank: int,
         review_summary: str,
+        critique: SuggestionCritique | None = None,
     ) -> SuggestionIdea:
         values = draft.model_dump(exclude={"idea_id"})
         handoff = self._handoffs.build_draft(draft, request, idea_id, revision)
@@ -341,6 +342,7 @@ class SuggestionService:
             revision=revision,
             rank=rank,
             review_summary=review_summary,
+            critique=critique,
             handoff=handoff,
         )
 
@@ -380,7 +382,14 @@ class SuggestionService:
                 revisions.append((idea, critique))
                 continue
             if critique.verdict is CritiqueVerdict.KEEP:
-                kept.append(idea.model_copy(update={"review_summary": critique.review_summary}))
+                kept.append(
+                    idea.model_copy(
+                        update={
+                            "review_summary": critique.review_summary,
+                            "critique": critique,
+                        }
+                    )
+                )
         return tuple(kept), tuple(revisions)
 
     def _finalize(

@@ -40,12 +40,17 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     ContextManifestEntry,
     CritiqueConfidence,
     CritiqueEvidenceCheck,
+    CritiqueIssueSeverity,
+    CritiqueRiskLevel,
+    CritiqueSignalLevel,
     CritiqueVerdict,
     SuggestionCandidateBatch,
     SuggestionContextItem,
     SuggestionContextPrimitive,
     SuggestionCritique,
     SuggestionCritiqueArtifact,
+    SuggestionCritiqueIssue,
+    SuggestionCritiqueSignals,
     SuggestionDraft,
     SuggestionRequest,
     SuggestionSettings,
@@ -97,9 +102,12 @@ class FakeAgent:
 class FakeSdk:
     """A typed fake for the SuggestionSdk methods used by SuggestionService."""
 
-    def __init__(self, *, revision: bool = False, extra_compute: bool = False) -> None:
+    def __init__(
+        self, *, revision: bool = False, extra_compute: bool = False, signals: bool = False
+    ) -> None:
         self.revision = revision
         self.extra_compute = extra_compute
+        self.signals = signals
         self.settings: list[SuggestionAgentSettingsInput] = []
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
@@ -123,6 +131,15 @@ class FakeSdk:
             ids = self._candidate_ids(settings.context.candidate_handoffs)
             critiques = []
             for index, idea_id in enumerate(ids):
+                signal_packet = (
+                    SuggestionCritiqueSignals(
+                        goal_alignment=CritiqueSignalLevel.STRONG,
+                        evidence_grounding=CritiqueSignalLevel.ADEQUATE,
+                        risk=CritiqueRiskLevel.MEDIUM,
+                    )
+                    if self.signals
+                    else None
+                )
                 if self.revision and self.critic_calls == 1 and index == 0:
                     critiques.append(
                         _critique(
@@ -130,10 +147,11 @@ class FakeSdk:
                             verdict=CritiqueVerdict.REVISE,
                             fix="Clarify the first action without changing the evidence.",
                             preserve=("title", "primary_category", "considerations"),
+                            signals=signal_packet,
                         )
                     )
                 else:
-                    critiques.append(_critique(idea_id))
+                    critiques.append(_critique(idea_id, signals=signal_packet))
             return SuggestionCritiqueArtifact(critiques=tuple(critiques))
 
         self.generator_calls += 1
@@ -183,6 +201,8 @@ def _critique(
     verdict: CritiqueVerdict = CritiqueVerdict.KEEP,
     fix: str = "",
     preserve: tuple[str, ...] = (),
+    signals: SuggestionCritiqueSignals | None = None,
+    issues: tuple[SuggestionCritiqueIssue, ...] = (),
 ) -> SuggestionCritique:
     return SuggestionCritique(
         idea_id=idea_id,
@@ -192,6 +212,8 @@ def _critique(
         fix_instruction=fix,
         preserve=preserve,
         review_summary=f"Reviewed {idea_id} with no unsupported claim.",
+        signals=signals or SuggestionCritiqueSignals(),
+        issues=issues,
     )
 
 
@@ -299,6 +321,7 @@ class SuggestionSuite:
     def run(self) -> None:
         self.check_categories_and_prompts()
         self.check_request_boundary()
+        self.check_critic_signal_contract()
         self.check_sdk_context_boundary()
         self.check_generation_and_revision()
         self.check_extra_compute()
@@ -370,6 +393,56 @@ class SuggestionSuite:
             strict_rejection = False
         results.check("request dataclass rejects invalid values at construction", strict_rejection)
 
+    def check_critic_signal_contract(self) -> None:
+        results = self.results
+        issue = SuggestionCritiqueIssue(
+            code="unsupported_claim",
+            severity=CritiqueIssueSeverity.MAJOR,
+            fields=("expected_benefit",),
+            evidence_refs=("ctx-001",),
+            explanation="The benefit is not established by the supplied evidence.",
+            repair="State the benefit as an assumption or add supporting evidence.",
+        )
+        critique = _critique(
+            "idea-001",
+            signals=SuggestionCritiqueSignals(
+                goal_alignment=CritiqueSignalLevel.STRONG,
+                actionability=CritiqueSignalLevel.WEAK,
+                risk=CritiqueRiskLevel.HIGH,
+            ),
+            issues=(issue,),
+        )
+        results.check(
+            "critic signal packet captures quality, risk, and traceable issues",
+            critique.signals.goal_alignment is CritiqueSignalLevel.STRONG
+            and critique.signals.actionability is CritiqueSignalLevel.WEAK
+            and critique.signals.risk is CritiqueRiskLevel.HIGH
+            and critique.issues[0].evidence_refs == ("ctx-001",),
+        )
+        results.check(
+            "critic signal defaults preserve provider compatibility",
+            SuggestionCritiqueSignals().goal_alignment is CritiqueSignalLevel.UNKNOWN
+            and SuggestionCritiqueSignals().risk is CritiqueRiskLevel.UNKNOWN,
+        )
+        try:
+            SuggestionCritiqueIssue(
+                code="Not snake case",
+                severity=CritiqueIssueSeverity.NOTE,
+                explanation="Invalid code.",
+            )
+        except ValueError:
+            invalid_issue_rejected = True
+        else:
+            invalid_issue_rejected = False
+        results.check("critic issue codes are stable identifiers", invalid_issue_rejected)
+        try:
+            SuggestionCritiqueSignals.model_validate({"risk": "certain"})
+        except ValueError:
+            invalid_signal_rejected = True
+        else:
+            invalid_signal_rejected = False
+        results.check("critic signal values use the closed vocabulary", invalid_signal_rejected)
+
     def check_sdk_context_boundary(self) -> None:
         results = self.results
         context = _request().context
@@ -412,13 +485,21 @@ class SuggestionSuite:
 
     def check_generation_and_revision(self) -> None:
         results = self.results
-        fake = FakeSdk(revision=True)
+        fake = FakeSdk(revision=True, signals=True)
         result = SuggestionService(sdk=fake).run(_request(rounds=2, items=(_item(),)))
         results.check(
             "generated ideas survive independent critique with deterministic handoffs",
             result.returned_count == 4
             and all(idea.handoff.idea_id == idea.id for idea in result.ideas)
             and all(idea.evidence_refs == ("ctx-001",) for idea in result.ideas),
+        )
+        results.check(
+            "accepted results expose the critic signal packet",
+            all(
+                idea.critique is not None
+                and idea.critique.signals.goal_alignment is CritiqueSignalLevel.STRONG
+                for idea in result.ideas
+            ),
         )
         revised = next((idea for idea in result.ideas if idea.id == "idea-001"), None)
         results.check(
