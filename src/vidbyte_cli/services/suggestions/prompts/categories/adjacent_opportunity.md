@@ -1,14 +1,37 @@
 # Adjacent Opportunity
 
 ## Description
-An adjacent opportunity captures nearby value enabled by current work. It is not required for the original goal, but present access, setup, attention, or information makes it unusually attractive. The suggestion should explain the connection without turning convenience into a new obligation. It should protect the primary commitment from being displaced. A reversible capture is often better than immediate expansion when the advantage may persist. The opportunity is worth suggesting when the incremental effort is bounded and the timing advantage is credible.
+An adjacent opportunity is a nearby source of value that work already underway has made unusually cheap to reach. It sits outside the stated objective, so nothing about the original commitment depends on capturing it. What qualifies it is an enabling condition that exists right now and will not persist: access that has been granted, a system that is already set up, attention that is already focused, or information that is already in front of the person doing the work. The same action taken next quarter would cost materially more, and that cost difference is the whole argument. Proximity in topic is not proximity in this sense, because two efforts can share a subject and share no setup at all. The category exists to stop useful, perishable value from being discarded simply because it was not on the plan.
 
-## Things to consider
-- What current work creates the opportunity?
-- How is the opportunity adjacent rather than central?
-- What temporary advantage exists now?
-- What incremental effort would it require?
-- Could it distract from the primary goal?
-- Can the value be captured reversibly?
-- What future cost would waiting create?
-- What stopping point protects scope?
+The suggestion must name the enabling connection explicitly rather than gesture at relatedness, because an unnamed connection is usually a second project in disguise. It must bound the additional effort and state where that effort stops, so the primary commitment cannot be displaced by something that was never required. Where the opportunity can be preserved rather than pursued, the suggestion should prefer the reversible capture: a note, an export, a measurement, a reservation, a short spike. It should say what is lost by waiting and how confident that loss estimate is, because a vague timing claim is the most common way this category is abused. It should also distinguish the incremental cost from the full cost of the adjacent work, since only the increment is enabled by the current effort. When the increment cannot be described concretely, the honest answer is that no adjacent opportunity has been found.
+
+## Why use
+Reach for this category when the value you have noticed is real but nobody asked for it, and the reason to raise it now is cost rather than importance. Most suggestion categories argue that something should be done; this one argues that something should be done *now*, while a temporary advantage holds. That is a different claim and it needs different evidence — not the worth of the adjacent work, which may be modest, but the size of the gap between doing it during the current effort and doing it cold later. An adjacent opportunity with a large payoff and no timing advantage is not an adjacent opportunity; it is an ordinary piece of work competing for priority like any other.
+
+The category also earns its place by protecting the primary commitment from the thing it is most often lost to. Work expands through plausible neighbours, each individually reasonable, and a suggestion agent that cannot name this pattern will keep producing scope creep under the banner of helpfulness. Forcing the suggestion to carry an explicit stopping point and an explicit enabling condition makes expansion visible at the moment it is proposed rather than three steps later. The reversible-capture preference does the same job from the other side: it offers a way to keep the option without spending the commitment, which is usually the correct move when the opportunity's value is uncertain but its window is short.
+
+Use it in preference to its neighbours when the distinguishing feature is enablement by current work. If the action is required for the goal, it belongs to prerequisite or continuation regardless of how convenient the timing is. If the payoff is large enough to reshape direction, the honest framing is strategy or big bets, because calling a major commitment "adjacent" understates what is being decided. If one asset is being built deliberately to serve many future tasks, that is leverage, which argues from reuse rather than from a closing window. Adjacent opportunity is the narrow case where the work is optional, the value is bounded, and the moment is what makes it worth raising at all.
+
+## Use cases
+- **Current work has exposed reusable information.** The task may surface data, contacts, patterns, or decisions that a nearby objective would otherwise have to rediscover. Suggest capture when recovering that information later would mean repeating the access or the analysis that produced it.
+- **An existing setup can serve one more purpose.** A configured tool, a booked interview, a running prototype, or a loaded dataset may answer a second question at marginal cost. Name the extra step and keep it visibly separate from the original deliverable.
+- **A short external window is open.** A launch, a meeting, a market event, or a moment of stakeholder attention may make a neighbouring action unusually timely. Use the category only when waiting would plausibly remove the advantage rather than merely make it less convenient.
+- **Access has been granted that will lapse.** A credential, an environment, a permission, or an introduction may be available for a limited period. Suggest the smallest action that converts perishable access into a durable artifact.
+- **A reversible capture preserves a future choice.** A note, an export, a measurement, or a reservation can hold an option open without committing to the adjacent project. Recommend it when the capture has a bounded cost and an obvious stopping point.
+- **The adjacent value compounds the main artifact.** A small extension may make the current output reusable, discoverable, or easier to validate elsewhere. Use the category when the extra value comes out of the same work rather than from starting something unrelated.
+- **A neighbouring team or user has the same problem.** The current work may solve a closely related need for another audience with a modest adaptation. Suggest it only when the relationship is concrete and the adaptation will not quietly become a second deliverable.
+- **Capturing a decision now prevents a likely second pass.** Recording an interface, a convention, or a rationale while it is fresh may remove a duplicate investigation later. Use the category when the rework being prevented is specific rather than hypothetical.
+- **A nearby observation would change a later decision.** A quick adjacent check may reveal whether a larger follow-on path is worth pursuing at all. Recommend it when the check completes independently of the main work and its result has a decision attached.
+- **A one-time cost has already been paid.** Travel, setup, procurement, onboarding, or a long build may have a fixed component that a second use amortizes. Suggest the second use when the fixed cost genuinely dominates the marginal cost.
+- **A participant is available who will be hard to reach again.** A customer, an expert, a departing colleague, or a partner may be reachable now and expensive to reconvene. Use the category to capture the specific question worth asking while the access holds.
+- **The current environment reproduces a condition that is normally rare.** A load pattern, a data state, a failure mode, or a seasonal effect may be present only while this work runs. Suggest observing or recording it now, because recreating the condition deliberately is usually the expensive path.
+
+## When not to use
+- **The action is required for the stated goal.** Necessary work is not an opportunity, and framing it as optional hides a real dependency.
+- **The connection to current work is thematic rather than enabling.** Sharing a topic does not lower the cost of the second effort.
+- **The incremental effort is open-ended.** Without a stopping point, the suggestion is an invitation to displace the primary commitment.
+- **The timing claim rests on a feeling.** If nothing concrete closes the window, the work can be scheduled on its merits instead.
+- **The proposal changes the main direction.** A commitment that reshapes the plan should be argued as a direction, not smuggled in as a nearby convenience.
+- **The full adjacent project is what is being proposed.** Only the increment enabled by current work belongs here.
+
+Route the suggestion elsewhere when one of those signals holds. Required conditions belong to prerequisite, and the next agreed step belongs to continuation. A deliberate investment in one asset that pays back across many future tasks is leverage, and a direction that coordinates several actions is strategy. An ambitious, high-uncertainty commitment is big bets, and a nearby question that must be answered before anything is decided is investigation. If the opportunity is genuinely valuable but nothing about the present moment makes it cheaper, drop the timing argument and let it compete under prioritization.

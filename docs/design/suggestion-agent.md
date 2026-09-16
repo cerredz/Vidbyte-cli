@@ -74,9 +74,11 @@ inspection, handoff extraction, and the offline test suite do not call a provide
 
 Model-facing prompts live in Markdown and are loaded with `importlib.resources` so the installed
 wheel and a checkout use the same assets. Generator, critic, and revision prompts each carry
-focused XML sections with six-to-eight sentences. Category prompts carry one title, a six-to-
-eight sentence Description, and eight-to-ten tailored Things to consider bullets. Timelines and
-the old generic checklist section are intentionally absent. C003 enforces XML section depth and
+focused XML sections with six-to-eight sentences. Category prompts carry one title, a Description of
+exactly two six-to-eight sentence paragraphs, a prose `Why use` rationale arguing that category
+against the ones it is confused with, ten-to-fifteen `Use cases` items, and a `When not to use`
+list closed by a paragraph naming the categories that fit instead. Timelines, the old generic
+checklist, and the generic `Things to consider` list are intentionally absent. C003 enforces XML section depth and
 C004 enforces category structure; the runtime loader does not duplicate those lint concerns.
 
 Caller-facing help assets for dynamic text and path values use named headings for purpose,

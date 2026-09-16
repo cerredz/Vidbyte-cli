@@ -1,14 +1,37 @@
 # Big Bets
 
 ## Description
-A big-bet suggestion considers an ambitious change with substantial possible upside and meaningful uncertainty. It asks whether a larger shift in direction could change the caller's result more than incremental improvement. The proposal should state the size of the opportunity and the commitments it would demand. It must also make downside, reversibility, and early evidence visible. A big bet is not a demand for recklessness or a license to ignore current obligations. The strongest version has a bounded probe before the full commitment.
+A big bet is an ambitious commitment whose potential upside is large and whose outcome is genuinely uncertain. What separates it from ordinary work is not ambition but exposure: its scale, its irreversibility, or the concentration of attention it demands can overwhelm the normal machinery of prioritization. A suggestion in this category is therefore proposing a decision, not a task, and it should read as one. The hoped-for gain has to be made concrete, because excitement, novelty, and status make poor substitutes for a described payoff. The commitment has to be made concrete too — the capital, the capability, the timing, and the failure exposure that placing the bet actually requires. Without both halves the proposal is an aspiration rather than a bet.
 
-## Things to consider
-- What upside would justify the ambition?
-- Which uncertainty could make the bet fail?
-- What resources and commitments would be required?
-- What downside must be contained?
-- How reversible is the early move?
-- What smaller probe could test the premise?
-- Which existing commitments would be displaced?
-- What evidence would justify scaling or stopping?
+The suggestion should say which assumptions control the size and the probability of the payoff, since a bet is only as good as the beliefs holding it up. It should separate the reversible part of the commitment from the irreversible part, because those are governed differently and confusing them is how organizations lose more than they intended. A maximum acceptable loss belongs in the suggestion explicitly, stated against the core obligation the bet must not endanger. Staging can buy learning before the full commitment is placed, and where a staged path exists the suggestion should describe it along with the evidence that would justify advancing. Staging does not remove the underlying uncertainty, and a suggestion that implies otherwise is misleading. Name who has the authority to place the bet and who carries the downside, because a bet proposed past its decision-maker is not a bet but a surprise.
+
+## Why use
+Use this category when the honest framing of an opportunity is that it is large, uncertain, and consequential, and when saying anything smaller would misrepresent what is being asked for. Ordinary prioritization is built to compare bounded work against bounded work; it handles a commitment of this shape badly, usually by shrinking it into something safe that no longer captures the upside. Naming it a bet keeps the scale visible and puts the exposure in the same sentence as the reward, which is the only way the decision can be made on its real terms.
+
+The category also exists to enforce honesty in the other direction. A great deal of ambitious language attaches to proposals with no material upside, no bounded downside, and no named assumptions, and a suggestion agent that cannot tell those apart will inflate ordinary work into strategy theatre. Requiring a described payoff, a loss limit, and a decision owner filters most of that out before it reaches a reader. What survives is a small number of proposals worth the concentrated attention this category asks for.
+
+Keep the boundary against its neighbours sharp. Strategy chooses a direction that coordinates several actions, and a direction can be adopted incrementally without a concentrated, irreversible commitment. Long-term directions describes capability worth building over time without asserting that a decision is due now. Experiment runs a bounded test precisely to avoid a large commitment, so if a cheap test can answer the central question, the experiment is the correct suggestion and the bet can wait. Adjacent opportunity argues from a closing window on optional, bounded value, which is close to the opposite of the exposure this category describes. Use big bets only when the commitment is large, the uncertainty is irreducible by cheap means, and the upside justifies deliberate risk.
+
+## Use cases
+- **The upside would change the trajectory.** The opportunity may create a new level of reach, capability, revenue, or impact rather than an increment. Use the category when that step-change is plausible and material enough to matter.
+- **The current ceiling is structurally limiting.** Incremental improvement may not touch the constraint preventing the desired scale or position. Raise a bet when the step-change is necessary and the exposure can be discussed honestly.
+- **A rare window favours decisive action.** A technology shift, a market moment, a policy change, or unusual access may make a large move more valuable now than later. Use it when the window is evidenced and the cost of waiting can be stated.
+- **A capability requires concentrated investment.** Some outcomes need a dedicated team, platform, partnership, or long build before any benefit appears. Suggest the bet when spreading effort thinly would simply fail to produce the capability.
+- **A visible commitment would unlock complementary assets.** A decisive move may attract talent, partners, distribution, or credibility that small experiments cannot. Use it only when that enabling effect is more than a hopeful narrative.
+- **The downside is bounded and survivable.** Large risk can be acceptable when failure does not threaten the core obligation or the ability to recover. State the loss limit and the conditions that keep survivability true.
+- **The decision deserves explicit ownership.** A commitment may cross a threshold where ordinary task prioritization would conceal its consequences. Use the category to surface the decision and its evidence, never to route around governance.
+- **A staged path can test the key assumption first.** Discovery work, a paid pilot, or a capability milestone may retire the most important uncertainty cheaply. Recommend it when the staged path still preserves a real route to the full upside.
+- **Doing nothing is itself a large exposure.** Standing still may cede a position that cannot be re-entered later. Frame inaction as a bet with its own downside when that is the true shape of the decision.
+- **An existing asset could be redeployed at scale.** A proprietary dataset, a distribution channel, a brand, or an unusual skill concentration may support a much larger move. Use the category when redeployment is a commitment rather than a side effect.
+- **Several small efforts are competing for the same scarce resource.** Splitting a constrained budget or a scarce team across many bets may guarantee that none succeed. Propose concentration explicitly, and name what is being stopped to fund it.
+- **The payoff depends on a belief the organization can test but has not.** A single unvalidated conviction may be doing all the work in the case for a large move. Name it, and say what evidence would raise or lower the commitment.
+
+## When not to use
+- **The proposal is an ordinary improvement.** Ambition in the wording does not make a bounded task a bet.
+- **The cost has not been bounded.** A commitment with no stated loss limit cannot be responsibly placed.
+- **A cheap test could answer the central question.** Spending large to learn something small is a failure of sequencing, not courage.
+- **The upside is described only in adjectives.** Without a concrete payoff there is nothing to weigh the exposure against.
+- **The downside threatens the core obligation.** A bet that can take the organization with it is not a bet worth framing as one.
+- **No one named can actually decide it.** A proposal addressed to nobody will not be placed, and pretending otherwise wastes the reader's attention.
+
+Route the suggestion elsewhere when one of those signals holds. A bounded test that retires uncertainty is experiment, and gathering the evidence behind it is investigation. A coordinating direction is strategy, and a capability worth growing without a decision due now is long-term directions. Preventing a specific plausible failure is risk prevention, and choosing among competing bounded commitments is prioritization. If the upside is real but the present moment is merely convenient rather than decisive, the honest category is adjacent opportunity.
