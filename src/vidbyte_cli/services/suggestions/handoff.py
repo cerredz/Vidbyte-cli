@@ -8,6 +8,7 @@ a suggestion never authorizes its execution.
 from __future__ import annotations
 
 from ...types.suggestions import SuggestionHandoff, SuggestionIdea
+from .context import FUTURE_INTENDED_WORK_KIND
 
 
 class SuggestionHandoffBuilder:
@@ -30,6 +31,7 @@ class SuggestionHandoffBuilder:
             current_state=self._state(context),
             relevant_decisions=context.get("decision", ()),
             completed_work=context.get("completed", ()),
+            future_intended_work=context.get(FUTURE_INTENDED_WORK_KIND, ()),
             in_progress_work=context.get("in-progress", ()),
             constraints=context.get("constraint", ()),
             required_context=self._required(idea),
@@ -64,10 +66,11 @@ class SuggestionHandoffBuilder:
         return "\n".join(lines)
 
     def _state(self, context: dict[str, tuple[str, ...]]) -> str:
-        # Summarizes caller state from completed and in-progress lists only.
+        # Summarizes completed, planned, and active caller state without conflating them.
         done = "; ".join(context.get("completed", ())) or "none reported"
+        intended = "; ".join(context.get(FUTURE_INTENDED_WORK_KIND, ())) or "none reported"
         doing = "; ".join(context.get("in-progress", ())) or "none reported"
-        return f"Completed: {done}. In progress: {doing}."
+        return f"Completed: {done}. Future intended: {intended}. In progress: {doing}."
 
     def _required(self, idea: SuggestionIdea) -> tuple[str, ...]:
         # Carries evidence refs plus the benefit line so paths alone never suffice.

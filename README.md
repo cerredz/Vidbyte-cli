@@ -67,6 +67,26 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli agents suggest categories` | List the 17 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
 
+Suggestion context can separate completed work from planned work. Repeat
+`--future-intended-work "..."` for work the caller intends to do but has not completed; the
+agent may propose prerequisites, sequencing, validation, or a material refinement rather than
+claiming that plan is already done. Structured callers can send the same values under
+`context.future_intended_work`:
+
+```json
+{
+  "schema_version": 1,
+  "goal": "Improve onboarding",
+  "context": {
+    "completed": ["Published the setup guide"],
+    "future_intended_work": [
+      "Interview five new users",
+      "Prototype a shorter setup flow"
+    ]
+  }
+}
+```
+
 ### Research threads
 
 A thread is addressed only by the public ID that `research start` and `research threads`

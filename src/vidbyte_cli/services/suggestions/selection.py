@@ -50,6 +50,24 @@ class SuggestionSelection:
             kept.append(idea)
         return tuple(kept)
 
+    def suppress_exact_planned(
+        self, ideas: tuple[SuggestionIdea, ...], planned: tuple[str, ...]
+    ) -> tuple[SuggestionIdea, ...]:
+        # Removes only exact title or summary echoes so prerequisites remain eligible.
+        needles = {self._normalize(item) for item in planned if self._normalize(item)}
+        if not needles:
+            return ideas
+        return tuple(
+            idea
+            for idea in ideas
+            if self._normalize(idea.title) not in needles
+            and self._normalize(idea.summary) not in needles
+        )
+
+    def _normalize(self, value: str) -> str:
+        # Compares caller statements without case or whitespace differences.
+        return " ".join(value.lower().split())
+
     def rank(self, ideas: tuple[SuggestionIdea, ...], limit: int) -> tuple[SuggestionIdea, ...]:
         # Reassigns rank sequentially after trimming to the requested maximum.
         return tuple(

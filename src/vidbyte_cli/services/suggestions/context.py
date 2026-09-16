@@ -16,6 +16,7 @@ from typing import Literal
 from ...types.suggestions import ContextManifestEntry, SuggestionContextItem
 
 ManifestStatus = Literal["included", "truncated", "omitted", "not_supplied"]
+FUTURE_INTENDED_WORK_KIND = "future-intended-work"
 
 _MAX_FILE_CHARS = 8000
 _MAX_TOTAL_CHARS = 64000

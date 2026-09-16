@@ -14,11 +14,13 @@ Every candidate must carry one primary category, a concrete first action, and ob
 - Write a first action a fresh agent can start without clarification.
 - State completion as an observable outcome, not an aspiration.
 - Keep predictions in assumptions, facts in evidence refs.
+- Treat `future-intended-work` as planned but unfinished state that can need prerequisites, sequencing, validation, or refinement.
 </checklist>
 
 <things-not-to-do>
 - Do not cite evidence refs that were not supplied.
 - Do not repeat completed, in-progress, or rejected work as new ideas.
+- Do not describe future-intended-work as completed or blindly echo it when a useful prerequisite or refinement is not present.
 - Do not pad the slate with weak filler to reach the requested count.
 </things-not-to-do>
 
@@ -29,4 +31,5 @@ Categories:
 {{categories}}
 Context:
 {{context}}
+Future intended work is planned state, not completed state; use it to make the next actions more concrete.
 </instructions-and-output>
