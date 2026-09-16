@@ -13,7 +13,6 @@ from ....types.suggestions import (
     SUGGESTIONS_HANDOFF_KIND,
     SUGGESTIONS_RESULT_KIND,
     SuggestionHandoff,
-    SuggestionIdea,
     SuggestionResult,
 )
 
@@ -40,21 +39,5 @@ class SuggestionRenderer:
         )
 
     def _human_result(self, result: SuggestionResult) -> str:
-        # One block per idea so a person can scan ranks without parsing JSON.
-        if not result.ideas:
-            return f"No suggestions for: {result.goal}"
-        blocks: list[str] = []
-        for idea in result.ideas:
-            blocks.append(self._human_idea(idea))
-        header = self._human_header(result)
-        return header + "\n\n" + "\n\n".join(blocks)
-
-    def _human_idea(self, idea: SuggestionIdea) -> str:
-        # One ranked line plus its first action on a second line.
-        lead = f"#{idea.rank} {idea.id} [{idea.primary_category}]"
-        return f"{lead} {idea.title}\n  First action: {idea.first_action}"
-
-    def _human_header(self, result: SuggestionResult) -> str:
-        # Counts plus goal plus status so shortfalls read plainly.
-        counts = f"{result.returned_count}/{result.requested_count}"
-        return f"{counts} ideas for: {result.goal} [{result.status.value}]"
+        # Presentation delegates to the same deterministic structured value exposed to callers.
+        return result.to_string()

@@ -43,6 +43,7 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     CritiqueEvidenceCheck,
     CritiqueVerdict,
     SuggestionCandidateBatch,
+    SuggestionCategoryGroup,
     SuggestionCompletion,
     SuggestionContextItem,
     SuggestionContextPrimitive,
@@ -443,6 +444,24 @@ class SuggestionSuite:
             and all(idea.handoff.idea_id == idea.id for idea in result.ideas)
             and all(idea.evidence_refs == ("ctx-001",) for idea in result.ideas),
         )
+        results.check(
+            "final result exposes category groups without losing the flat view",
+            tuple(
+                sorted(
+                    (idea for group in result.suggestions for idea in group.suggestions),
+                    key=lambda idea: idea.rank,
+                )
+            )
+            == result.ideas
+            and tuple(group.category for group in result.suggestions)
+            == ("verification", "experiment"),
+        )
+        results.check(
+            "structured result has deterministic human rendering",
+            result.to_string().startswith("4/4 ideas for:")
+            and "[verification]" in result.to_string()
+            and "First action:" in result.to_string(),
+        )
         revised = next((idea for idea in result.ideas if idea.id == "idea-001"), None)
         results.check(
             "curation tool update preserves identity and increments revision",
@@ -466,6 +485,10 @@ class SuggestionSuite:
         dry = SuggestionService(sdk=dry_fake).run(dry_request)
         results.check(
             "dry run never constructs an agent", dry.returned_count == 0 and not dry_fake.turns
+        )
+        results.check(
+            "empty results expose no phantom category groups",
+            not dry.suggestions and dry.to_string().startswith("No suggestions for:"),
         )
         failed = SuggestionService(sdk=FakeSdk(curation_failure=True)).run(
             _request(rounds=2, items=(_item(),))
@@ -582,6 +605,23 @@ class SuggestionSuite:
             "stable output envelope constants remain versioned",
             SUGGESTIONS_HANDOFF_KIND == "suggestions.handoff"
             and SUGGESTIONS_RESULT_KIND == "suggestions.result",
+        )
+        results.check(
+            "category group type validates category membership",
+            isinstance(result.suggestions[0], SuggestionCategoryGroup),
+        )
+        try:
+            SuggestionCategoryGroup(
+                category="experiment",
+                suggestions=(result.ideas[0],),
+            )
+        except ValueError:
+            mismatched_group_rejected = True
+        else:
+            mismatched_group_rejected = False
+        results.check(
+            "category group rejects an idea from another category",
+            mismatched_group_rejected,
         )
 
     def check_cli_contracts(self) -> None:
