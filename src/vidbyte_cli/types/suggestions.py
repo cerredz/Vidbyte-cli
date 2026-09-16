@@ -375,6 +375,20 @@ class SuggestionIdea(BaseModel):
     handoff: SuggestionHandoff
 
 
+class SuggestionCategoryGroup(BaseModel):
+    """One deterministic category bucket in the final suggestion result."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    category: str = Field(min_length=1, max_length=64)
+    suggestions: tuple[SuggestionIdea, ...] = Field(min_length=1, max_length=15)
+
+    @model_validator(mode="after")
+    def _category_matches_ideas(self) -> SuggestionCategoryGroup:
+        if any(idea.primary_category != self.category for idea in self.suggestions):
+            raise ValueError("every grouped suggestion must use the group's category")
+        return self
+
+
 class SuggestionResult(BaseModel):
     """Whole validated outcome of one run, including shortfalls and usage."""
 
@@ -387,12 +401,55 @@ class SuggestionResult(BaseModel):
     settings: SuggestionSettings
     context_manifest: tuple[ContextManifestEntry, ...] = ()
     ideas: tuple[SuggestionIdea, ...] = ()
+    suggestions: tuple[SuggestionCategoryGroup, ...] = ()
     category_coverage: dict[str, int] = Field(default_factory=dict)
     missing_context: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+
+    @model_validator(mode="after")
+    def _normalize_structured_views(self) -> SuggestionResult:
+        flattened = tuple(idea for group in self.suggestions for idea in group.suggestions)
+        grouped_by_id = {idea.id: idea for idea in flattened}
+        flat_by_id = {idea.id: idea for idea in self.ideas}
+        if self.ideas and self.suggestions and grouped_by_id != flat_by_id:
+            raise ValueError("ideas and suggestions must describe the same slate")
+        if self.suggestions and not self.ideas:
+            object.__setattr__(self, "ideas", tuple(sorted(flattened, key=lambda idea: idea.rank)))
+        elif self.ideas and not self.suggestions:
+            object.__setattr__(self, "suggestions", self._group_ideas(self.ideas))
+            grouped_by_id = flat_by_id
+            flattened = tuple(idea for group in self.suggestions for idea in group.suggestions)
+        if len(grouped_by_id) != len(flattened) or len(flat_by_id) != len(self.ideas):
+            raise ValueError("a structured suggestion result cannot repeat an idea ID")
+        return self
+
+    @staticmethod
+    def _group_ideas(ideas: tuple[SuggestionIdea, ...]) -> tuple[SuggestionCategoryGroup, ...]:
+        grouped: dict[str, list[SuggestionIdea]] = {}
+        for idea in ideas:
+            grouped.setdefault(idea.primary_category, []).append(idea)
+        return tuple(
+            SuggestionCategoryGroup(category=category, suggestions=tuple(values))
+            for category, values in grouped.items()
+        )
+
+    def to_string(self) -> str:
+        """Render the typed result for a human without changing its data."""
+        if not self.ideas:
+            return f"No suggestions for: {self.goal} [{self.status.value}]"
+        lines = [
+            f"{self.returned_count}/{self.requested_count} ideas for: "
+            f"{self.goal} [{self.status.value}]"
+        ]
+        for group in self.suggestions:
+            lines.append(f"[{group.category}]")
+            for idea in group.suggestions:
+                lines.append(f"#{idea.rank} {idea.id} {idea.title}")
+                lines.append(f"  First action: {idea.first_action}")
+        return "\n".join(lines)
 
 
 __all__ = [
@@ -411,6 +468,7 @@ __all__ = [
     "SUGGESTIONS_RESULT_KIND",
     "StopReason",
     "SuggestionCandidateBatch",
+    "SuggestionCategoryGroup",
     "SuggestionCompletion",
     "SuggestionContextItem",
     "SuggestionContextPrimitive",
