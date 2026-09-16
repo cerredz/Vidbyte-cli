@@ -28,8 +28,5 @@ Treat the critic as a repair instruction, not as permission to execute work.
 </Output>
 
 Goal: {{goal}}
-Candidates:
-{{candidates}}
-Critiques:
-{{critiques}}
+The revision context contains the exact candidate and critique packet.
 Requested revisions: {{count}}
