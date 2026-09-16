@@ -13,6 +13,7 @@ import click
 from ....lib.runtime.context import ApplicationContext as Context
 from ....services.suggestions.categories import SuggestionCategories
 from ....services.suggestions.service import SuggestionService
+from ...agent_options import AgentAttachmentOptions
 from .prompts.library import SuggestionHelpLibrary
 from .render import SuggestionRenderer
 from .request_builder import SuggestionRequestBuilder
@@ -50,6 +51,7 @@ _BLOCKERS_HELP = _HELP.load("blockers")
 _HYPOTHESES_HELP = _HELP.load("hypotheses")
 _RISKS_HELP = _HELP.load("risks")
 _TRAJECTORY_HELP = _HELP.load("trajectory")
+_ATTACHMENT_OPTIONS = AgentAttachmentOptions()
 
 
 class SuggestRunCommand:
@@ -67,6 +69,7 @@ class SuggestRunCommand:
             type=click.Path(path_type=Path),
             help=_FILES_HELP,
         )
+        @_ATTACHMENT_OPTIONS.apply
         @click.option("--completed", "completed", multiple=True, help=_COMPLETED_HELP)
         @click.option("--in-progress", "in_progress", multiple=True, help=_IN_PROGRESS_HELP)
         @click.option("--decision", "decision", multiple=True, help=_DECISION_HELP)
