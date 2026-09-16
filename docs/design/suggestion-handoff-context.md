@@ -336,6 +336,7 @@ N/A - this is a local in-memory/file contract change. The existing `suggestions.
 - `[Edge Case]` A 4,096-character valid goal remains lossless in `original_goal` while repeated context excerpts and the rendered prompt stay bounded.
 - `[Hidden Failure]` Invalid closed-literal values, empty required strings, extra keys, and unsupported nested shapes fail Pydantic validation before rendering.
 - `[Hidden Failure]` Handoff extraction rejects a version-1 nested handoff instead of silently accepting it as version 2.
+- `[Hidden Failure]` Maximum-size caller context is compacted and marked as truncated while the rendered prompt remains within 16,384 characters.
 - `[Silent Failure]` Every existing idea metadata field appears in the handoff with the same value.
 - `[Silent Failure]` Every new context value appears under the correct deterministic prompt section.
 - `[Silent Failure]` `selected_action`, `suggested_steps`, `deliverables`, and `acceptance_checks` remain distinct rather than reusing one field for multiple meanings.

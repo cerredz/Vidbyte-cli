@@ -220,6 +220,30 @@ class SuggestionHandoffContextSuite:
             "No network changes" in with_caller_context.execution_prompt
             and "Constraints:" in with_caller_context.execution_prompt,
         )
+        oversized_context = (
+            self.service.run(
+                SuggestionRequest(
+                    goal="Bound a large caller context",
+                    context_items=(
+                        SuggestionContextItem(
+                            ref="ctx-002",
+                            kind="constraint",
+                            label="Large constraint",
+                            content="x" * 65536,
+                            source="test",
+                        ),
+                    ),
+                    settings=SuggestionSettings(requested_count=1),
+                )
+            )
+            .ideas[0]
+            .handoff
+        )
+        self.results.check(
+            "[Hidden Failure] oversized caller context stays within prompt bound",
+            len(oversized_context.execution_prompt) <= 16384
+            and "[truncated]" in oversized_context.execution_prompt,
+        )
 
     def check_extraction(self) -> None:
         # Uses the public extraction command to verify the versioned packet path.

@@ -72,9 +72,9 @@ class SuggestionHandoffBuilder:
             f"Effort estimate: {handoff.effort_estimate}",
             f"Review: {handoff.review_summary}",
             "Evidence refs:",
-            *[f"- {ref}" for ref in handoff.evidence_refs or ("none supplied",)],
+            *self._prompt_items("ref", handoff.evidence_refs),
             "Required context:",
-            *[f"- {item}" for item in handoff.required_context or ("none supplied",)],
+            *self._prompt_items("item", handoff.required_context),
             "Problem or opportunity:",
             f"- Type: {handoff.suggestion_context.problem_or_opportunity.type}",
             f"- Condition: {handoff.suggestion_context.problem_or_opportunity.condition}",
@@ -98,36 +98,36 @@ class SuggestionHandoffBuilder:
             f"- Why now: {handoff.reason_for_selection}",
             f"- Current state: {handoff.current_state}",
             "Caller decisions:",
-            *[f"- {item}" for item in handoff.relevant_decisions or ("none supplied",)],
+            *self._prompt_items("decision", handoff.relevant_decisions),
             "Completed work:",
-            *[f"- {item}" for item in handoff.completed_work or ("none supplied",)],
+            *self._prompt_items("completed", handoff.completed_work),
             "In-progress work:",
-            *[f"- {item}" for item in handoff.in_progress_work or ("none supplied",)],
+            *self._prompt_items("in-progress", handoff.in_progress_work),
             "Constraints:",
-            *[f"- {item}" for item in handoff.constraints or ("none supplied",)],
+            *self._prompt_items("constraint", handoff.constraints),
             "Assumptions to verify:",
-            *[f"- {item}" for item in handoff.assumptions_to_verify or ("none supplied",)],
+            *self._prompt_items("assumption", handoff.assumptions_to_verify),
             "Steps:",
-            *[f"- {step}" for step in handoff.suggested_steps],
+            *self._prompt_items("step", handoff.suggested_steps),
             "Deliverables:",
-            *[f"- {item}" for item in handoff.deliverables or ("none specified",)],
+            *self._prompt_items("deliverable", handoff.deliverables),
             "Acceptance:",
-            *[f"- {check}" for check in handoff.acceptance_checks],
+            *self._prompt_items("check", handoff.acceptance_checks),
             "Dependencies:",
-            *[f"- {item}" for item in handoff.dependencies or ("none specified",)],
+            *self._prompt_items("dependency", handoff.dependencies),
             "Required capabilities:",
-            *[f"- {item}" for item in handoff.required_capabilities or ("none specified",)],
+            *self._prompt_items("capability", handoff.required_capabilities),
             "Stop when:",
-            *[f"- {stop}" for stop in handoff.stop_conditions],
+            *self._prompt_items("stop", handoff.stop_conditions),
             f"Authority: {handoff.authority}",
             f"Report: {handoff.return_report}",
         ]
-        return "\n".join(lines)
+        return self._fit_prompt("\n".join(lines))
 
     def _state(self, context: dict[str, tuple[str, ...]]) -> str:
         # Summarizes caller state from completed and in-progress lists only.
-        done = "; ".join(context.get("completed", ())) or "none reported"
-        doing = "; ".join(context.get("in-progress", ())) or "none reported"
+        done = self._compact_values(context.get("completed", ())) or "none reported"
+        doing = self._compact_values(context.get("in-progress", ())) or "none reported"
         return f"Completed: {done}. In progress: {doing}."
 
     def _required(self, idea: SuggestionIdea) -> tuple[str, ...]:
@@ -232,6 +232,32 @@ class SuggestionHandoffBuilder:
     def _labeled_items(self, label: str, items: tuple[str, ...]) -> tuple[str, ...]:
         # Gives repeated context values a stable readable label.
         return tuple(f"- {label}: {item}" for item in items)
+
+    def _prompt_items(self, label: str, items: tuple[str, ...]) -> tuple[str, ...]:
+        # Bounds caller-controlled lines while preserving their labels and order.
+        values = items or ("none supplied",)
+        return tuple(f"- {label}: {self._truncate(item)}" for item in values)
+
+    def _compact_values(self, items: tuple[str, ...]) -> str:
+        # Bounds the current-state summary before it enters the typed handoff field.
+        values = [self._truncate(item, 512) for item in items]
+        return "; ".join(values)[:3500]
+
+    def _truncate(self, value: str, limit: int = 1024) -> str:
+        # Marks omitted tail content so compaction cannot look like a complete claim.
+        if len(value) <= limit:
+            return value
+        return f"{value[: limit - 24].rstrip()}... [truncated]"
+
+    def _fit_prompt(self, rendered: str) -> str:
+        # Keeps the copyable prompt within its contract while retaining the report tail.
+        limit = 16384
+        if len(rendered) <= limit:
+            return rendered
+        notice = "\n[Prompt truncated; consult structured fields for omitted values.]\n"
+        tail = rendered[-1024:]
+        head_limit = limit - len(notice) - len(tail)
+        return f"{rendered[:head_limit]}{notice}{tail}"
 
     def _stops(self) -> tuple[str, ...]:
         # Fixed stop set every handoff carries regardless of category.
