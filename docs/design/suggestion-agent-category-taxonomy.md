@@ -111,6 +111,7 @@ class CategoryDefinition:
     summary: str
     prompt_name: str
 
+
 class SuggestionCategories:
     def ids(self) -> tuple[str, ...]: ...
     def definitions(self) -> tuple[CategoryDefinition, ...]: ...
