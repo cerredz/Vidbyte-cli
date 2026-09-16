@@ -453,6 +453,16 @@ class SuggestionSuite:
             and revised.title == "verification action 0",
         )
         results.check(
+            "revision handoff carries the complete rubric assessment",
+            any(
+                settings.role == "generator"
+                and "Suggestion revision" in settings.system_prompt
+                and '"rubric"' in prompt
+                and "current_state_grounding" in prompt
+                for settings, prompt in fake.turns
+            ),
+        )
+        results.check(
             "critic context carries candidate handoffs and selected categories",
             any(
                 settings.role == "critic"
