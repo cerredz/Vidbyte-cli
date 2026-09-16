@@ -72,6 +72,8 @@ class StopReason(StrEnum):
     ROUND_LIMIT = "round_limit"
     TOKEN_LIMIT = "token_limit"
     TIME_LIMIT = "time_limit"
+    AGENT_CALL_LIMIT = "agent_call_limit"
+    TOOL_CALL_LIMIT = "tool_call_limit"
     PROVIDER_FAILED = "provider_failed"
     DRY_RUN = "dry_run"
 
@@ -200,6 +202,8 @@ class SuggestionSettings(BaseModel):
     max_output_tokens: int | None = Field(default=None, gt=0, le=5_000_000)
     max_total_tokens: int | None = Field(default=None, gt=0, le=20_000_000)
     timeout_seconds: int | None = Field(default=None, gt=0, le=86_400)
+    max_agent_calls: int = Field(default=64, ge=1, le=128)
+    max_tool_calls: int = Field(default=64, ge=1, le=256)
     dry_run: bool = False
 
     @model_validator(mode="after")
