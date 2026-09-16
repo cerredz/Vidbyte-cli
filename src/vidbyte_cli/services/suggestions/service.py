@@ -159,7 +159,7 @@ class SuggestionService:
 
     def _same_candidate_content(self, before: SuggestionIdea, after: SuggestionIdea) -> bool:
         # Compares meaningful candidate fields while ignoring generated identity and handoff data.
-        ignored = {"id", "revision", "rank", "review_summary", "handoff"}
+        ignored = {"id", "revision", "rank", "review_summary", "critique", "handoff"}
         before_values = before.model_dump(mode="json", exclude=ignored)
         after_values = after.model_dump(mode="json", exclude=ignored)
         return before_values == after_values
@@ -350,6 +350,7 @@ class SuggestionService:
         revision: int,
         rank: int,
         review_summary: str,
+        critique: SuggestionCritique | None = None,
     ) -> SuggestionIdea:
         values = draft.model_dump(exclude={"idea_id"})
         handoff = self._handoffs.build_draft(draft, request, idea_id, revision)
@@ -359,6 +360,7 @@ class SuggestionService:
             revision=revision,
             rank=rank,
             review_summary=review_summary,
+            critique=critique,
             handoff=handoff,
         )
 
@@ -398,7 +400,14 @@ class SuggestionService:
                 revisions.append((idea, critique))
                 continue
             if critique.verdict is CritiqueVerdict.KEEP:
-                kept.append(idea.model_copy(update={"review_summary": critique.review_summary}))
+                kept.append(
+                    idea.model_copy(
+                        update={
+                            "review_summary": critique.review_summary,
+                            "critique": critique,
+                        }
+                    )
+                )
         return tuple(kept), tuple(revisions)
 
     def _finalize(
