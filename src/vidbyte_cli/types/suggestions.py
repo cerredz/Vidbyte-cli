@@ -72,6 +72,8 @@ class StopReason(StrEnum):
     ROUND_LIMIT = "round_limit"
     TOKEN_LIMIT = "token_limit"
     TIME_LIMIT = "time_limit"
+    AGENT_CALL_LIMIT = "agent_call_limit"
+    TOOL_CALL_LIMIT = "tool_call_limit"
     PROVIDER_FAILED = "provider_failed"
     DRY_RUN = "dry_run"
 
@@ -200,6 +202,8 @@ class SuggestionSettings(BaseModel):
     max_output_tokens: int | None = Field(default=None, gt=0, le=5_000_000)
     max_total_tokens: int | None = Field(default=None, gt=0, le=20_000_000)
     timeout_seconds: int | None = Field(default=None, gt=0, le=86_400)
+    max_agent_calls: int = Field(default=64, ge=1, le=2048)
+    max_tool_calls: int = Field(default=64, ge=1, le=4096)
     dry_run: bool = False
 
     @model_validator(mode="after")
@@ -207,6 +211,66 @@ class SuggestionSettings(BaseModel):
         if self.all_categories and self.categories:
             raise ValueError("all_categories and categories cannot both be selected.")
         return self
+
+
+@dataclass(slots=True)
+class SuggestionRunAccounting:
+    """Mutable per-run counters for attempted turns, phase turns, and observed tokens.
+
+    This is deliberately not called usage: it counts CLI-observed turns, while the
+    SDK's UsageTracker prices provider-reported token payloads per model call and
+    requires the SDK's pricing registries. The service owns this object for one run
+    and converts it to the plain ``usage`` mapping on the versioned result only.
+    """
+
+    tokens: int = 0
+    agent_calls: int = 0
+    generation_calls: int = 0
+    critique_calls: int = 0
+    curation_calls: int = 0
+
+    def __post_init__(self) -> None:
+        for name in (
+            "tokens",
+            "agent_calls",
+            "generation_calls",
+            "critique_calls",
+            "curation_calls",
+        ):
+            if type(getattr(self, name)) is not int or getattr(self, name) < 0:
+                raise ValueError(
+                    f"Suggestion run accounting {name} must be a non-negative integer."
+                )
+
+    def note_attempt(self) -> None:
+        """Count one attempted agent turn before the call is made."""
+        self.agent_calls += 1
+
+    def note_completion(
+        self, phase: Literal["generation", "critique", "curation"], tokens: int
+    ) -> None:
+        """Count one completed turn in its phase bucket plus any observed tokens."""
+        if phase == "generation":
+            self.generation_calls += 1
+        elif phase == "critique":
+            self.critique_calls += 1
+        elif phase == "curation":
+            self.curation_calls += 1
+        else:
+            raise ValueError("Suggestion run accounting phase must be a known workflow phase.")
+        if type(tokens) is not int or tokens < 0:
+            raise ValueError("Suggestion run accounting tokens must be a non-negative integer.")
+        self.tokens += tokens
+
+    def to_dict(self) -> dict[str, int]:
+        """Render the stable ``usage`` mapping stored on the versioned result."""
+        return {
+            "tokens": self.tokens,
+            "agent_calls": self.agent_calls,
+            "generation_calls": self.generation_calls,
+            "critique_calls": self.critique_calls,
+            "curation_calls": self.curation_calls,
+        }
 
 
 class SuggestionRequest(BaseModel):
@@ -419,5 +483,6 @@ __all__ = [
     "SuggestionIdea",
     "SuggestionRequest",
     "SuggestionResult",
+    "SuggestionRunAccounting",
     "SuggestionSettings",
 ]

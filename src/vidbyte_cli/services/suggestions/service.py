@@ -27,6 +27,7 @@ from ...types.suggestions import (
     SuggestionIdea,
     SuggestionRequest,
     SuggestionResult,
+    SuggestionRunAccounting,
 )
 from .categories import SuggestionCategories
 from .extra_compute import ExtraComputeService
@@ -34,7 +35,23 @@ from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
 from .sdk import SuggestionAgentSettingsInput, SuggestionSdk, SuggestionTextInput
 from .selection import SuggestionSelection
-from .store import SuggestionStore
+from .store import SuggestionStore, ToolCallLimitReached
+from .warnings import (
+    SHORT_AGENT_CALL_LIMIT,
+    SHORT_CURATION_FAILED,
+    SHORT_CURATION_INCOMPLETE,
+    SHORT_TIME_LIMIT,
+    SHORT_TOKEN_LIMIT,
+    SHORT_TOOL_CALL_LIMIT,
+    guidance_agent_call_limit,
+    guidance_curation_failed,
+    guidance_curation_incomplete,
+    guidance_time_limit,
+    guidance_token_limit,
+    guidance_tool_call_limit,
+    prompt_with_guidance,
+    short_count_shortfall,
+)
 
 _POOL_MULTIPLE = 2
 _POOL_CAP = 40
@@ -52,9 +69,77 @@ class _WorkflowOutcome:
     """Committed ideas plus accounting and the reason the loop stopped."""
 
     ideas: tuple[SuggestionIdea, ...]
-    usage: dict[str, int]
+    accounting: SuggestionRunAccounting
     stop_reason: StopReason
     warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CurationPassInput:
+    """Strict, validated input for one isolated curation pass."""
+
+    request: SuggestionRequest
+    sdk: Any
+    categories: tuple[str, ...]
+    current: tuple[SuggestionIdea, ...]
+    artifact: SuggestionCritiqueArtifact
+    store: SuggestionStore
+    started: float
+    accounting: SuggestionRunAccounting
+    warnings: list[str]
+    guidance: str = ""
+    remaining_rounds: int = 0
+
+    def __post_init__(self) -> None:
+        self._validate_participants()
+        self._validate_state()
+        self._validate_run_context()
+
+    def _validate_participants(self) -> None:
+        # Every actor in the pass must already be the validated typed object.
+        if not isinstance(self.request, SuggestionRequest):
+            raise TypeError("Curation pass request must be a SuggestionRequest.")
+        if self.sdk is None:
+            raise TypeError("Curation pass sdk must be provided.")
+        if not isinstance(self.artifact, SuggestionCritiqueArtifact):
+            raise TypeError("Curation pass artifact must be a SuggestionCritiqueArtifact.")
+        if not isinstance(self.store, SuggestionStore):
+            raise TypeError("Curation pass store must be a SuggestionStore.")
+
+    def _validate_state(self) -> None:
+        # The slate under curation must be well-typed even when it is empty.
+        if not isinstance(self.categories, tuple) or not self.categories:
+            raise TypeError("Curation pass categories must be a non-empty tuple.")
+        if any(type(category) is not str or not category for category in self.categories):
+            raise ValueError("Curation pass categories must contain only non-empty strings.")
+        if not isinstance(self.current, tuple) or any(
+            not isinstance(idea, SuggestionIdea) for idea in self.current
+        ):
+            raise TypeError("Curation pass current must be a tuple of SuggestionIdea.")
+
+    def _validate_run_context(self) -> None:
+        # Run-local clocks, counters, and collectors must keep their exact shapes.
+        if isinstance(self.started, bool) or not isinstance(self.started, (int, float)):
+            raise TypeError("Curation pass started must be a monotonic timestamp.")
+        if not isinstance(self.accounting, SuggestionRunAccounting):
+            raise TypeError("Curation pass accounting must be a SuggestionRunAccounting.")
+        if type(self.warnings) is not list:
+            raise TypeError("Curation pass warnings must be a mutable list.")
+        if type(self.guidance) is not str:
+            raise TypeError("Curation pass guidance must be a string.")
+        if type(self.remaining_rounds) is not int or self.remaining_rounds < 0:
+            raise ValueError("Curation pass remaining rounds must be a non-negative integer.")
+
+
+@dataclass(frozen=True, slots=True)
+class _CurationRetry:
+    """Model-facing guidance for a curation pass the next round should retry."""
+
+    guidance: str
+
+    def __post_init__(self) -> None:
+        if type(self.guidance) is not str or not self.guidance.strip():
+            raise ValueError("Curation retry guidance must be a non-empty string.")
 
 
 class SuggestionService:
@@ -73,7 +158,9 @@ class SuggestionService:
         if not isinstance(request, SuggestionRequest):
             raise SuggestionInputInvalid()
         if request.settings.dry_run:
-            return self._result(request, _WorkflowOutcome((), {}, StopReason.DRY_RUN))
+            return self._result(
+                request, _WorkflowOutcome((), SuggestionRunAccounting(), StopReason.DRY_RUN)
+            )
         sdk = self._sdk or SuggestionSdk.load()
         try:
             outcome = asyncio.run(self._run(request, sdk))
@@ -86,16 +173,11 @@ class SuggestionService:
     async def _run(self, request: SuggestionRequest, sdk: Any) -> _WorkflowOutcome:
         # Runs initial generation once, then lets the generator edit state for each review pass.
         started = time.monotonic()
-        usage = {
-            "tokens": 0,
-            "agent_calls": 0,
-            "generation_calls": 0,
-            "critique_calls": 0,
-            "curation_calls": 0,
-        }
+        accounting = SuggestionRunAccounting()
         categories = request.settings.categories or self._categories.ids()
         pool_size = min(request.settings.requested_count * _POOL_MULTIPLE, _POOL_CAP)
         warnings: list[str] = list(request.context_warnings)
+        pending_guidance = ""
         drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...]
         store: SuggestionStore | None = None
         try:
@@ -114,49 +196,57 @@ class SuggestionService:
                         SuggestionCandidateBatch,
                         request,
                         started,
-                        usage,
+                        accounting,
                         "generation",
                     ),
                 )
             else:
-                drafts = await self._generate(request, sdk, categories, pool_size, started, usage)
+                drafts = await self._generate(
+                    request, sdk, categories, pool_size, started, accounting
+                )
             current = self._ideas_from_drafts(drafts, request)
             if not current:
-                return _WorkflowOutcome((), usage, StopReason.COUNT_SHORTFALL, tuple(warnings))
+                return _WorkflowOutcome((), accounting, StopReason.COUNT_SHORTFALL, tuple(warnings))
 
             store = SuggestionStore(request, categories)
             store.seed(current)
             for round_index in range(request.settings.rounds):
-                self._check_limit(request, started, usage)
+                self._check_limit(request, started, accounting)
                 current = store.snapshot()
-                artifact = await self._critique(request, sdk, categories, current, started, usage)
+                artifact = await self._critique(
+                    request, sdk, categories, current, started, accounting
+                )
                 self._validate_critique(current, artifact)
                 working = store.working_copy()
                 before = working.mutation_count
-                self._check_limit(request, started, usage)
-                try:
-                    completion = await self._curate(
-                        request, sdk, categories, current, artifact, working, started, usage
+                self._check_limit(request, started, accounting)
+                curation = await self._run_curation(
+                    CurationPassInput(
+                        request,
+                        sdk,
+                        categories,
+                        current,
+                        artifact,
+                        working,
+                        started,
+                        accounting,
+                        warnings,
+                        pending_guidance,
+                        request.settings.rounds - round_index - 1,
                     )
-                except _WorkflowLimit:
-                    raise
-                except Exception:
-                    warnings.append(
-                        "Curation did not complete; returning the last committed suggestions."
-                    )
-                    finalized = self._finalize(store.snapshot(), request)
-                    return _WorkflowOutcome(
-                        finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings)
-                    )
-                if not completion.completed:
-                    warnings.append(
-                        "Curation returned an incomplete receipt; returning the last "
-                        "committed suggestions."
-                    )
-                    finalized = self._finalize(store.snapshot(), request)
-                    return _WorkflowOutcome(
-                        finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings)
-                    )
+                )
+                pending_guidance = ""
+                if isinstance(curation, _CurationRetry):
+                    if round_index == request.settings.rounds - 1:
+                        finalized = self._finalize(current, request)
+                        warnings.append(curation.guidance)
+                        return _WorkflowOutcome(
+                            finalized, accounting, StopReason.PROVIDER_FAILED, tuple(warnings)
+                        )
+                    pending_guidance = curation.guidance
+                    continue
+                if isinstance(curation, _WorkflowOutcome):
+                    return curation
                 if working.mutation_count == before:
                     finalized = self._finalize(store.snapshot(), request)
                     reason = (
@@ -164,18 +254,19 @@ class SuggestionService:
                         if len(finalized) >= request.settings.requested_count
                         else StopReason.COUNT_SHORTFALL
                     )
-                    return _WorkflowOutcome(finalized, usage, reason, tuple(warnings))
+                    return _WorkflowOutcome(finalized, accounting, reason, tuple(warnings))
                 store.commit_from(working)
                 if round_index == request.settings.rounds - 1:
                     finalized = self._finalize(store.snapshot(), request)
                     return _WorkflowOutcome(
-                        finalized, usage, StopReason.ROUND_LIMIT, tuple(warnings)
+                        finalized, accounting, StopReason.ROUND_LIMIT, tuple(warnings)
                     )
         except _WorkflowLimit as limit:
             committed = self._finalize(store.snapshot(), request) if store else ()
-            return _WorkflowOutcome(committed, usage, limit.reason, tuple(warnings))
+            warnings.extend(self._limit_warnings(limit.reason, request, accounting))
+            return _WorkflowOutcome(committed, accounting, limit.reason, tuple(warnings))
         committed = self._finalize(store.snapshot(), request) if store else ()
-        return _WorkflowOutcome(committed, usage, StopReason.ROUND_LIMIT, tuple(warnings))
+        return _WorkflowOutcome(committed, accounting, StopReason.ROUND_LIMIT, tuple(warnings))
 
     async def _generate(
         self,
@@ -184,7 +275,7 @@ class SuggestionService:
         categories: tuple[str, ...],
         count: int,
         started: float,
-        usage: dict[str, int],
+        accounting: SuggestionRunAccounting,
     ) -> SuggestionCandidateBatch:
         context = self._agent_context(request, categories)
         prompt = self._prompts.generator_turn(request.goal, count)
@@ -200,10 +291,43 @@ class SuggestionService:
                 SuggestionCandidateBatch,
                 request,
                 started,
-                usage,
+                accounting,
                 "generation",
             ),
         )
+
+    async def _run_curation(
+        self, passed: CurationPassInput
+    ) -> SuggestionCompletion | _WorkflowOutcome | _CurationRetry:
+        """Run one isolated curation pass, retry it, or return its safe partial outcome."""
+        try:
+            completion = await self._curate(
+                passed.request,
+                passed.sdk,
+                passed.categories,
+                passed.current,
+                passed.artifact,
+                passed.store,
+                passed.started,
+                passed.accounting,
+                passed.guidance,
+            )
+        except _WorkflowLimit:
+            raise
+        except ToolCallLimitReached:
+            passed.warnings.append(SHORT_TOOL_CALL_LIMIT)
+            passed.warnings.append(guidance_tool_call_limit(passed.request.settings.max_tool_calls))
+            finalized = self._finalize(passed.current, passed.request)
+            return _WorkflowOutcome(
+                finalized, passed.accounting, StopReason.TOOL_CALL_LIMIT, tuple(passed.warnings)
+            )
+        except Exception:
+            passed.warnings.append(SHORT_CURATION_FAILED)
+            return _CurationRetry(guidance_curation_failed(passed.remaining_rounds))
+        if not completion.completed:
+            passed.warnings.append(SHORT_CURATION_INCOMPLETE)
+            return _CurationRetry(guidance_curation_incomplete(passed.remaining_rounds))
+        return completion
 
     async def _critique(
         self,
@@ -212,7 +336,7 @@ class SuggestionService:
         categories: tuple[str, ...],
         ideas: tuple[SuggestionIdea, ...],
         started: float,
-        usage: dict[str, int],
+        accounting: SuggestionRunAccounting,
     ) -> SuggestionCritiqueArtifact:
         context = self._agent_context(request, categories, ideas)
         ids = ", ".join(idea.id for idea in ideas)
@@ -229,7 +353,7 @@ class SuggestionService:
                 SuggestionCritiqueArtifact,
                 request,
                 started,
-                usage,
+                accounting,
                 "critique",
             ),
         )
@@ -243,9 +367,12 @@ class SuggestionService:
         artifact: SuggestionCritiqueArtifact,
         store: SuggestionStore,
         started: float,
-        usage: dict[str, int],
+        accounting: SuggestionRunAccounting,
+        guidance: str = "",
     ) -> SuggestionCompletion:
         # Gives a fresh generator the critic data and a transactionally isolated tool surface.
+        if type(guidance) is not str:
+            raise TypeError("Curation guidance must be a string.")
         context = self._agent_context(request, categories, current)
         feedback = json.dumps(
             artifact.model_dump(mode="json"),
@@ -254,7 +381,9 @@ class SuggestionService:
             separators=(",", ":"),
         )
         feedback = feedback.replace("<", "\\u003c").replace(">", "\\u003e")
-        prompt = self._prompts.curator_turn(request.goal, len(current))
+        prompt = prompt_with_guidance(
+            self._prompts.curator_turn(request.goal, len(current)), guidance
+        )
         return cast(
             SuggestionCompletion,
             await self._call_agent(
@@ -267,7 +396,7 @@ class SuggestionService:
                 SuggestionCompletion,
                 request,
                 started,
-                usage,
+                accounting,
                 "curation",
                 store.tools(),
             ),
@@ -284,11 +413,12 @@ class SuggestionService:
         schema: type[Any],
         request: SuggestionRequest,
         started: float,
-        usage: dict[str, int],
-        phase: str,
+        accounting: SuggestionRunAccounting,
+        phase: Literal["generation", "critique", "curation"],
         tools: tuple[Any, ...] = (),
     ) -> Any:
-        self._check_limit(request, started, usage)
+        self._check_limit(request, started, accounting)
+        accounting.note_attempt()
         prompt = self._with_output_budget(prompt, request)
         settings = sdk.agent_settings(
             SuggestionAgentSettingsInput(
@@ -311,7 +441,7 @@ class SuggestionService:
                     reply = await agent.arun(sdk.run_input(SuggestionTextInput(prompt)))
         except TimeoutError as error:
             raise _WorkflowLimit(StopReason.TIME_LIMIT) from error
-        self._record_usage(reply, usage, phase)
+        self._record_usage(reply, accounting, phase)
         structured = getattr(reply, "structured", None)
         if isinstance(structured, schema):
             return structured
@@ -402,15 +532,41 @@ class SuggestionService:
         )
 
     def _check_limit(
-        self, request: SuggestionRequest, started: float, usage: dict[str, int]
+        self, request: SuggestionRequest, started: float, accounting: SuggestionRunAccounting
     ) -> None:
+        if accounting.agent_calls >= request.settings.max_agent_calls:
+            raise _WorkflowLimit(StopReason.AGENT_CALL_LIMIT)
         if (
             request.settings.max_total_tokens is not None
-            and usage["tokens"] >= request.settings.max_total_tokens
+            and accounting.tokens >= request.settings.max_total_tokens
         ):
             raise _WorkflowLimit(StopReason.TOKEN_LIMIT)
         if self._remaining_seconds(request, started) == 0:
             raise _WorkflowLimit(StopReason.TIME_LIMIT)
+
+    def _limit_warnings(
+        self,
+        reason: StopReason,
+        request: SuggestionRequest,
+        accounting: SuggestionRunAccounting,
+    ) -> tuple[str, str]:
+        # Pairs the stable operator warning with the model-facing recovery guidance.
+        if reason is StopReason.AGENT_CALL_LIMIT:
+            return (
+                SHORT_AGENT_CALL_LIMIT,
+                guidance_agent_call_limit(request.settings.max_agent_calls, accounting.agent_calls),
+            )
+        if reason is StopReason.TOKEN_LIMIT:
+            return (
+                SHORT_TOKEN_LIMIT,
+                guidance_token_limit(
+                    cast(int, request.settings.max_total_tokens), accounting.tokens
+                ),
+            )
+        return (
+            SHORT_TIME_LIMIT,
+            guidance_time_limit(cast(int, request.settings.timeout_seconds)),
+        )
 
     def _with_output_budget(self, prompt: str, request: SuggestionRequest) -> str:
         # Carries the caller's generous output ceiling into every typed model turn.
@@ -426,13 +582,16 @@ class SuggestionService:
         remaining = limit - (time.monotonic() - started)
         return max(remaining, 0.0)
 
-    def _record_usage(self, reply: Any, usage: dict[str, int], phase: str) -> None:
-        usage["agent_calls"] += 1
-        usage[f"{phase}_calls"] = usage.get(f"{phase}_calls", 0) + 1
+    def _record_usage(
+        self,
+        reply: Any,
+        accounting: SuggestionRunAccounting,
+        phase: Literal["generation", "critique", "curation"],
+    ) -> None:
         codex = getattr(reply, "codex", None)
         snapshot = getattr(codex, "last_usage", None) or getattr(codex, "usage", None)
         tokens = int(getattr(snapshot, "total_tokens", 0) or 0)
-        usage["tokens"] += max(tokens, 0)
+        accounting.note_completion(phase, max(tokens, 0))
 
     def _rejected_terms(self, request: SuggestionRequest) -> tuple[str, ...]:
         return tuple(
@@ -445,9 +604,7 @@ class SuggestionService:
         ideas = outcome.ideas
         warnings = list(outcome.warnings)
         if outcome.stop_reason is StopReason.COUNT_SHORTFALL and ideas:
-            warnings.append(
-                f"Only {len(ideas)} worthwhile suggestions survived review; no filler was added."
-            )
+            warnings.append(short_count_shortfall(len(ideas)))
         status = (
             RunStatus.NO_SUGGESTIONS
             if not ideas
@@ -480,10 +637,10 @@ class SuggestionService:
             category_coverage=self._selection.coverage(ideas),
             missing_context=missing,
             warnings=tuple(dict.fromkeys(warnings)),
-            usage=outcome.usage,
+            usage=outcome.accounting.to_dict(),
             stop_reason=outcome.stop_reason,
             prompt_version=request.prompt_version,
         )
 
 
-__all__ = ["SuggestionService"]
+__all__ = ["CurationPassInput", "SuggestionService"]
