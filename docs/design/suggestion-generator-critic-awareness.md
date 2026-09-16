@@ -83,18 +83,23 @@ sentence per line, and `revision.md` already proves the section set varies per s
    candidate is dropped from the run.
 7. The section states that rounds are finite, so a defect should be fixed on first response rather
    than deferred.
-8. The section states that a smaller, better-supported slate is preferred over filler, since the
-   critic removes weak candidates anyway.
+8. The section states that fields the critic asked to preserve stay untouched and that a repair
+   never broadens a candidate's scope.
 9. The section reframes critique as the mechanism that gets a candidate to the caller, not as an
    adversary to argue with.
 10. The addition introduces no new `{{token}}` placeholder.
 11. Every other line of `generator.md` is unchanged.
+12. The section contains six to eight complete sentences, satisfying lint rule C003.
 
 ### Non-Functional Requirements
 - **Packaging:** `generator.md` is already covered by the `services/suggestions/prompts/*.md` glob
   in `[tool.setuptools.package-data]`; no packaging change is required, and the built wheel must
   still carry the file.
 - **Style:** one sentence per line, matching the four existing sections.
+- **Lint band:** rule `C003 markdown-xml-section-depth` requires every XML-delimited Markdown
+  section to hold six to eight complete sentences, with `lint/baseline.json` frozen at 33 known
+  findings. The new section must sit inside that band, which caps the addition at eight sentences
+  and is the reason the guidance below is prioritized rather than exhaustive.
 - **Observability:** N/A - prompt text emits no telemetry of its own; loop warnings already report
   unchanged revisions.
 - **Performance:** the section adds roughly 300 tokens to each generation and repair turn, which is
@@ -112,10 +117,18 @@ property the output must have, how to draft it, what happens to it afterwards, a
 response contract. Putting it before `<Output>` also means the last thing the generator reads
 before the turn placeholders is still the output contract itself.
 
-The section is written as two six-line stanzas separated by a blank line. That satisfies the
-request for one to two paragraphs of content while preserving the six-lines-per-section rhythm
-every other section in the suggestions family uses. The first stanza covers the relationship and
-what the critic can see; the second covers what to do with the feedback that comes back.
+The section is written as two four-line stanzas separated by a blank line, eight sentences in
+total. That reads as the one-to-two paragraphs the request asked for while sitting at the top of
+the six-to-eight sentence band rule C003 enforces, which is the most guidance the section is
+allowed to carry. The first stanza covers the relationship and what the critic can see; the second
+covers what to do with the feedback that comes back.
+
+The band is a real constraint rather than a formality: it forced the content to be ranked, and two
+candidate lines were cut. A line telling the generator to prefer a shorter slate over filler was
+dropped because `<Algorithm>` step six already says exactly that for the generation turn, and
+keeping it would have created the section overlap the field guide warns against. A line restating
+the critic's internal consistency checks was dropped because it described the critic's job rather
+than changing what the generator should do.
 
 Nothing reads the file except `SuggestionPrompts._read`, which strips and caches the text, so a
 new static section flows into both `generator_system()` call sites with no code change.
@@ -158,16 +171,18 @@ def generator_system(self) -> str:
 #### Logic / Algorithm
 1. Insert a `<Review>` section between the closing `</Algorithm>` tag and the opening `<Output>`
    tag, separated by one blank line on each side, matching existing spacing.
-2. Stanza one states the relationship: an independent critic reviews every candidate; it sees the
-   goal, context, and candidate artifact but no private reasoning; unstated justification is
-   invisible; a fabricated or unsupported reference is caught by the verdict; a labelled assumption
-   is repairable where a false claim of evidence is not; and review is what carries a candidate to
-   the caller.
-3. Stanza two states the response to feedback: a keep is banked and needs no re-defending; a revise
-   or missing-evidence verdict returns the candidate for a narrow field-level repair; a returned
-   candidate that is materially unchanged is removed from the run; the fix instruction is a repair
-   order rather than an opening position; rounds are finite so defects are fixed on first response;
-   and a shorter well-supported slate beats filler the critic will cut.
+2. Stanza one states the relationship in four sentences: an independent critic reviews every
+   candidate before it reaches the caller; it sees the goal, context, and candidate artifact but no
+   private reasoning, so unwritten justification does not exist; a constraint violation,
+   contradicted reference, confident rejection, or duplicate is fatal; and a revise verdict, merely
+   missing reference, or hesitant rejection is repairable, which makes a labelled assumption safer
+   than an unsupportable claim.
+3. Stanza two states the response to feedback in four sentences: a critique is a repair order for
+   one candidate identifier and the mechanism that carries good work to the caller, not an opening
+   position; a kept candidate is banked, so only the named candidates get the narrowest field-level
+   edit; preserved fields stay exactly as they were and a repair never broadens scope; and a
+   materially unchanged resubmission is dropped from the run while the final round has no repair
+   pass, so defects are fixed on the first response.
 4. Leave every other byte of the file unchanged.
 
 #### Edge Cases & Error Handling
