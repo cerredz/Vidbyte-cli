@@ -308,13 +308,31 @@ class SuggestionSuite:
     def check_categories_and_prompts(self) -> None:
         results = self.results
         registry = SuggestionCategories()
-        results.check("registry exposes all 31 categories", len(registry.ids()) == 31)
+        new_categories = (
+            "customer_market",
+            "business_model_monetization",
+            "brand_positioning",
+            "distribution_sales",
+            "customer_relationship_service",
+        )
+        results.check("registry exposes all 36 categories", len(registry.ids()) == 36)
         results.check(
             "category identifiers and prompt assets are one-to-one",
-            len({item.prompt_name for item in registry.definitions()}) == 31
+            len({item.prompt_name for item in registry.definitions()}) == 36
             and all(
                 registry.category_prompt_exists(item.prompt_name) for item in registry.definitions()
             ),
+        )
+        results.check(
+            "focused business categories are registered",
+            all(registry.is_known(category) for category in new_categories),
+        )
+        focused = registry.prompt_section(("customer_market", "distribution_sales"))
+        results.check(
+            "focused business prompts stay distinct",
+            focused.startswith("# Customer and Market")
+            and "# Distribution and Sales" in focused
+            and "# Business and Growth" not in focused,
         )
         selected = registry.prompt_section(("verification", "experiment"))
         results.check(
@@ -515,7 +533,7 @@ class SuggestionSuite:
             visible = []
         results.check(
             "category listing works without credentials",
-            categories.returncode == 0 and len(visible) == 31,
+            categories.returncode == 0 and len(visible) == 36,
         )
         detail = _run_cli(["--json", "agents", "suggest", "categories", "--view", "feedback"])
         try:

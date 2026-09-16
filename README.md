@@ -64,7 +64,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 | `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate and independently critique ranked next-action ideas with handoffs |
-| `vidbyte-cli agents suggest categories [--view-all|--view ID]` | Inspect the 31 suggestion categories (no model, no credentials) |
+| `vidbyte-cli agents suggest categories [--view-all|--view ID]` | Inspect the 36 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
 
 ### Suggestion agent

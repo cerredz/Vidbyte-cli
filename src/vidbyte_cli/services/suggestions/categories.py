@@ -206,6 +206,36 @@ class SuggestionCategories:
                 "business_growth",
             ),
             CategoryDefinition(
+                "customer_market",
+                "Customer and Market",
+                "Identify who to serve, which problems matter, and where demand may exist.",
+                "customer_market",
+            ),
+            CategoryDefinition(
+                "business_model_monetization",
+                "Business Model and Monetization",
+                "Change how the business creates value and earns money from it.",
+                "business_model_monetization",
+            ),
+            CategoryDefinition(
+                "brand_positioning",
+                "Brand and Positioning",
+                "Clarify what the business stands for and why someone should choose it.",
+                "brand_positioning",
+            ),
+            CategoryDefinition(
+                "distribution_sales",
+                "Distribution and Sales",
+                "Improve how an offering reaches people and turns interest into purchase.",
+                "distribution_sales",
+            ),
+            CategoryDefinition(
+                "customer_relationship_service",
+                "Customer Relationship and Service",
+                "Improve the value, support, and trust customers receive after joining or buying.",
+                "customer_relationship_service",
+            ),
+            CategoryDefinition(
                 "product_experience",
                 "Product and Experience",
                 "Improve what people can use and how it feels to use it.",
