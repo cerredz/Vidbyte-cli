@@ -1,14 +1,38 @@
 # Business and Growth
 
 ## Description
-A business-and-growth suggestion improves how an endeavor reaches people, creates value, earns support, or remains sustainable. It should identify the audience, value exchange, and behavior that would indicate improvement. Growth is not only more activity or attention. The suggestion should consider retention, quality, cost, and the capacity to serve what grows. It should connect a possible opportunity to evidence about demand or unmet need. The proposal should make clear which tradeoff the endeavor accepts while pursuing expansion.
+A business and growth suggestion improves reach, sustainability, revenue, customer value, or the conditions that make those durable. It must attach the proposed action to one identified growth mechanism rather than treating growth as a general justification for activity. The mechanisms are distinguishable and behave differently: acquisition, activation, retention, expansion, pricing, distribution, and operating leverage each change a different behaviour by a different party. Naming which one is in play is what makes the suggestion evaluable, because the evidence that supports a pricing change is not the evidence that supports a channel change. A credible suggestion says whose behaviour must change and how that change would be observed. Where neither can be stated, what is being proposed is an aspiration about growth rather than a growth action.
 
-## Things to consider
-- Who is the relevant audience or customer?
-- What value would they recognize?
-- Which behavior signals real demand?
-- What channel or relationship could reach them?
-- What cost accompanies acquisition or service?
-- Could growth damage quality or trust?
-- What evidence exists about the opportunity?
-- What small test would justify further investment?
+The suggestion must also account for what growth costs. Acquisition, service, delivery, and support costs scale with volume, and a mechanism that is unprofitable at small scale rarely becomes profitable at large scale by itself. Capacity has to be ready before demand is increased, or the growth converts directly into strain, failed delivery, and lost trust. The proposal should name the measure that captures delivered value rather than a volume number that can rise while value falls. It should consider harm to trust, quality, access, or existing customers, since several reliable growth mechanisms work by borrowing against exactly those. Where the mechanism is uncertain, the suggestion should propose a bounded test capable of separating channel, offer, and execution effects. A test that cannot make that separation will produce a number without producing knowledge.
+
+## Why use
+Use this category when the decision in front of the person is commercial or organizational rather than technical or task-level — when the question is whether the work will reach people, sustain itself, or be worth what it costs. Most suggestion categories operate inside an accepted objective. This one steps outside and asks whether the objective is connected to anything that keeps the effort alive, which is a question that goes unasked for long periods and then becomes urgent all at once.
+
+It earns its place by demanding a mechanism. The most common failure in commercial suggestion-making is the unfalsifiable recommendation: do more marketing, find more users, raise prices, add a partnership. Each of those can be right, and none of them is a suggestion until someone says which behaviour changes, for whom, and how it is measured. Forcing that specification converts a slogan into something a reader can accept, reject, or test. It also exposes the proposals whose only argument is that the number should be larger.
+
+Keep the boundary against neighbouring categories clear. Product and experience improves what people can use and how using it feels, which often drives growth but is argued from the interaction rather than from a commercial mechanism. Strategy chooses a coordinating direction, which may be commercial but does not have to name an acquisition or retention loop. Long-term directions concerns capability worth building over time without a near-term growth mechanism attached. Bottleneck relieves an operational limiter, which matters for growth but is a property of flow rather than of demand. Use business and growth when the primary decision genuinely concerns durable commercial or organizational value.
+
+## Use cases
+- **A valuable audience is not being reached.** The offer may be strong while discovery, distribution, or channel fit is weak. Use the category when a specific audience and a concrete route to reach it can both be named.
+- **Interested people are not becoming active.** Friction in activation, onboarding, or time-to-first-value may be suppressing adoption despite real interest. Suggest a change when the behavioural step and its measure are clear.
+- **Existing customers are not retained or expanded.** Value may go unrealized after the first transaction. Use it when a retention, renewal, cross-sell, or expansion mechanism can be tested without eroding trust.
+- **Revenue does not reflect delivered value.** Pricing, packaging, or contract structure may be misaligned with what customers actually receive. Recommend the change when the economic hypothesis can be checked against customer and cost evidence.
+- **Growth is creating operational strain.** Demand may be outrunning support, delivery, quality, or cash. Use the category to find the sustainable rate rather than to maximize a top-line number.
+- **A repeatable acquisition loop is emerging.** Current work may have surfaced a channel, referral pattern, or message worth systematizing. Suggest it when repeatability and unit economics are both plausible.
+- **A partnership could extend reach or capability.** Another organization may supply distribution, trust, supply, or complementary expertise. Use it when mutual value, ownership, and dependency risk can all be stated.
+- **A commercial decision needs a bounded test.** A campaign, offer, channel, or retention intervention may warrant a trial before commitment. Recommend it when the trial can distinguish the mechanism from ordinary fluctuation.
+- **Unit economics are unknown.** Decisions may be being made without knowing what a customer costs to acquire or serve. Suggest establishing the number when it would change what is worth scaling.
+- **Concentration has become a risk.** Revenue, distribution, or supply may depend on a single customer, channel, or partner. Use the category when diversification is a commercial decision rather than an operational one.
+- **Churn has a nameable cause.** Departures may cluster around a segment, a moment, or an unmet expectation. Recommend acting on the cause when it can be identified rather than inferred from a total.
+- **A segment is being served at a loss.** Some customers may cost more to serve than they contribute. Use the category when the segment can be identified and the response is a commercial choice rather than a service failure.
+- **Demand exists for something adjacent to the current offer.** Requests may consistently point at a capability that is not sold today. Suggest it when the willingness to pay is evidenced rather than assumed.
+
+## When not to use
+- **The task is internal and has no commercial mechanism.** Completing work is not growth merely because the organization benefits from it.
+- **The only rationale is a larger number.** More users or more revenue, with no named customer value, is not a mechanism.
+- **The change is about the interaction itself.** Improving how something feels to use is argued from the experience, not from a growth loop.
+- **The proposal is a long-range capability.** Without a near-term mechanism it is a direction rather than a growth action.
+- **The limiter is operational.** Demand-side suggestions do not help a system that cannot deliver what it already sells.
+- **Whose behaviour changes cannot be stated.** An unattributed behaviour change cannot be observed, tested, or accepted.
+
+Route the suggestion elsewhere when one of those signals holds. Interaction quality belongs to product and experience, and a coordinating commercial direction belongs to strategy. A capability worth building over time is long-term directions, and an ambitious, uncertain commercial commitment is big bets. An operational limiter is bottleneck, and an unproven commercial belief that must be settled first is investigation or experiment. If the organization does not yet agree what outcome it is pursuing, start with goal clarification.

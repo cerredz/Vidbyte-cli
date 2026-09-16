@@ -669,7 +669,7 @@ class SuggestionSuite:
             "one category can be expanded without a provider",
             detail.returncode == 0
             and detail_item.get("id") == "feedback"
-            and "Things to consider" in detail_item.get("prompt", ""),
+            and "When not to use" in detail_item.get("prompt", ""),
         )
         dry = _run_cli(["--json", "agents", "suggest", "run", "--goal", "Dry goal", "--dry-run"])
         try:

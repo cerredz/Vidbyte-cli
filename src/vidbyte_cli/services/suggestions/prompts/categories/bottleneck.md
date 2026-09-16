@@ -1,14 +1,38 @@
 # Bottleneck
 
 ## Description
-A bottleneck suggestion targets the constraint that limits the pace or quality of a larger effort. It looks for the narrow point whose relief changes downstream flow. The constraint may be a scarce resource, unresolved decision, waiting relationship, or repeated failure. The suggestion should explain how progress will improve when the constraint moves. A visible inconvenience is not automatically the governing bottleneck. The proposal should include a way to notice whether the limiting point has shifted elsewhere.
+A bottleneck suggestion targets the one constraint that limits useful progress through a system. The constraint may be a person, a decision, a dependency, a resource, a queue, a capability, or a policy, and it is defined by what it holds back rather than by how busy it looks. The busiest stage is frequently not the limiting stage, and the most visible pain is frequently downstream of the real cause. What makes something a bottleneck is a traceable link between that point and a measurable loss of throughput, quality, or decision speed. Improving anything that is not the constraint produces activity without producing progress. It can also move the constraint somewhere less convenient, which is worse than leaving it alone.
 
-## Things to consider
-- What flow or outcome is being limited?
-- Which constraint currently governs that flow?
-- What observation supports calling it the bottleneck?
-- What intervention would relieve it?
-- How much improvement would make the intervention worthwhile?
-- Could relief create a new constraint nearby?
-- Which other work depends on this constraint?
-- What measurement will show that the bottleneck moved?
+The suggestion should identify the constraint by evidence — where work waits, where it returns, where many things depend on one thing — and say what downstream work is actually released if the constraint improves. It should classify what kind of constraint it is, because capacity, policy, information, quality, ownership, and dependency access have different repairs and are routinely confused. It should propose the smallest intervention that changes effective capacity at that point, since large reorganizations are rarely the cheapest way to relieve a specific limiter. It should consider whether raising input into the constraint would worsen the queue instead of helping, which is the most common way well-meant effort backfires here. It should name the flow measure expected to improve and the window over which that improvement should become visible. It should also anticipate where the constraint moves next, because relieving one limiter always promotes another.
+
+## Why use
+Use this category when progress is unsatisfying in a way that no individual's effort explains. Systems fail at their constraints, and the experience of a constrained system is diffuse frustration: people are working, work is happening, and yet very little finishes. A suggestion that names the constraint converts that diffuse frustration into one addressable target, which is the single most valuable thing that can be said in such a situation. Nothing else in the category set makes that particular move.
+
+The category also guards against a specific and expensive error. Local optimization feels productive, reports well, and reliably fails to improve anything end to end when the optimized stage was not the limiter. A suggestion agent with no bottleneck vocabulary will keep recommending improvements to whichever area is most legible, and those recommendations will keep not working for reasons nobody can articulate. Requiring the suggestion to trace a dependency chain from the constraint to released downstream work is what separates a real diagnosis from a plausible-sounding one.
+
+Hold the boundary against the categories it resembles. Prioritization chooses among competing commitments when attention is scarce, whereas a bottleneck is about flow through a system that has already agreed what it wants to do. Coordination resolves ownership, sequencing, or alignment between parties, which is one possible kind of bottleneck rather than a synonym for the category. Simplification removes complexity for its own benefits and may not touch the limiter at all. Stop or defer concludes the work is not worth doing, where this category assumes it is worth doing and asks why it is not moving. Use bottleneck only when one specific point demonstrably limits the whole, and relieving it would demonstrably help.
+
+## Use cases
+- **Work is accumulating at one point.** A queue, a review stage, a handoff, or an approval step may be gating everything behind it. Use the category when the accumulation persists and its downstream effect can be observed.
+- **Many people are waiting on one decision.** A delayed choice can block otherwise ready work while consuming coordination effort. Suggest relief when clarifying ownership or decision criteria would release several dependent actions at once.
+- **A scarce skill sets the pace.** One person or capability may be required by too many tasks to keep up. Use the category when load balancing, training, tooling, or resequencing would expand effective capacity at that point.
+- **A dependency repeatedly interrupts flow.** External systems, suppliers, permissions, or data may cause the same work to stop and restart. Recommend changing the interface or adding a buffer when that would restore end-to-end movement.
+- **Rework is consuming the constrained stage.** Defects or unclear inputs may send work back through a stage that is already the limiter. Improving the constraint's input quality is usually more useful than asking it to work faster.
+- **Local optimization is hiding a system loss.** A team may be improving its own numbers while downstream work stays blocked. Name the system constraint that explains the mismatch.
+- **The limiting resource has moved.** A surge, a new project, or a seasonal shift may have created a different constraint from the one everyone still optimizes. Identify the current limiter rather than yesterday's.
+- **One small intervention would release a broad queue.** A template, a decision, an access grant, or a capacity shift may unblock many tasks at once. Recommend it when the leverage follows a traceable dependency chain and not optimism.
+- **Throughput is flat despite added effort.** Adding people or hours without effect is strong evidence that the constraint is elsewhere. Use the category to locate it before more effort is spent.
+- **Lead time is dominated by waiting, not working.** When most elapsed time is queueing, capacity at the active stages is not the problem. Target the wait, and say which wait.
+- **A single shared environment or asset is contended.** A test environment, a data pipeline, a licence, or a physical resource may serialize work that could otherwise run in parallel. Suggest relieving contention when the serialization is the observable limiter.
+- **A policy is the constraint.** An approval threshold, a compliance step, or an internal rule may be limiting flow independently of capacity. Treat the policy as the target, and propose a proportionate change rather than a workaround.
+- **Batching is inflating the wait.** Work released in large infrequent batches may queue for reasons that have nothing to do with capacity. Recommend a smaller batch when it would shorten the cycle without weakening the stage's checks.
+
+## When not to use
+- **The problem is one unverified claim.** A single doubtful belief is a question to answer, not a constraint to relieve.
+- **No repeated or system-level effect can be shown.** A one-off delay does not establish a limiter.
+- **The goal itself is unclear.** Optimizing flow towards an undefined outcome produces faster motion in an unknown direction.
+- **The proposed target is simply the busiest stage.** Busy is not the same as limiting, and confusing them moves effort away from the real constraint.
+- **The work should not be flowing at all.** Relieving a constraint on work that is not worth doing accelerates waste.
+- **Several commitments are competing for attention.** That is a choice about what to pursue, not a property of a pipeline.
+
+Route the suggestion elsewhere when one of those signals holds. Competing commitments belong to prioritization, and work that is not worth continuing belongs to stop or defer. Unclear ownership or sequencing between parties is coordination, and an undefined outcome is goal clarification. A doubtful claim is verification, and a missing condition that must exist before work can proceed is prerequisite. If the intent is to reduce complexity for its own sake rather than to relieve a demonstrated limiter, use simplification.
