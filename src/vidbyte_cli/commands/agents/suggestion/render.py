@@ -42,12 +42,12 @@ class SuggestionRenderer:
     def _human_result(self, result: SuggestionResult) -> str:
         # One block per idea so a person can scan ranks without parsing JSON.
         if not result.ideas:
-            return f"No suggestions for: {result.goal}"
+            return f"No suggestions for: {result.goal}\n{self._human_attachments(result)}"
         blocks: list[str] = []
         for idea in result.ideas:
             blocks.append(self._human_idea(idea))
         header = self._human_header(result)
-        return header + "\n\n" + "\n\n".join(blocks)
+        return header + "\n" + self._human_attachments(result) + "\n\n" + "\n\n".join(blocks)
 
     def _human_idea(self, idea: SuggestionIdea) -> str:
         # One ranked line plus its first action on a second line.
@@ -58,3 +58,13 @@ class SuggestionRenderer:
         # Counts plus goal plus status so shortfalls read plainly.
         counts = f"{result.returned_count}/{result.requested_count}"
         return f"{counts} ideas for: {result.goal} [{result.status.value}]"
+
+    def _human_attachments(self, result: SuggestionResult) -> str:
+        # Shows safe attachment metadata without printing captured file bodies.
+        if not result.attachment_manifest:
+            return "Attachments: none"
+        entries = ", ".join(
+            f"{entry['name']} ({entry['kind']}, {entry['size_bytes']} bytes)"
+            for entry in result.attachment_manifest
+        )
+        return f"Attachments: {entries}"

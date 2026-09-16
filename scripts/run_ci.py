@@ -145,6 +145,11 @@ class CiRunner:
             ("research-only surface", (python, "scripts/test_research_only_surface.py")),
             # Offline: verifies the typed suggestion boundary, context contract, and handoffs.
             ("suggestion agent", (python, "scripts/test_suggestions.py")),
+            # Offline: verifies attachment orchestration across request, execution, and output.
+            (
+                "suggestion attachments",
+                (python, "scripts/test-suggestion-agent-attachments.py"),
+            ),
             (
                 "runtime admission and persistence",
                 (python, "scripts/test-layered-runtime-admission-gate.py"),

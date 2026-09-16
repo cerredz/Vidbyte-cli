@@ -510,6 +510,7 @@ class SuggestionService:
             returned_count=len(ideas),
             settings=request.settings,
             context_manifest=request.context_manifest,
+            attachment_manifest=request.attachments.manifest(),
             ideas=ideas,
             category_coverage=self._selection.coverage(ideas),
             missing_context=missing,
