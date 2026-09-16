@@ -140,8 +140,13 @@ class SuggestionStore:
         def add_tool(category_id: str, suggestion: SuggestionDraft) -> str:
             return self.add_suggestion(category_id, suggestion)
 
-        def remove_tool(suggestion_id: str) -> str:
-            return self.remove_suggestion(suggestion_id)
+        def remove_tool(number: str | int) -> str:
+            if isinstance(number, int):
+                active = tuple(self._ideas)
+                if number < 1 or number > len(active):
+                    return f"No active suggestion exists at number {number}."
+                number = active[number - 1]
+            return self.remove_suggestion(number)
 
         def more_tool() -> str:
             return self.more_suggestions()
