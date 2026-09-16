@@ -29,7 +29,9 @@ Use revise only when a specific evidence-backed fix can preserve the candidate's
 
 <Output>
 Return exactly one critique for every candidate identifier in the input.
-For each critique, provide verdict, confidence, error spans, evidence check, evidence reference when relevant, constraint hit, constraint quote when relevant, duplicate identifier when relevant, fix instruction when revising, preserved fields, and a review summary.
+For each critique, provide verdict, confidence, error spans, evidence check, relevant references and constraints, duplicate identifier, revision instruction, preserved fields, and review summary.
+Fill every `signals` dimension with `strong`, `adequate`, `weak`, or `unknown` for quality and decision observations, and use `low`, `medium`, `high`, or `unknown` for risk without collapsing the observations into a numeric score.
+Return an `issues` array when a concrete defect or tradeoff should be visible to the caller, with a stable snake-case code, severity, affected fields, supporting evidence references, explanation, and optional repair.
 Set confidence to high, medium, or low according to the strength of the evidence rather than the fluency of the candidate.
 Set evidence check to supported, missing, or contradicts and do not conceal an unsupported claim inside a keep verdict.
 Use a low-confidence reject as a revision signal only when a concrete correction is available.

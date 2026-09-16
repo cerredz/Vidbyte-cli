@@ -109,6 +109,33 @@ class CritiqueConstraint(StrEnum):
     NONE = "none"
 
 
+class CritiqueSignalLevel(StrEnum):
+    """Ordinal quality signal without pretending to be a precise score."""
+
+    STRONG = "strong"
+    ADEQUATE = "adequate"
+    WEAK = "weak"
+    UNKNOWN = "unknown"
+
+
+class CritiqueRiskLevel(StrEnum):
+    """Estimated downside signal kept separate from quality dimensions."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    UNKNOWN = "unknown"
+
+
+class CritiqueIssueSeverity(StrEnum):
+    """How urgently one traceable issue should affect a decision."""
+
+    BLOCKER = "blocker"
+    MAJOR = "major"
+    MINOR = "minor"
+    NOTE = "note"
+
+
 class SuggestionContextItem(BaseModel):
     """One labeled piece of caller-supplied context with a stable run-local ref."""
 
@@ -264,6 +291,38 @@ class SuggestionCandidateBatch(BaseModel):
     ideas: tuple[SuggestionDraft, ...] = Field(max_length=30)
 
 
+class SuggestionCritiqueSignals(BaseModel):
+    """Multidimensional observations returned alongside one critic verdict."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    goal_alignment: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    category_fit: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    evidence_grounding: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    actionability: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    feasibility: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    internal_coherence: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    distinctness: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    constraint_compliance: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    expected_impact: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    effort_proportionality: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    time_to_value: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    reversibility: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    information_gain: CritiqueSignalLevel = CritiqueSignalLevel.UNKNOWN
+    risk: CritiqueRiskLevel = CritiqueRiskLevel.UNKNOWN
+
+
+class SuggestionCritiqueIssue(BaseModel):
+    """One evidence-linked defect or useful observation in a critic packet."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    code: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    severity: CritiqueIssueSeverity
+    fields: tuple[str, ...] = Field(default=(), max_length=12)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=12)
+    explanation: str = Field(min_length=1, max_length=2048)
+    repair: str = Field(default="", max_length=2048)
+
+
 class SuggestionCritique(BaseModel):
     """The critic artifact for exactly one candidate ID."""
 
@@ -280,6 +339,8 @@ class SuggestionCritique(BaseModel):
     fix_instruction: str = Field(default="", max_length=2048)
     preserve: tuple[str, ...] = Field(default=(), max_length=24)
     review_summary: str = Field(min_length=1, max_length=2048)
+    signals: SuggestionCritiqueSignals = Field(default_factory=SuggestionCritiqueSignals)
+    issues: tuple[SuggestionCritiqueIssue, ...] = Field(default=(), max_length=12)
 
     @model_validator(mode="after")
     def _validate_review_contract(self) -> SuggestionCritique:
@@ -360,6 +421,7 @@ class SuggestionIdea(BaseModel):
     completion_criteria: str = Field(min_length=1, max_length=1024)
     effort_estimate: str = Field(min_length=1, max_length=256)
     review_summary: str = Field(min_length=1, max_length=2048)
+    critique: SuggestionCritique | None = None
     handoff: SuggestionHandoff
 
 
@@ -388,6 +450,9 @@ __all__ = [
     "CritiqueConfidence",
     "CritiqueConstraint",
     "CritiqueEvidenceCheck",
+    "CritiqueIssueSeverity",
+    "CritiqueRiskLevel",
+    "CritiqueSignalLevel",
     "CritiqueVerdict",
     "IdeaHorizon",
     "IdeaReadiness",
@@ -403,6 +468,8 @@ __all__ = [
     "SuggestionContextPrimitive",
     "SuggestionCritique",
     "SuggestionCritiqueArtifact",
+    "SuggestionCritiqueIssue",
+    "SuggestionCritiqueSignals",
     "SuggestionDraft",
     "SuggestionHandoff",
     "SuggestionHandoffEvidence",
