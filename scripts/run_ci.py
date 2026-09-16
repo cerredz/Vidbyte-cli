@@ -33,6 +33,8 @@ _BUILD_COPY_EXCLUDES = (
 _WHEEL_RUNTIME_PROMPTS = (
     "vidbyte_cli/services/persistence/prompts/persistence_system.md",
     "vidbyte_cli/services/persistence/prompts/persistence_turn.md",
+    "vidbyte_cli/services/suggestions/prompts/generator.md",
+    "vidbyte_cli/services/suggestions/prompts/critic.md",
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
 )
 
@@ -76,6 +78,7 @@ class CiRunner:
             ("task board", (python, "scripts/test-task-board.py")),
             # Offline: deterministic suggestion agent with fakes only at the SDK turn.
             ("suggestions", (python, "scripts/test_suggestions.py")),
+            ("suggestion handoff context", (python, "scripts/test-suggestion-handoff-context.py")),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):

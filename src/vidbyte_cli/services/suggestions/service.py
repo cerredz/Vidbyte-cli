@@ -20,11 +20,25 @@ from ...types.suggestions import (
     IdeaRelationship,
     RunStatus,
     StopReason,
+    SuggestionAlternative,
+    SuggestionConfidence,
+    SuggestionContext,
+    SuggestionDecisionPoint,
+    SuggestionExpectedChange,
+    SuggestionGoalContribution,
     SuggestionHandoff,
     SuggestionIdea,
+    SuggestionProblem,
     SuggestionRequest,
     SuggestionResult,
+    SuggestionReversibility,
+    SuggestionRisk,
+    SuggestionScope,
     SuggestionSettings,
+    SuggestionTimeSensitivity,
+    SuggestionTradeoff,
+    SuggestionUnknown,
+    SuggestionVerification,
 )
 from .categories import SuggestionCategories
 from .handoff import SuggestionHandoffBuilder
@@ -124,18 +138,35 @@ class SuggestionService:
             number = index + 1
             title = self._title_for(category, request.goal)
             summary = self._summary_for(title, request.goal, category)
+            goal_excerpt = self._goal_excerpt(request.goal)
+            first_action = f"Start the {category} step for: {goal_excerpt}"
+            proposed_action = f"Advance '{goal_excerpt}' through a bounded {category} intervention."
+            completion = f"An observable {category} outcome exists and is recorded."
+            suggestion_context = self._context_for(request, category, proposed_action, completion)
             handoff = SuggestionHandoff(
                 idea_id=f"idea-{number:03d}",
                 idea_revision=1,
+                suggestion_title=title,
+                suggestion_summary=summary,
+                primary_category=category,
+                secondary_categories=(),
+                horizon=horizon,
+                relationship=IdeaRelationship.DIRECT,
+                readiness=IdeaReadiness.READY,
+                expected_benefit=f"Moves '{goal_excerpt}' forward with bounded effort.",
+                effort_estimate="Small: under half a day.",
+                review_summary="Template review: relevant, concrete, and within constraints.",
+                evidence_refs=self._evidence_for(request),
+                suggestion_context=suggestion_context,
                 original_goal=request.goal,
-                selected_action=f"Do the {category} step for: {request.goal}",
+                selected_action=proposed_action,
                 reason_for_selection=f"It is the highest-leverage {category} move now.",
                 current_state="As supplied by the caller.",
-                suggested_steps=(f"Do the {category} step for: {request.goal}",),
-                acceptance_checks=(f"Observable {category} outcome exists.",),
+                suggested_steps=(first_action, completion),
+                acceptance_checks=(completion,),
                 stop_conditions=("Done when acceptance checks pass.",),
                 return_report="Report outcome and evidence.",
-                execution_prompt=f"Goal: {request.goal}\nAction: Do the {category} step.",
+                execution_prompt=f"Goal: {request.goal}\nAction: {proposed_action}",
             )
             ideas.append(
                 SuggestionIdea(
@@ -150,15 +181,17 @@ class SuggestionService:
                     relationship=IdeaRelationship.DIRECT,
                     readiness=IdeaReadiness.READY,
                     why_now=f"A {category} move is due now for this goal.",
-                    expected_benefit=f"Moves '{request.goal}' forward with bounded effort.",
+                    expected_benefit=f"Moves '{goal_excerpt}' forward with bounded effort.",
                     evidence_refs=self._evidence_for(request),
                     assumptions=("Caller context is accurate.",),
                     dependencies=(),
                     alternative_to=(),
-                    first_action=f"Do the {category} step for: {request.goal}",
-                    completion_criteria=f"Observable {category} outcome exists.",
+                    first_action=first_action,
+                    proposed_action=proposed_action,
+                    completion_criteria=completion,
                     effort_estimate="Small: under half a day.",
                     review_summary="Template review: relevant, concrete, and within constraints.",
+                    suggestion_context=suggestion_context,
                     handoff=handoff,
                 )
             )
@@ -236,6 +269,130 @@ class SuggestionService:
             grouped.setdefault(item.kind, []).append(item.content)
         return {key: tuple(values) for key, values in grouped.items()}
 
+    def _context_for(
+        self, request: SuggestionRequest, category: str, proposed_action: str, completion: str
+    ) -> SuggestionContext:
+        # Builds bounded reasoning and verification context for one deterministic candidate.
+        evidence = ", ".join(self._evidence_for(request)) or "no caller evidence supplied"
+        goal = self._goal_excerpt(request.goal)
+        return SuggestionContext(
+            problem_or_opportunity=SuggestionProblem(
+                type="problem",
+                condition=f"Progress toward '{goal}' lacks an explicit {category} move.",
+                consequence="The next executor may act without a bounded way to advance the goal.",
+                affected_area=category,
+            ),
+            core_insight=(
+                f"A bounded {category} move can reduce uncertainty around the stated goal."
+            ),
+            causal_rationale=(
+                f"Executing the proposed {category} action creates an observable result "
+                "that can guide the next decision."
+            ),
+            goal_contribution=SuggestionGoalContribution(
+                target=goal,
+                contribution=f"Adds a concrete {category} move to the path toward the goal.",
+            ),
+            expected_change=SuggestionExpectedChange(
+                before="The next move is not yet explicit or verified.",
+                after=(
+                    f"The caller has a recorded {category} result and a clear follow-up decision."
+                ),
+            ),
+            scope=SuggestionScope(
+                in_scope=(
+                    f"Define and perform the bounded {category} move for '{goal}'.",
+                    "Record the result needed by the verification plan.",
+                ),
+                out_of_scope=(
+                    "Unrelated improvements or automatic execution beyond this handoff.",
+                    "Irreversible changes without separately granted authority.",
+                ),
+            ),
+            decision_points=(
+                SuggestionDecisionPoint(
+                    condition="A prerequisite, authority grant, or cited fact is missing.",
+                    response="Stop and report what is missing before taking the action.",
+                    requires_authority=True,
+                ),
+            ),
+            verification_plan=(
+                SuggestionVerification(
+                    claim=f"The {category} action produces a useful outcome.",
+                    procedure=f"Perform this action: {proposed_action}",
+                    pass_condition=completion,
+                    evidence_to_capture="Record the resulting artifact, observation, or decision.",
+                    on_failure=(
+                        "Stop, record the failed check, and reassess the assumptions "
+                        "before continuing."
+                    ),
+                ),
+            ),
+            final_success_condition=completion,
+            beneficiaries=("The calling agent", "The agent executing the handoff"),
+            affected_surfaces=(
+                f"{category} work for the stated goal",
+                "The next decision after verification",
+            ),
+            tradeoffs=(
+                SuggestionTradeoff(
+                    cost="Spends a bounded amount of execution time before the next decision.",
+                    reason_acceptable="The result reduces uncertainty or advances the goal.",
+                    mitigation=(
+                        "Keep the action limited to the proposed scope and stop at the checks."
+                    ),
+                ),
+            ),
+            risks=(
+                SuggestionRisk(
+                    failure_mode="The action produces an outcome that does not support the goal.",
+                    likelihood="medium",
+                    impact="medium",
+                    guard="Use the verification procedure and stop on contradictory evidence.",
+                ),
+            ),
+            unknowns=(
+                SuggestionUnknown(
+                    question=(
+                        "Will the supplied context remain accurate while the action is executed?"
+                    ),
+                    importance="Stale context could make the result misleading.",
+                    resolution_method=(
+                        "Re-check the cited context and assumptions at the verification step."
+                    ),
+                ),
+            ),
+            confidence=SuggestionConfidence(
+                level="medium" if request.context_items else "low",
+                basis=(f"Generated from the stated goal and {evidence}.",),
+                would_change_with=("Contradictory caller evidence",),
+            ),
+            alternatives_considered=(
+                SuggestionAlternative(
+                    alternative=f"Continue without taking a bounded {category} step.",
+                    reason_not_selected=(
+                        "That leaves the next decision unsupported by a new observation."
+                    ),
+                ),
+            ),
+            cost_of_inaction=(
+                f"Without this {category} move, progress toward '{goal}' remains less explicit."
+            ),
+            reversibility=SuggestionReversibility(
+                level="reversible",
+                reason=(
+                    "The action is bounded and does not grant authority to make "
+                    "irreversible changes."
+                ),
+                recovery="Stop at the verification check and report the observed result.",
+            ),
+            time_sensitivity=SuggestionTimeSensitivity(
+                level="high" if request.settings.horizon.value == "now" else "medium",
+                trigger="The next executor is ready to choose a bounded move.",
+                expires_when=None,
+            ),
+        )
+
     def _missing(self, request: SuggestionRequest) -> tuple[str, ...]:
         # Names high-value absent inputs instead of claiming completeness.
         kinds = {item.kind for item in request.context_items}
@@ -284,12 +441,18 @@ class SuggestionService:
 
     def _title_for(self, category: str, goal: str) -> str:
         # Short deterministic title per category so dedup has stable keys.
-        short = " ".join(goal.split()[:6]).rstrip(".,!?") or "the goal"
+        short = (" ".join(goal.split()[:6]).rstrip(".,!?") or "the goal")[:220]
         return f"{category.replace('_', ' ').title()}: {short}"
 
     def _summary_for(self, title: str, goal: str, category: str) -> str:
         # One-line template summary grounding the idea in goal and category.
-        return f"{title} Advance '{goal}' via a {category} step with action."
+        return f"{title} Advance '{self._goal_excerpt(goal)}' via a {category} step with action."
+
+    def _goal_excerpt(self, goal: str) -> str:
+        # Bounds repeated goal references while the original goal stays lossless in the handoff.
+        limit = 512
+        excerpt = goal[:limit].rstrip()
+        return f"{excerpt}..." if len(goal) > limit else excerpt
 
     def _verdict(self, score: int) -> str:
         # Deterministic critic note recording the relevance score.

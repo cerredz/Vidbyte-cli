@@ -220,6 +220,18 @@ class SuggestionSuite:
             and len(rebuilt.stop_conditions) > 0,
         )
         results.check(
+            "[Silent Failure] handoff preserves suggestion context",
+            rebuilt.handoff_version == 2
+            and rebuilt.suggestion_title == idea.title
+            and rebuilt.suggestion_context == idea.suggestion_context
+            and rebuilt.selected_action == idea.proposed_action,
+        )
+        results.check(
+            "[Silent Failure] verification plan supplies acceptance checks",
+            tuple(check.pass_condition for check in rebuilt.suggestion_context.verification_plan)
+            == rebuilt.acceptance_checks,
+        )
+        results.check(
             "[Hidden Assumption] authority defaults to not-granted",
             rebuilt.authority == "not_granted_by_this_handoff",
         )
