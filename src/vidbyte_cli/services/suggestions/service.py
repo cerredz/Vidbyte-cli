@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Literal, cast
 from uuid import uuid4
 
@@ -33,6 +32,7 @@ from ...types.suggestions import (
     SuggestionResult,
 )
 from .categories import SuggestionCategories
+from .context_bridge import SuggestionContextBridge
 from .extra_compute import ExtraComputeService
 from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
@@ -67,6 +67,7 @@ class SuggestionService:
         # Injection keeps offline verification at the same typed agent boundary as production.
         self._sdk = sdk
         self._categories = SuggestionCategories()
+        self._context_bridge = SuggestionContextBridge(self._categories)
         self._selection = SuggestionSelection()
         self._handoffs = SuggestionHandoffBuilder()
         self._prompts = SuggestionPrompts()
@@ -96,7 +97,9 @@ class SuggestionService:
         drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...]
         try:
             if request.settings.extra_compute:
-                drafts = await ExtraComputeService(self._categories, self._prompts).generate(
+                drafts = await ExtraComputeService(
+                    self._categories, self._prompts, self._context_bridge
+                ).generate(
                     request,
                     categories,
                     pool_size,
@@ -157,7 +160,7 @@ class SuggestionService:
         started: float,
         usage: dict[str, int],
     ) -> SuggestionCandidateBatch:
-        context = self._agent_context(request, categories)
+        context = self._context_bridge.generator(request, categories)
         prompt = self._prompts.generator_turn(request.goal, count)
         return cast(
             SuggestionCandidateBatch,
@@ -185,7 +188,7 @@ class SuggestionService:
         started: float,
         usage: dict[str, int],
     ) -> SuggestionCritiqueArtifact:
-        context = self._agent_context(request, categories, ideas)
+        context = self._context_bridge.critic(request, categories, ideas)
         ids = ", ".join(idea.id for idea in ideas)
         prompt = self._prompts.critic_turn(request.goal, ids)
         return cast(
@@ -215,14 +218,8 @@ class SuggestionService:
         started: float,
         usage: dict[str, int],
     ) -> tuple[SuggestionIdea, ...]:
-        context = self._agent_context(request, categories, current)
-        candidates = json.dumps(
-            [idea.model_dump(mode="json") for idea, _ in revisions], sort_keys=True
-        )
-        critiques = json.dumps(
-            [critique.model_dump(mode="json") for _, critique in revisions], sort_keys=True
-        )
-        prompt = self._prompts.revision_turn(request.goal, candidates, critiques, len(revisions))
+        context = self._context_bridge.revision(request, categories, revisions)
+        prompt = self._prompts.revision_turn(request.goal, len(revisions))
         batch = await self._call_agent(
             sdk,
             "generator",
@@ -413,23 +410,6 @@ class SuggestionService:
         merged = {idea.id: idea for idea in previous}
         merged.update({idea.id: idea for idea in current})
         return tuple(merged.values())
-
-    def _agent_context(
-        self,
-        request: SuggestionRequest,
-        categories: tuple[str, ...],
-        ideas: tuple[SuggestionIdea, ...] = (),
-    ) -> SuggestionContextPrimitive:
-        candidate_handoffs = (
-            json.dumps([idea.model_dump(mode="json") for idea in ideas], sort_keys=True)
-            if ideas
-            else ""
-        )
-        return replace(
-            request.context,
-            selected_categories=self._categories.prompt_section(categories),
-            candidate_handoffs=candidate_handoffs,
-        )
 
     def _check_limit(
         self, request: SuggestionRequest, started: float, usage: dict[str, int]
