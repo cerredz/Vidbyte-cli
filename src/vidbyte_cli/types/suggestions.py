@@ -377,6 +377,7 @@ class SuggestionResult(BaseModel):
     returned_count: int = Field(ge=0, le=15)
     settings: SuggestionSettings
     context_manifest: tuple[ContextManifestEntry, ...] = ()
+    attachment_manifest: tuple[dict[str, object], ...] = ()
     ideas: tuple[SuggestionIdea, ...] = ()
     category_coverage: dict[str, int] = Field(default_factory=dict)
     missing_context: tuple[str, ...] = ()

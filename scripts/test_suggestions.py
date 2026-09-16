@@ -474,6 +474,11 @@ class SuggestionSuite:
             bool(fake.inputs) and all(input_.attachments is bundle for input_ in fake.inputs),
         )
         results.check(
+            "result carries ordered attachment metadata without bodies",
+            result.attachment_manifest == bundle.manifest()
+            and all("content" not in entry for entry in result.attachment_manifest),
+        )
+        results.check(
             "generated ideas survive independent critique with deterministic handoffs",
             result.returned_count == 4
             and all(idea.handoff.idea_id == idea.id for idea in result.ideas)
@@ -599,6 +604,35 @@ class SuggestionSuite:
             dry.returncode == 0
             and dry_document.get("kind") == SUGGESTIONS_RESULT_KIND
             and dry_document.get("data", {}).get("stop_reason") == "dry_run",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            attachment = Path(temporary) / "dry-run.txt"
+            attachment.write_text("Dry-run attachment body.", encoding="utf-8")
+            attached_dry = _run_cli(
+                [
+                    "--json",
+                    "agents",
+                    "suggest",
+                    "run",
+                    "--goal",
+                    "Dry goal",
+                    "--dry-run",
+                    "--attach",
+                    str(attachment),
+                ]
+            )
+        try:
+            attached_document = json.loads(attached_dry.stdout)
+            attached_data = attached_document.get("data", {})
+        except json.JSONDecodeError:
+            attached_data = {}
+        manifest = attached_data.get("attachment_manifest", [])
+        results.check(
+            "dry-run exposes attachment metadata without bodies",
+            attached_dry.returncode == 0
+            and len(manifest) == 1
+            and manifest[0].get("name") == "dry-run.txt"
+            and "content" not in manifest[0],
         )
 
 
