@@ -140,6 +140,18 @@ class SuggestionService:
                 current = await self._revise(
                     request, sdk, categories, current, revisions, started, usage
                 )
+                before = {idea.id: idea for idea, _ in revisions}
+                unchanged = tuple(
+                    idea
+                    for idea in current
+                    if idea.id in before and self._same_candidate_content(before[idea.id], idea)
+                )
+                if unchanged:
+                    warnings.append(
+                        f"Stopped {len(unchanged)} unchanged suggestion revision(s) "
+                        "before another critique."
+                    )
+                    current = tuple(idea for idea in current if idea not in unchanged)
                 if not current:
                     return _WorkflowOutcome(
                         last_reviewed, usage, StopReason.COUNT_SHORTFALL, tuple(warnings)
@@ -147,6 +159,13 @@ class SuggestionService:
         except _WorkflowLimit as limit:
             return _WorkflowOutcome(last_reviewed, usage, limit.reason, tuple(warnings))
         return _WorkflowOutcome(last_reviewed, usage, StopReason.ROUND_LIMIT, tuple(warnings))
+
+    def _same_candidate_content(self, before: SuggestionIdea, after: SuggestionIdea) -> bool:
+        # Compares meaningful candidate fields while ignoring generated identity and handoff data.
+        ignored = {"id", "revision", "rank", "review_summary", "handoff"}
+        before_values = before.model_dump(mode="json", exclude=ignored)
+        after_values = after.model_dump(mode="json", exclude=ignored)
+        return before_values == after_values
 
     async def _generate(
         self,

@@ -97,9 +97,16 @@ class FakeAgent:
 class FakeSdk:
     """A typed fake for the SuggestionSdk methods used by SuggestionService."""
 
-    def __init__(self, *, revision: bool = False, extra_compute: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        revision: bool = False,
+        extra_compute: bool = False,
+        unchanged_revision: bool = False,
+    ) -> None:
         self.revision = revision
         self.extra_compute = extra_compute
+        self.unchanged_revision = unchanged_revision
         self.settings: list[SuggestionAgentSettingsInput] = []
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
@@ -123,7 +130,8 @@ class FakeSdk:
             ids = self._candidate_ids(settings.context.candidate_handoffs)
             critiques = []
             for index, idea_id in enumerate(ids):
-                if self.revision and self.critic_calls == 1 and index == 0:
+                first_revision = self.revision or self.unchanged_revision
+                if first_revision and self.critic_calls == 1 and index == 0:
                     critiques.append(
                         _critique(
                             idea_id,
@@ -138,6 +146,15 @@ class FakeSdk:
 
         self.generator_calls += 1
         if "Suggestion revision" in settings.system_prompt:
+            if self.unchanged_revision:
+                candidate = json.loads(settings.context.candidate_handoffs)[0]
+                candidate.pop("id", None)
+                candidate.pop("revision", None)
+                candidate.pop("rank", None)
+                candidate.pop("review_summary", None)
+                candidate.pop("handoff", None)
+                candidate["idea_id"] = "idea-001"
+                return SuggestionCandidateBatch(ideas=(SuggestionDraft.model_validate(candidate),))
             return SuggestionCandidateBatch(
                 ideas=(
                     _draft(
@@ -299,6 +316,7 @@ class SuggestionSuite:
     def run(self) -> None:
         self.check_categories_and_prompts()
         self.check_request_boundary()
+        self.check_round_limits()
         self.check_sdk_context_boundary()
         self.check_generation_and_revision()
         self.check_extra_compute()
@@ -369,6 +387,35 @@ class SuggestionSuite:
         else:
             strict_rejection = False
         results.check("request dataclass rejects invalid values at construction", strict_rejection)
+
+    def check_round_limits(self) -> None:
+        results = self.results
+        accepted = all(
+            SuggestionRunInput(goal="x", rounds=value).rounds == value for value in (1, 8)
+        )
+        results.check("round limit accepts one and eight", accepted)
+        rejected = []
+        for value in (0, 9, True):
+            try:
+                SuggestionRunInput(goal="x", rounds=value)
+            except (TypeError, ValueError):
+                rejected.append(True)
+            else:
+                rejected.append(False)
+        results.check("round limit rejects zero, nine, and booleans", all(rejected))
+        help_result = _run_cli(["agents", "suggest", "run", "--help"])
+        results.check(
+            "round help documents the expanded ceiling",
+            help_result.returncode == 0 and "one through eight" in help_result.stdout,
+        )
+        fake = FakeSdk(unchanged_revision=True)
+        result = SuggestionService(sdk=fake).run(_request(rounds=8, items=(_item(),)))
+        results.check(
+            "unchanged revision stops before another critique",
+            fake.critic_calls == 1
+            and fake.generator_calls == 2
+            and "unchanged suggestion" in " ".join(result.warnings),
+        )
 
     def check_sdk_context_boundary(self) -> None:
         results = self.results
