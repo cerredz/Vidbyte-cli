@@ -1,14 +1,38 @@
 # Alternative
 
 ## Description
-An alternative proposes a materially different route to the same meaningful goal. It changes a mechanism, sequence, audience, resource choice, or commitment rather than merely changing the wording. The comparison should expose a real tradeoff in speed, quality, cost, risk, or reversibility. An alternative is most useful before the current route becomes expensive to abandon. It should preserve the original outcome unless the caller is explicitly reconsidering that outcome. The suggestion should say what evidence would make switching worthwhile.
+An alternative is a materially different route to an outcome that has already been agreed. It changes the method, the sequence, the resource mix, or the scope boundary, while leaving the intended result recognizable to the person who asked for it. The invariant is the outcome; everything else is negotiable and the suggestion must say which part it is trading. A variation that only renames steps or reorders cosmetic detail is not an alternative, because nothing about the decision changes. The value of the category comes from making a credible second option visible, since a committed path tends to hide the options it displaced. Presenting that option is useful only when it could actually be chosen.
 
-## Things to consider
-- What goal remains constant across the choices?
-- How does the alternative differ in mechanism?
-- Which weakness in the current route does it address?
-- What new costs or risks does it introduce?
-- What would switching require?
-- How reversible is the choice?
-- What evidence should trigger comparison or adoption?
-- What existing decisions must not be reopened without cause?
+The comparison must run on criteria that decide, not on a list of properties that merely differ. State what the alternative assumes, what it sacrifices, and what has to be paid once to move from the current route onto it, because transition cost is what usually decides between two viable paths. Say what is known to make the alternative credible rather than simply imaginable, and be explicit when that evidence is thin. Name the risks that disappear, the risks that remain, and the risks that move somewhere else, since a second route rarely reduces exposure without relocating some of it. Where the two routes cannot be separated by argument, propose the smallest comparison or pilot that would separate them. A suggestion that cannot name a criterion on which the alternative wins has not found one.
+
+## Why use
+Use this category when the current path is still viable but its cost, its risk, or its dependence on an untested premise makes a second option worth putting on the table. The claim is not that the current plan is wrong. It is that the decision was made against a smaller set of options than actually exists, and that widening the set is cheap compared with discovering the constraint later. This is why an alternative is most valuable early, when the transition cost is low, and why raising one late must come with an honest accounting of the work already sunk into the current route.
+
+The category carries a specific discipline that generic advice does not: it forces the outcome to be held fixed. Much of what gets offered as an alternative is really a different goal wearing the same name, and the moment the outcome drifts, the comparison stops meaning anything. Requiring the suggestion to state the invariant makes that failure visible immediately. It also forces the transition to be priced. Two routes that look equivalent on a whiteboard are rarely equivalent from where the work actually stands, and the difference is almost always what it costs to switch.
+
+Distinguish it carefully from the categories it neighbours. Creative exploration generates many possibilities without committing to a shared outcome, so it is the right choice when the aim is to widen the field rather than to choose between two routes. Reframing changes how the problem is understood, which changes the outcome itself and therefore breaks the invariant this category depends on. Strategy selects one direction that coordinates several actions over time, where an alternative concerns a single route to a single result. Stop or defer argues the outcome is not worth pursuing at all, which is a different conclusion from pursuing it another way.
+
+## Use cases
+- **The current route has grown expensive.** A different method may reach the same outcome with materially less time, money, or coordination. Raise it when the cost gap is large enough to survive the transition effort.
+- **A required dependency cannot be secured.** The chosen path may rest on a person, tool, supplier, permission, or data source that will not be available. Offer a route that preserves the outcome instead of waiting on something that is not coming.
+- **Repeated attempts are producing weak results.** When the failure lives in the method, repeating it more carefully does not help. Propose a route that changes the mechanism responsible for the poor output.
+- **A load-bearing assumption is doubtful.** The plan may assume demand, capacity, access, or feasibility that has never been established. Use an alternative to make the decision robust to that uncertainty, not as a way to avoid testing it.
+- **Risk is concentrated in one design choice.** A second route may remove a single point of failure or provide a fallback. Compare residual risk honestly rather than treating the newer route as automatically safer.
+- **Sequence is causing avoidable friction.** The same work in a different order may cut waiting, rework, or handoffs. Recommend it when the reordered path still respects prerequisites and completion criteria.
+- **A narrower commitment would still meet the goal.** A smaller route may deliver what is actually needed without the full scope of the current plan. Present the reduced scope as an explicit trade, never as a quiet failure to meet the goal.
+- **A different resource mix changes what is feasible.** Borrowing expertise, automating a step, partnering, or reusing an existing asset may open a route the current team cannot walk. Suggest it when ownership and transition cost can be described concretely.
+- **The current route has an unacceptable failure mode.** Even a likely-successful path may fail in a way that cannot be recovered from. Offer a route whose worst case is survivable, and say what it costs.
+- **An external constraint has changed.** Pricing, regulation, tooling, availability, or organizational structure may have moved since the route was chosen. Re-open the comparison when the change plausibly reverses the original decision.
+- **The route cannot be validated until the end.** A path that yields no signal until completion may be worth trading for one that produces evidence early. Argue from when learning arrives, not only from total cost.
+- **A build-versus-adopt choice was never made.** The plan may be constructing something that already exists in usable form. Compare the two on integration cost, control, and long-term ownership rather than on effort alone.
+- **The current route depends on sustained attention.** A path that only works if a specific person stays engaged may be fragile. Propose a route that survives ordinary interruption, and name what it gives up in exchange.
+
+## When not to use
+- **The current route is merely unfinished.** An incomplete plan whose assumptions still hold needs execution, not a competitor.
+- **No shared outcome has been defined.** Without an invariant there is nothing for the two routes to be alternatives to.
+- **The difference is cosmetic.** A relabelled sequence changes no decision and wastes the reader's judgment.
+- **The proposed route changes what success means.** Once the outcome moves, this is a new goal rather than another way to reach the old one.
+- **The aim is to widen the field rather than choose.** Generating many options is a different activity from comparing two.
+- **The transition cost cannot be described at all.** An unpriced switch is not a decision anyone can make.
+
+Route the suggestion elsewhere when one of those signals holds. An unfinished but sound plan belongs to continuation, and a final remaining obligation belongs to completion. Widening the option space without a fixed outcome is creative exploration, and changing how the problem itself is understood is reframing. A choice of direction spanning many actions is strategy, and abandoning the outcome is stop or defer. If the real blocker is that nobody knows which route is better, use investigation or experiment to produce the evidence first.
