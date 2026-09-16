@@ -36,6 +36,7 @@ from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: 
 from vidbyte_cli.services.suggestions.store import SuggestionStore  # noqa: E402
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     MAX_CONTEXT_CHARS,
+    MAX_SUGGESTIONS,
     SUGGESTIONS_HANDOFF_KIND,
     SUGGESTIONS_RESULT_KIND,
     ContextManifestEntry,
@@ -287,7 +288,7 @@ def _request(
         context=context,
         context_manifest=manifest,
         settings=SuggestionSettings(
-            requested_count=count,
+            suggestions_number=count,
             categories=categories,
             extra_compute=extra_compute,
             rounds=rounds,
@@ -386,6 +387,34 @@ class SuggestionSuite:
         results.check("run no longer accepts a JSON input file", rejected.returncode == 2)
         bad_count = _run_cli(["agents", "suggest", "run", "--goal", "x", "--count", "1"])
         results.check("count below 2 fails before model calls", bad_count.returncode == 2)
+        maximum = _run_cli(
+            [
+                "agents",
+                "suggest",
+                "run",
+                "--goal",
+                "x",
+                "--suggestions-number",
+                "50",
+                "--dry-run",
+            ]
+        )
+        results.check(
+            "suggestions number accepts the configured maximum",
+            maximum.returncode == 0,
+        )
+        too_many = _run_cli(
+            ["agents", "suggest", "run", "--goal", "x", "--suggestions-number", "51"]
+        )
+        results.check(
+            "suggestions number rejects values above the configured maximum",
+            too_many.returncode == 2,
+        )
+        results.check(
+            "suggestion settings expose the named number",
+            SuggestionSettings(suggestions_number=MAX_SUGGESTIONS).suggestions_number
+            == MAX_SUGGESTIONS,
+        )
         try:
             SuggestionRunInput(goal="x", count=1)
         except ValueError:
@@ -479,7 +508,7 @@ class SuggestionSuite:
             ),
         )
         dry_request = _request().model_copy(
-            update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}
+            update={"settings": SuggestionSettings(suggestions_number=4, dry_run=True)}
         )
         dry_fake = FakeSdk()
         dry = SuggestionService(sdk=dry_fake).run(dry_request)
@@ -631,6 +660,7 @@ class SuggestionSuite:
             "expanded context and extra compute controls are visible",
             help_result.returncode == 0
             and "--extra-compute" in help_result.stdout
+            and "--suggestions-number" in help_result.stdout
             and "--trajectory" in help_result.stdout
             and "--files" in help_result.stdout
             and "--context-file" not in help_result.stdout

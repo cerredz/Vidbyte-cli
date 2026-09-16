@@ -27,7 +27,8 @@ the repeated `--files` option. The generator uses the provider default; `--criti
 optional override for independent review only. The handoff verb retains `--input` because it
 reads a previously emitted result artifact.
 
-`--count` defaults to 5 and accepts 2–15. `--rounds` defaults to 2 and accepts 1–3.
+`--suggestions-number` (with the compatibility alias `--count`) defaults to 5 and accepts
+2–50. `--rounds` defaults to 2 and accepts 1–3.
 `--extra-compute` fans out one fresh generator context for each selected category and combines
 the stable typed results before the independent critic runs. `--max-output-tokens` accepts up
 to 5,000,000, `--max-total-tokens` accepts up to 20,000,000, and timeout accepts up to 86,400
@@ -51,7 +52,7 @@ Markdown prompt asset, and no category is inferred from a model-produced idea.
 1. `SuggestionRequestBuilder` builds the strict request, resolves explicit context, attaches
    the selected category block, and completes all local validation before provider loading.
 2. The generator returns a typed `SuggestionCandidateBatch` with a pool of up to twice the
-   requested count, capped at 40. The SDK adapter creates a read-only, deny-all agent with the
+   suggestions number, capped at 100. The SDK adapter creates a read-only, deny-all agent with the
    declared structured output schema.
 3. The critic receives only the bounded context and candidate handoffs in a separate context
    window. It returns exactly one `SuggestionCritique` per candidate with verdict, confidence,

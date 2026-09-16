@@ -12,10 +12,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 SCHEMA_VERSION = 1
 MAX_CONTEXT_CHARS = 5_000_000
+MAX_SUGGESTIONS = 50
+MAX_SUGGESTION_POOL = MAX_SUGGESTIONS * 2
 
 SUGGESTIONS_RESULT_KIND = "suggestions.result"
 SUGGESTIONS_HANDOFF_KIND = "suggestions.handoff"
@@ -191,7 +193,12 @@ class SuggestionSettings(BaseModel):
     """The one validated settings object passed unchanged through the workflow."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    requested_count: int = Field(ge=2, le=15, default=5)
+    suggestions_number: int = Field(
+        ge=2,
+        le=MAX_SUGGESTIONS,
+        default=5,
+        validation_alias=AliasChoices("suggestions_number", "requested_count"),
+    )
     categories: tuple[str, ...] = ()
     all_categories: bool = False
     extra_compute: bool = False
@@ -211,6 +218,11 @@ class SuggestionSettings(BaseModel):
         if self.all_categories and self.categories:
             raise ValueError("all_categories and categories cannot both be selected.")
         return self
+
+    @property
+    def requested_count(self) -> int:
+        """Keeps the prior internal name available to in-process callers."""
+        return self.suggestions_number
 
 
 class SuggestionRequest(BaseModel):
@@ -265,7 +277,7 @@ class SuggestionCandidateBatch(BaseModel):
     """Structured output requested from the generator for initial and revision turns."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    ideas: tuple[SuggestionDraft, ...] = Field(max_length=30)
+    ideas: tuple[SuggestionDraft, ...] = Field(max_length=MAX_SUGGESTION_POOL)
 
 
 class SuggestionCompletion(BaseModel):
@@ -308,7 +320,7 @@ class SuggestionCritiqueArtifact(BaseModel):
     """Complete per-candidate review returned by the independent critic."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    critiques: tuple[SuggestionCritique, ...] = Field(max_length=30)
+    critiques: tuple[SuggestionCritique, ...] = Field(max_length=MAX_SUGGESTION_POOL)
 
 
 class SuggestionHandoffEvidence(BaseModel):
@@ -380,7 +392,7 @@ class SuggestionCategoryGroup(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     category: str = Field(min_length=1, max_length=64)
-    suggestions: tuple[SuggestionIdea, ...] = Field(min_length=1, max_length=15)
+    suggestions: tuple[SuggestionIdea, ...] = Field(min_length=1, max_length=MAX_SUGGESTIONS)
 
     @model_validator(mode="after")
     def _category_matches_ideas(self) -> SuggestionCategoryGroup:
@@ -396,12 +408,12 @@ class SuggestionResult(BaseModel):
     run_id: str = Field(min_length=1, max_length=64)
     status: RunStatus = RunStatus.COMPLETE
     goal: str = Field(min_length=1, max_length=4096)
-    requested_count: int = Field(ge=2, le=15)
-    returned_count: int = Field(ge=0, le=15)
+    requested_count: int = Field(ge=2, le=MAX_SUGGESTIONS)
+    returned_count: int = Field(ge=0, le=MAX_SUGGESTIONS)
     settings: SuggestionSettings
     context_manifest: tuple[ContextManifestEntry, ...] = ()
-    ideas: tuple[SuggestionIdea, ...] = ()
-    suggestions: tuple[SuggestionCategoryGroup, ...] = ()
+    ideas: tuple[SuggestionIdea, ...] = Field(default=(), max_length=MAX_SUGGESTIONS)
+    suggestions: tuple[SuggestionCategoryGroup, ...] = Field(default=(), max_length=MAX_SUGGESTIONS)
     category_coverage: dict[str, int] = Field(default_factory=dict)
     missing_context: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
@@ -412,6 +424,10 @@ class SuggestionResult(BaseModel):
     @model_validator(mode="after")
     def _normalize_structured_views(self) -> SuggestionResult:
         flattened = tuple(idea for group in self.suggestions for idea in group.suggestions)
+        if len(flattened) > MAX_SUGGESTIONS:
+            raise ValueError(
+                f"a structured suggestion result cannot exceed {MAX_SUGGESTIONS} ideas"
+            )
         grouped_by_id = {idea.id: idea for idea in flattened}
         flat_by_id = {idea.id: idea for idea in self.ideas}
         if self.ideas and self.suggestions and grouped_by_id != flat_by_id:
@@ -462,6 +478,8 @@ __all__ = [
     "IdeaReadiness",
     "IdeaRelationship",
     "MAX_CONTEXT_CHARS",
+    "MAX_SUGGESTION_POOL",
+    "MAX_SUGGESTIONS",
     "RunStatus",
     "SCHEMA_VERSION",
     "SUGGESTIONS_HANDOFF_KIND",

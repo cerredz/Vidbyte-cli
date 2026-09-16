@@ -67,7 +67,9 @@ def _request() -> SuggestionRequest:
             items=(item,),
         ),
         context_manifest=(manifest,),
-        settings=SuggestionSettings(requested_count=2, categories=("verification", "experiment")),
+        settings=SuggestionSettings(
+            suggestions_number=2, categories=("verification", "experiment")
+        ),
     )
 
 

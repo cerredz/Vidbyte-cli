@@ -2572,7 +2572,7 @@ class SuggestionInputInvalid(CliError):
                 "from providers and no model was called."
             ),
             trace="SuggestRunCommand validated the request before building context.",
-            hint="Run with --goal 'outcome' and keep --count between 2 and 15.",
+            hint=("Run with --goal 'outcome' and keep --suggestions-number between 2 and 50."),
         )
 
 
@@ -2635,7 +2635,9 @@ class SuggestionLimitExceeded(CliError):
                 "provider work started."
             ),
             trace="SuggestRunCommand validated generation controls before the service.",
-            hint="Use --count 2-15, --rounds 1-3, and positive token/timeout values.",
+            hint=(
+                "Use --suggestions-number 2-50, --rounds 1-3, and positive token/timeout values."
+            ),
         )
 
 

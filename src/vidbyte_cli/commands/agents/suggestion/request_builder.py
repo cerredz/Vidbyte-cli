@@ -113,8 +113,8 @@ class SuggestionRunInput:
             raise TypeError("files must contain only pathlib.Path values")
 
     def _validate_selection(self) -> None:
-        if type(self.count) is not int or not 2 <= self.count <= 15:
-            raise ValueError("count must be between 2 and 15")
+        if type(self.count) is not int or not 2 <= self.count <= 50:
+            raise ValueError("suggestions number must be between 2 and 50")
         if not isinstance(self.categories, tuple) or any(
             type(category) is not str or not category.strip() for category in self.categories
         ):
@@ -178,7 +178,7 @@ class SuggestionRequestBuilder:
             raise SuggestionContextUnreadable(str(error)) from error
         try:
             settings = SuggestionSettings(
-                requested_count=values.count,
+                suggestions_number=values.count,
                 categories=values.categories,
                 all_categories=values.all_categories,
                 extra_compute=values.extra_compute,

@@ -13,6 +13,7 @@ import click
 from ....lib.runtime.context import ApplicationContext as Context
 from ....services.suggestions.categories import SuggestionCategories
 from ....services.suggestions.service import SuggestionService
+from ....types.suggestions import MAX_SUGGESTIONS
 from .prompts.library import SuggestionHelpLibrary
 from .render import SuggestionRenderer
 from .request_builder import SuggestionRequestBuilder
@@ -86,7 +87,13 @@ class SuggestRunCommand:
         @click.option("--capability", "capability", multiple=True, help=_CAPABILITY_HELP)
         @click.option("--success", "success", multiple=True, help=_SUCCESS_HELP)
         @click.option(
-            "--count", type=click.IntRange(2, 15), default=5, show_default=True, help=_COUNT_HELP
+            "--suggestions-number",
+            "--count",
+            "count",
+            type=click.IntRange(2, MAX_SUGGESTIONS),
+            default=5,
+            show_default=True,
+            help=_COUNT_HELP,
         )
         @click.option(
             "--category",

@@ -6,7 +6,12 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from ...types.suggestions import SuggestionDraft, SuggestionIdea, SuggestionRequest
+from ...types.suggestions import (
+    MAX_SUGGESTION_POOL,
+    SuggestionDraft,
+    SuggestionIdea,
+    SuggestionRequest,
+)
 from .handoff import SuggestionHandoffBuilder
 
 
@@ -32,8 +37,10 @@ class SuggestionStore:
 
     def seed(self, ideas: tuple[SuggestionIdea, ...]) -> None:
         """Seeds the committed store with host-assigned initial ideas."""
-        if len(ideas) > 40:
-            raise ValueError("suggestion store cannot contain more than 40 ideas")
+        if len(ideas) > MAX_SUGGESTION_POOL:
+            raise ValueError(
+                f"suggestion store cannot contain more than {MAX_SUGGESTION_POOL} ideas"
+            )
         self._ideas = {idea.id: idea for idea in ideas}
         self._next_id = self._next_identifier(ideas)
 
@@ -77,7 +84,7 @@ class SuggestionStore:
             raise ValueError("suggestion cites an unavailable context reference")
 
         existing = self._existing_update(suggestion)
-        if existing is None and len(self._ideas) >= 40:
+        if existing is None and len(self._ideas) >= MAX_SUGGESTION_POOL:
             raise ValueError("suggestion store capacity is full")
         fingerprint = self._fingerprint(suggestion)
         if any(
@@ -128,7 +135,7 @@ class SuggestionStore:
         active_categories = {idea.primary_category for idea in self._ideas.values()}
         missing = sorted(self._categories - active_categories)
         gap_text = ", ".join(missing[:8]) or "none"
-        remaining = max(40 - len(self._ideas), 0)
+        remaining = max(MAX_SUGGESTION_POOL - len(self._ideas), 0)
         return (
             f"You may add up to {remaining} more suggestions. Missing categories: {gap_text}. "
             "Add only distinct, evidence-grounded ideas, then finish when the slate is useful."
