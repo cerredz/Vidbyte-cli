@@ -23,5 +23,73 @@ An experiment is a bounded intervention that separates competing explanations, d
 - What thresholds trigger adoption, revision, further testing, or stopping?
 - What will the caller do differently for each plausible result?
 
+## Generation requirements
+
+Every experiment suggestion must turn an uncertainty into a bounded test whose result changes a real
+decision. The proposal should:
+
+- State the hypothesis, mechanism, audience or system, and decision that depends on the result.
+- Identify the smallest intervention that can distinguish the relevant outcomes without pretending it
+  predicts every future condition.
+- Define what is changed, what is held constant, who or what is observed, and over what period.
+- Specify support, failure, ambiguity, and stop conditions before the test begins.
+- Use supplied context to establish the problem and constraints; label causal assumptions explicitly.
+- Avoid testing a vague preference, a completed claim, or a broad rollout disguised as an experiment.
+- Account for safety, ethics, privacy, selection bias, operational burden, and effects on existing work.
+- Assign an owner and define how results will be recorded and interpreted.
+- State what the caller will do differently for each plausible result.
+- Keep learning that changes action as the primary mechanism; route factual checks to verification or
+  investigation and broad route choices to strategy or alternative.
+
+## Candidate shape
+
+Shape the candidate as a decision-linked hypothesis with a testable intervention and a precommitted
+interpretation. The reader should know what is learned, not merely what activity is performed.
+
+- In the **summary**, name the uncertainty, proposed intervention, and decision the result will inform.
+- In the **action sequence**, state the hypothesis, design the smallest fair test, run it, inspect the
+  result, and choose the next action.
+- In **decision points**, choose sample or setting, treatment, comparison, duration, metric, thresholds,
+  and what ambiguity requires another test.
+- In **considerations**, cover signal quality, confounding, safety, cost, representativeness, ethics,
+  reversibility, and operational disruption.
+- In **dependencies**, name data, participants, access, instrumentation, owner, or authority required.
+- In **evidence references**, cite the problem and prior observations; do not cite expected outcomes as
+  if they were measured.
+- In **assumptions**, label causal, behavioral, and measurement assumptions with a falsifying observation.
+- In the **completion criterion**, require a recorded result and a decision to adopt, revise, repeat, or
+  stop rather than a completed test with no interpretation.
+- If the claim can be checked directly without changing an intervention, use verification or investigation.
+
+## Valid suggestion directions
+
+Use this category for bounded tests:
+
+- Compare two routes, messages, interfaces, offers, or sequences against the same outcome.
+- Run a small pilot before a broader rollout or irreversible commitment.
+- Test whether a suspected constraint or intervention changes an observable behavior.
+- Use a fake-door, concierge, prototype, cohort, or staged exposure when appropriate and ethical.
+- Vary one consequential mechanism while preserving relevant context.
+- Test adoption, comprehension, trust, retention, quality, cost, or operational feasibility.
+- Measure a leading signal that can change the next decision before final outcomes arrive.
+- Add a recovery or stop condition when the intervention could harm customers or the system.
+- Repeat only when the first result is ambiguous and the next test reduces a named uncertainty.
+
+## Alignment check
+
+The candidate is aligned when an intervention is deliberately introduced to learn something that will
+change the caller's next decision. It must define the hypothesis, boundaries, result interpretation,
+and action for plausible outcomes. A test is not an experiment if the result cannot alter the plan.
+
+Reject or reroute candidates that:
+
+- Check an existing claim against an authoritative source; use verification.
+- Gather facts without changing an intervention; use investigation.
+- Execute a known action with no uncertainty; use continuation or immediate next steps.
+- Explore many possibilities without a selected hypothesis; use creative exploration.
+- Choose a broad direction rather than test one consequential uncertainty; use strategy or alternative.
+
+The primary decision must be what the experiment will make possible to choose, stop, or change.
+
 ## When not to use
 Do not use this category when the needed action is already known and merely needs execution or when the question is factual and can be answered by investigation. Avoid it when no result would change the decision or when the proposed “test” is actually an unbounded rollout. If the check is intended only to confirm an established claim, use verification; if the unresolved choice concerns the broader direction, use strategy or alternative.

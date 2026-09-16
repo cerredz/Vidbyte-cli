@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -18,6 +19,44 @@ from typing import Any
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
+
+_CATEGORY_PROMPT_DIR = (
+    REPOSITORY_ROOT / "src" / "vidbyte_cli" / "services" / "suggestions" / "prompts" / "categories"
+)
+_REQUIRED_CATEGORY_SECTIONS = (
+    "Generation requirements",
+    "Candidate shape",
+    "Valid suggestion directions",
+    "Alignment check",
+)
+_CATEGORY_SECTION_MIN_WORDS = {
+    "Generation requirements": 140,
+    "Candidate shape": 150,
+    "Valid suggestion directions": 90,
+    "Alignment check": 110,
+}
+_FOCUSED_CATEGORY_ANCHORS = {
+    "customer_market": ("audience", "problem", "demand"),
+    "business_model_monetization": ("value", "payer", "cost"),
+    "brand_positioning": ("audience", "comparison", "proof"),
+    "distribution_sales": ("channel", "funnel", "purchase"),
+    "customer_relationship_service": ("lifecycle", "support", "retention"),
+}
+
+
+def _category_section(text: str, heading: str) -> str:
+    """Returns one level-two category section body for structural prompt checks."""
+    match = re.search(
+        rf"(?ms)^## {re.escape(heading)}\s*(.*?)(?=^## |\Z)",
+        text,
+    )
+    return match.group(1) if match else ""
+
+
+def _word_count(text: str) -> int:
+    """Counts words without treating Markdown punctuation as prompt content."""
+    return len(re.findall(r"[\w]+(?:[-'][\w]+)*", text))
+
 
 from vidbyte_cli.commands.agents.suggestion.request_builder import (  # noqa: E402
     SuggestionRequestBuilder,
@@ -333,6 +372,32 @@ class SuggestionSuite:
             focused.startswith("# Customer and Market")
             and "# Distribution and Sales" in focused
             and "# Business and Growth" not in focused,
+        )
+        prompt_files = tuple(sorted(_CATEGORY_PROMPT_DIR.glob("*.md")))
+        contract_sections = all(
+            all(
+                _word_count(_category_section(path.read_text(encoding="utf-8"), heading))
+                >= _CATEGORY_SECTION_MIN_WORDS[heading]
+                for heading in _REQUIRED_CATEGORY_SECTIONS
+            )
+            for path in prompt_files
+        )
+        results.check(
+            "all category prompts carry the expanded generation contract",
+            len(prompt_files) == 36 and contract_sections,
+        )
+        focused_anchors = all(
+            all(term in (path.read_text(encoding="utf-8")).lower() for term in terms)
+            for name, terms in _FOCUSED_CATEGORY_ANCHORS.items()
+            if (path := _CATEGORY_PROMPT_DIR / f"{name}.md").exists()
+        )
+        distinct_sections = {
+            _category_section(path.read_text(encoding="utf-8"), "Generation requirements")[:240]
+            for path in prompt_files
+        }
+        results.check(
+            "category generation guidance stays category-specific",
+            focused_anchors and len(distinct_sections) >= 30,
         )
         selected = registry.prompt_section(("verification", "experiment"))
         results.check(

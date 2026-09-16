@@ -29,6 +29,84 @@ bounded channel or sales experiment with a clear owner, cost, and decision rule.
 - **A new offer needs a repeatable launch route.** One successful sale is not a distribution system.
   Use this category when repeatability and capacity can be measured.
 
+## Generation requirements
+
+Every distribution-and-sales suggestion must improve a defined path from reachable customer to
+qualified interest, evaluation, purchase, or repeatable acquisition. Treat attention as a starting
+condition rather than evidence of commercial access. The proposal should:
+
+- Name the audience, buying situation, decision maker, and place where that audience already searches,
+  compares, asks for help, or accepts recommendations.
+- Identify the funnel stage and handoff being changed: discovery, qualification, trial, evaluation,
+  procurement, checkout, close, or repeat purchase.
+- Match the channel or sales motion to offer complexity, trust requirements, urgency, geography,
+  capacity, and expected acquisition economics.
+- Explain the customer uncertainty or friction the proposed route removes without deleting necessary
+  safeguards, privacy, security, or informed consent.
+- Name the owner of lead capture, qualification, follow-up, expectation setting, and handoff so the
+  suggestion does not create an orphaned channel.
+- Use only supplied evidence about search behavior, conversion, cost, capacity, or partner access;
+  label unverified reach and conversion as assumptions.
+- Define a bounded channel, partner, sales, or buying-flow experiment with cost, duration, audience,
+  and a continue, change, or stop rule.
+- Measure qualified demand and completed value, not impressions, contacts, or traffic alone.
+- Account for fulfillment, support, onboarding, and service capacity before increasing acquisition.
+- Keep route-to-purchase as the primary mechanism; route market discovery, promise, pricing, and
+  post-purchase relationship design to their focused categories.
+
+## Candidate shape
+
+Shape the candidate as a route-to-purchase hypothesis with an explicit owner and funnel signal. The
+proposal should let an executor see where a customer enters, what uncertainty is removed, what handoff
+changes, and what evidence justifies repeating the route.
+
+- In the **summary**, name the target customer, route, funnel stage, and purchase obstacle or access
+  advantage being addressed.
+- In the **action sequence**, map the current journey, choose one bounded route or handoff, instrument
+  the critical transition, run the test, and decide whether the route is repeatable.
+- In **decision points**, choose self-serve versus assisted motion, channel ownership, qualification,
+  proof, follow-up timing, partner incentives, and the threshold for continuing.
+- In **considerations**, cover reachability, trust, education, acquisition cost, conversion, sales
+  cycle, capacity, channel conflict, accessibility, and customer expectation.
+- In **dependencies**, name a channel owner, partner, sales capacity, landing or commerce surface,
+  tracking signal, fulfillment capability, or procurement access.
+- In **evidence references**, cite observed searches, referrals, funnel behavior, conversion, costs,
+  partner access, or buying friction; do not cite raw reach as qualified demand.
+- In **assumptions**, identify uncertain audience access, partner incentives, conversion, timing, or
+  capacity and pair each material assumption with a bounded test.
+- In the **completion criterion**, require a route-level result and a continue, change, or stop
+  decision based on qualified demand, completed purchase, payback, or repeatability.
+- If no audience or problem is established, make discovery the prerequisite rather than proposing a
+  channel that broadcasts to an undefined market.
+
+## Valid suggestion directions
+
+Use this category to vary how customers discover, evaluate, trust, and purchase an established offer.
+Keep each direction tied to a measurable route rather than a generic request for more marketing:
+
+- Meet customers in a search, community, marketplace, event, partner, or referral context they already
+  trust.
+- Separate self-serve, sales-assisted, partner-served, and high-touch routes by customer need.
+- Repair a marketing-to-sales, trial-to-purchase, or partner-to-owner handoff that loses intent.
+- Add proof, consultation, security information, or education at the point of highest uncertainty.
+- Remove avoidable qualification, procurement, checkout, scheduling, or approval friction.
+- Design a partner or referral incentive with explicit ownership, economics, and customer protection.
+- Build a repeatable launch route with capacity, follow-up, fulfillment, and stop conditions.
+- Compare channels by qualified demand, conversion, acquisition cost, payback, and sales capacity.
+- Improve lead routing so the right customer receives the right amount of human assistance.
+- Create a route for a segment whose buying behavior differs from the current channel.
+- Test message-to-channel fit without turning the experiment into a brand repositioning exercise.
+- Preserve trust and expectation quality when increasing volume or automating the buying path.
+
+## Evidence and assumptions
+
+Traffic, impressions, followers, and partner enthusiasm do not establish a viable sales route. Keep
+discovery separate from qualification, qualification separate from trial, and trial separate from
+purchase. Do not invent channel reach, conversion, partner access, or acquisition cost. When the
+context lacks a reliable funnel signal, define the smallest observable transition and a decision rule
+before recommending scale. Include the operational evidence needed to fulfill what the route sells;
+otherwise a successful acquisition test may create a service failure rather than durable growth.
+
 ## Things to consider
 
 - Where does the target customer already search, compare, or ask for help?
@@ -39,6 +117,41 @@ bounded channel or sales experiment with a clear owner, cost, and decision rule.
 - What partner or referral incentive could create durable access rather than one-off volume?
 - Which customers should be self-serve, sales-assisted, or partner-served?
 - What smallest channel test has a pre-set continue, change, or stop decision?
+
+## Alignment check
+
+The candidate is aligned when its primary mechanism changes how a defined customer discovers,
+evaluates, trusts, or purchases an established offering. The candidate should name a route, transition,
+owner, and commercial signal. A message, partner, product surface, or pricing artifact can support the
+route, but the central decision must concern access to purchase and the economics or capacity of that
+route.
+
+Reject or reroute candidates that:
+
+- Ask whether a segment has an urgent problem or will switch before a route can be chosen; use
+  customer and market.
+- Change what the offering should mean, promise, or be remembered for; use brand and positioning.
+- Change price, tiers, payment timing, or value capture while route access is secondary; use business
+  model and monetization.
+- Improve onboarding, support, renewal, recovery, or advocacy after purchase; use customer
+  relationship and service.
+- Add a feature or interaction whose primary problem is usability rather than discovery or purchase;
+  use product and experience.
+- Present a broad acquisition plan with no single route, owner, funnel stage, or decision rule; use
+  business and growth or narrow the candidate.
+
+When several mechanisms appear together, keep the candidate here only when route access or the
+purchase transition is the decision that determines whether the plan works. A campaign, partner, or
+checkout artifact is not enough by itself; the candidate must show how a defined customer reaches a
+qualified decision and how the organization can deliver what the route sells.
+
+## Weak suggestion patterns
+
+- “Use social media” or “add partnerships” without a reachable audience, owner, economics, and test.
+- Traffic or impressions treated as qualified demand or completed value.
+- A channel recommendation that ignores fulfillment, support, sales capacity, or procurement friction.
+- More follow-up messages added without identifying the handoff or uncertainty causing loss.
+- A single successful sale treated as proof of a repeatable distribution system.
 
 ## When not to use
 

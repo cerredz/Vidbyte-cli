@@ -23,5 +23,66 @@ A prerequisite identifies a condition that intended work cannot safely or effect
 - Can a narrower or alternative route proceed without it?
 - What should happen if the condition remains unavailable by the decision point?
 
+## Generation requirements
+
+Every prerequisite suggestion must identify a condition the intended work cannot safely or effectively
+proceed without. The proposal should:
+
+- Name the downstream work, outcome, or decision that depends on the condition.
+- Explain why the condition is genuinely required rather than merely convenient or preferred.
+- Classify the dependency as evidence, access, authority, capability, resource, consent, preparation, or prior result.
+- Identify the owner who can provide, approve, or verify the condition and the time it is needed.
+- Use supplied context to establish the dependency; label uncertainty about necessity or availability.
+- Define the smallest action to obtain, validate, substitute, or escalate the condition.
+- State what can proceed safely in parallel and what must remain blocked.
+- Define a fallback, deferment, or stop decision if the condition remains unavailable.
+- Avoid accumulating a wish list of improvements that do not block the intended work.
+- Keep a true blocking condition as the primary mechanism; route research, readiness, ownership, and prioritization to their categories.
+
+## Candidate shape
+
+Shape the candidate as a dependency resolution with a downstream unlock. The reader should know what
+cannot proceed, why, who owns the condition, and what happens if it is not obtained.
+
+- In the **summary**, name the intended work, blocking condition, reason it is required, and downstream unlock.
+- In the **action sequence**, validate necessity, request or create the condition, confirm it, and release the dependent work.
+- In **decision points**, choose whether to wait, substitute, proceed partially, escalate, defer, or stop.
+- In **considerations**, cover urgency, authority, access, quality, safety, cost, parallel work, and dependency decay.
+- In **dependencies**, name the source, owner, permission, capability, resource, or prior result explicitly.
+- In **evidence references**, cite requirements, constraints, failed attempts, or authoritative policy; do not cite preference as necessity.
+- In **assumptions**, label why the condition blocks progress and test that assumption where possible.
+- In the **completion criterion**, require the condition to be available and verified, or a recorded decision not to proceed.
+- If the condition is only useful for a future event, use preparation.
+
+## Valid suggestion directions
+
+Use this category for genuine blockers:
+
+- Obtain access, authority, consent, data, environment, capability, or a required decision.
+- Resolve a prerequisite artifact, design, migration, or prior result before dependent work begins.
+- Verify that a stated requirement is actually satisfied before relying on it.
+- Find a safe substitute when the original dependency is unavailable.
+- Assign an owner and deadline to a condition currently treated as ambient responsibility.
+- Separate blocked work from parallel work that can proceed without the condition.
+- Escalate an unavailable dependency with a clear consequence and decision point.
+- Record a deliberate deferment or stop when the condition cannot be obtained in time.
+- Reclassify a preference as optional when it does not truly block the outcome.
+
+## Alignment check
+
+The candidate is aligned when the intended work cannot safely or effectively proceed without the named
+condition. It must explain the downstream unlock and the response if the condition remains unavailable.
+A useful prerequisite narrows the gate; it does not turn every desirable improvement into a blocker.
+
+Reject or reroute candidates that:
+
+- Prepare for a future trigger rather than block current work; use preparation.
+- Gather evidence about an unknown necessity; use investigation or verification.
+- Resolve unclear ownership or sequence among actors; use coordination.
+- Rank several valid commitments; use prioritization.
+- Describe a quality preference that can be deferred without changing safety or outcome.
+
+The primary decision must be whether this condition is truly required before the intended work can proceed.
+
 ## When not to use
 Do not use this category for information that would be interesting but cannot block the intended action. Avoid it when the condition is already available or when the real issue is a queue, owner, or decision rather than a requirement. If readiness is for a future event, use preparation; if the caller needs to find out whether a claim is true, use investigation or verification.
