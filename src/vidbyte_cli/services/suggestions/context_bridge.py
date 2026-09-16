@@ -83,9 +83,11 @@ class SuggestionContextBridge:
         # Rebuilds the primitive without mutating the caller-owned rich snapshot.
         return replace(
             request.context,
+            description="Stage context contains only evidence and category guidance.",
             items=self._items(request.context.items),
             selected_categories=self._categories.prompt_section(category_ids),
             candidate_handoffs=self._json(payload) if payload else "",
+            metadata={},
         )
 
     def _items(self, items: tuple[SuggestionContextItem, ...]) -> tuple[SuggestionContextItem, ...]:
