@@ -7,6 +7,7 @@ stay outside this module.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -132,7 +133,6 @@ class SuggestionContextPrimitive:
     description: str
     items: tuple[SuggestionContextItem, ...] = ()
     selected_categories: str = ""
-    candidate_handoffs: str = ""
     kind: str = field(default="suggestion-context", init=False)
     title: str = field(default="Suggestion Agent Context", init=False)
     metadata: Mapping[str, object] = field(default_factory=dict)
@@ -152,24 +152,16 @@ class SuggestionContextPrimitive:
             raise TypeError("Suggestion context metadata must be a mapping.")
 
     def to_context_text(self) -> str:
-        # Goal is already carried by each stage prompt; keep this primitive to task data only.
-        sections = ["<Selected Categories>"]
+        sections = [f"Goal: {self.goal}", "", "<Selected Categories>"]
         sections.append(self.selected_categories or "No category was selected.")
         sections.extend(("</Selected Categories>", ""))
         for item in self.items:
             sections.extend(
                 (
-                    f"## [{item.ref}] {item.kind}",
+                    f"## [{item.ref}] {item.label} ({item.kind})",
+                    f"Source: {item.source}",
                     item.content,
                     "",
-                )
-            )
-        if self.candidate_handoffs:
-            sections.extend(
-                (
-                    "<Candidate Handoffs>",
-                    self.candidate_handoffs,
-                    "</Candidate Handoffs>",
                 )
             )
         return "\n".join(sections).rstrip()
@@ -302,6 +294,86 @@ class SuggestionCritiqueArtifact(BaseModel):
     critiques: tuple[SuggestionCritique, ...] = Field(max_length=30)
 
 
+def _packet(models: tuple[BaseModel, ...]) -> str:
+    """Render one typed model tuple as the compact JSON a model window reads."""
+    return json.dumps(
+        [model.model_dump(mode="json") for model in models],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SuggestionEvidence:
+    """One supplied record as a model sees it: its stable ref, its kind, its body."""
+
+    ref: str
+    kind: str
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class SuggestionAgentContext:
+    """SDK context primitive holding exactly what one workflow stage may read.
+
+    Caller-only data has no field here at all, so a stage cannot place a source
+    path, a label, a manifest entry, a setting, or workflow state such as rank,
+    revision, or handoff into a model window. Candidates travel as the same
+    `SuggestionDraft` contract the generator returns, and critiques as the same
+    `SuggestionCritique` the critic returns, so no parallel projection can drift.
+    """
+
+    description: str
+    evidence: tuple[SuggestionEvidence, ...] = ()
+    selected_categories: str = ""
+    candidates: tuple[SuggestionDraft, ...] = ()
+    critiques: tuple[SuggestionCritique, ...] = ()
+    kind: str = field(default="suggestion-context", init=False)
+    title: str = field(default="Suggestion Agent Context", init=False)
+    metadata: Mapping[str, object] = field(default_factory=dict, init=False)
+    primitive_id: str = field(default="suggestion-context:stage", init=False)
+    primitive_frozen: bool = field(default=True, init=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.description, str) or not self.description.strip():
+            raise ValueError("Suggestion agent context description must be a non-empty string.")
+
+    @classmethod
+    def for_stage(
+        cls,
+        context: SuggestionContextPrimitive,
+        selected_categories: str,
+        candidates: tuple[SuggestionDraft, ...] = (),
+        critiques: tuple[SuggestionCritique, ...] = (),
+    ) -> SuggestionAgentContext:
+        """Build one stage window from the caller snapshot without mutating it."""
+        return cls(
+            description="Stage context holds only evidence, category guidance, and candidates.",
+            evidence=tuple(
+                SuggestionEvidence(item.ref, item.kind, item.content) for item in context.items
+            ),
+            selected_categories=selected_categories,
+            candidates=candidates,
+            critiques=critiques,
+        )
+
+    def to_context_text(self) -> str:
+        # Every stage prompt already states the goal, so this window stays task data only.
+        sections = [
+            "<Selected Categories>",
+            self.selected_categories or "No category was selected.",
+            "</Selected Categories>",
+            "",
+        ]
+        for item in self.evidence:
+            sections.extend((f"## [{item.ref}] {item.kind}", item.content, ""))
+        if self.candidates:
+            sections.extend(("<Candidates>", _packet(self.candidates), "</Candidates>"))
+        if self.critiques:
+            sections.extend(("<Critiques>", _packet(self.critiques), "</Critiques>"))
+        return "\n".join(sections).rstrip()
+
+
 class SuggestionHandoffEvidence(BaseModel):
     """One context record embedded in a final action handoff."""
 
@@ -365,6 +437,12 @@ class SuggestionIdea(BaseModel):
     review_summary: str = Field(min_length=1, max_length=2048)
     handoff: SuggestionHandoff
 
+    def to_draft(self) -> SuggestionDraft:
+        """Project this reviewed idea back to the candidate contract agents reason over."""
+        # Identity stays as idea_id; rank, revision, review trail, and handoff are CLI-owned.
+        values = self.model_dump(exclude={"id", "revision", "rank", "review_summary", "handoff"})
+        return SuggestionDraft.model_validate({**values, "idea_id": self.id})
+
 
 class SuggestionResult(BaseModel):
     """Whole validated outcome of one run, including shortfalls and usage."""
@@ -401,12 +479,14 @@ __all__ = [
     "SUGGESTIONS_HANDOFF_KIND",
     "SUGGESTIONS_RESULT_KIND",
     "StopReason",
+    "SuggestionAgentContext",
     "SuggestionCandidateBatch",
     "SuggestionContextItem",
     "SuggestionContextPrimitive",
     "SuggestionCritique",
     "SuggestionCritiqueArtifact",
     "SuggestionDraft",
+    "SuggestionEvidence",
     "SuggestionHandoff",
     "SuggestionHandoffEvidence",
     "SuggestionHorizon",

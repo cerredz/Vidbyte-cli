@@ -1,7 +1,7 @@
 """Lazily binds the suggestion service to Vidbyte SDK Codex agents.
 
 This is the only module that imports SDK symbols. It constructs read-only,
-structured-output agents and places one validated custom context primitive in
+structured-output agents and places one validated stage context primitive in
 each fresh context manager.
 """
 
@@ -15,7 +15,7 @@ from typing import Any, Literal, Protocol, cast
 from ...lib.errors.failures import SuggestionSdkUnavailable
 from ...lib.io.codex_attachments import CodexAttachmentInputBuilder
 from ...types.attachments import AttachmentBundle
-from ...types.suggestions import SuggestionContextPrimitive
+from ...types.suggestions import SuggestionAgentContext
 
 _CODEX_MODULE = "vidbyte.agents.codex"
 _CONTEXT_MODULE = "vidbyte.context"
@@ -62,7 +62,7 @@ class SuggestionAgentSettingsInput:
 
     role: Literal["generator", "critic"]
     system_prompt: str
-    context: SuggestionContextPrimitive
+    context: SuggestionAgentContext
     output_schema: type | Mapping[str, Any]
     provider: str | None = None
     model: str | None = None
@@ -72,8 +72,8 @@ class SuggestionAgentSettingsInput:
             raise ValueError("Suggestion agent role must be generator or critic.")
         if type(self.system_prompt) is not str or not self.system_prompt.strip():
             raise ValueError("Suggestion agent system_prompt must be non-empty.")
-        if not isinstance(self.context, SuggestionContextPrimitive):
-            raise TypeError("Suggestion agent context must be SuggestionContextPrimitive.")
+        if not isinstance(self.context, SuggestionAgentContext):
+            raise TypeError("Suggestion agent context must be SuggestionAgentContext.")
         if not isinstance(self.output_schema, (type, Mapping)):
             raise TypeError("Suggestion agent output_schema must be a class or mapping.")
         for name, value in (("provider", self.provider), ("model", self.model)):

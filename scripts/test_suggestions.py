@@ -26,9 +26,6 @@ from vidbyte_cli.commands.agents.suggestion.request_builder import (  # noqa: E4
 )
 from vidbyte_cli.services.suggestions.categories import SuggestionCategories  # noqa: E402
 from vidbyte_cli.services.suggestions.context import SuggestionContextBuilder  # noqa: E402
-from vidbyte_cli.services.suggestions.context_bridge import (  # noqa: E402
-    SuggestionContextBridge,
-)
 from vidbyte_cli.services.suggestions.handoff import SuggestionHandoffBuilder  # noqa: E402
 from vidbyte_cli.services.suggestions.prompts.library import SuggestionPrompts  # noqa: E402
 from vidbyte_cli.services.suggestions.sdk import (  # noqa: E402
@@ -50,6 +47,7 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     CritiqueConfidence,
     CritiqueEvidenceCheck,
     CritiqueVerdict,
+    SuggestionAgentContext,
     SuggestionCandidateBatch,
     SuggestionContextItem,
     SuggestionContextPrimitive,
@@ -138,7 +136,7 @@ class FakeSdk:
     def next_artifact(self, settings: SuggestionAgentSettingsInput, prompt: str) -> Any:
         if settings.role == "critic":
             self.critic_calls += 1
-            ids = self._candidate_ids(settings.context.candidate_handoffs)
+            ids = tuple(candidate.idea_id for candidate in settings.context.candidates)
             critiques = []
             for index, idea_id in enumerate(ids):
                 first_revision = self.revision or self.unchanged_revision
@@ -158,14 +156,7 @@ class FakeSdk:
         self.generator_calls += 1
         if "Suggestion revision" in settings.system_prompt:
             if self.unchanged_revision:
-                candidate = json.loads(settings.context.candidate_handoffs)[0]
-                candidate.pop("id", None)
-                candidate.pop("revision", None)
-                candidate.pop("rank", None)
-                candidate.pop("review_summary", None)
-                candidate.pop("handoff", None)
-                candidate["idea_id"] = "idea-001"
-                return SuggestionCandidateBatch(ideas=(SuggestionDraft.model_validate(candidate),))
+                return SuggestionCandidateBatch(ideas=(settings.context.candidates[0],))
             return SuggestionCandidateBatch(
                 ideas=(
                     _draft(
@@ -173,7 +164,7 @@ class FakeSdk:
                         idea_id="idea-001",
                         title="Revised verification action",
                         first_action="Clarify the first action and run the smallest safe check.",
-                        evidence_refs=tuple(item.ref for item in settings.context.items[:1]),
+                        evidence_refs=tuple(item.ref for item in settings.context.evidence[:1]),
                     ),
                 )
             )
@@ -184,18 +175,11 @@ class FakeSdk:
                 _draft(
                     categories[index % len(categories)],
                     title=f"{categories[index % len(categories)]} action {index}",
-                    evidence_refs=tuple(item.ref for item in settings.context.items[:1]),
+                    evidence_refs=tuple(item.ref for item in settings.context.evidence[:1]),
                 )
                 for index in range(count)
             )
         )
-
-    def _candidate_ids(self, handoffs: str) -> tuple[str, ...]:
-        if not handoffs:
-            return ()
-        packet = json.loads(handoffs)
-        candidates = packet["candidates"] if isinstance(packet, dict) else packet
-        return tuple(item["id"] for item in candidates)
 
 
 def _categories_from_context(text: str) -> tuple[str, ...]:
@@ -476,7 +460,9 @@ class SuggestionSuite:
 
     def check_sdk_context_boundary(self) -> None:
         results = self.results
-        context = _request().context
+        context = SuggestionAgentContext.for_stage(
+            _request().context, SuggestionCategories().prompt_section(("verification",))
+        )
         sdk = SuggestionSdk.load()
         generator = sdk.agent_settings(
             SuggestionAgentSettingsInput(
@@ -498,8 +484,8 @@ class SuggestionSuite:
         results.check(
             "generator and critic receive independent managed context windows",
             generator.context_manager is not critic.context_manager
-            and generator.context_manager.get_by_id("suggestion-context:request") is context
-            and critic.context_manager.get_by_id("suggestion-context:request") is context,
+            and generator.context_manager.get_by_id("suggestion-context:stage") is context
+            and critic.context_manager.get_by_id("suggestion-context:stage") is context,
         )
         results.check(
             "SDK settings enforce the read-only provider boundary",
@@ -538,40 +524,34 @@ class SuggestionSuite:
             and revised.revision == 2
             and revised.title == "verification action 0",
         )
-        results.check(
-            "critic context carries compact candidates and selected categories",
-            any(
-                settings.role == "critic"
-                and "<Candidate Handoffs>" in settings.context.to_context_text()
-                and "<Selected Categories>" in settings.context.to_context_text()
-                for settings, _ in fake.turns
-            ),
-        )
         critic_context = next(
             settings.context for settings, _ in fake.turns if settings.role == "critic"
         )
-        packet = json.loads(critic_context.candidate_handoffs)
+        critic_text = critic_context.to_context_text()
         results.check(
-            "critic context omits handoffs and workflow metadata",
-            "execution_prompt" not in critic_context.candidate_handoffs
-            and "rank" not in critic_context.candidate_handoffs
-            and "revision" not in critic_context.candidate_handoffs
-            and set(packet) == {"candidates"},
+            "critic context carries candidates and selected categories",
+            "<Candidates>" in critic_text
+            and "<Selected Categories>" in critic_text
+            and len(critic_context.candidates) == result.returned_count,
         )
-        revision_context = next(
-            settings.context
-            for settings, _ in fake.turns
-            if settings.role == "generator" and "Suggestion revision" in settings.system_prompt
+        results.check(
+            "critic window has no field for workflow state or a handoff",
+            not critic_context.critiques
+            and critic_context.metadata == {}
+            and "execution_prompt" not in critic_text
+            and '"rank"' not in critic_text
+            and '"revision"' not in critic_text,
         )
-        revision_prompt = next(
-            prompt
+        revision_context, revision_prompt = next(
+            (settings.context, prompt)
             for settings, prompt in fake.turns
             if settings.role == "generator" and "Suggestion revision" in settings.system_prompt
         )
         results.check(
-            "revision prompt carries packet once through context",
+            "revision window pairs each candidate with its critique, exactly once",
             "Candidates:\n" not in revision_prompt
-            and set(json.loads(revision_context.candidate_handoffs)) == {"candidates", "critiques"},
+            and len(revision_context.candidates) == len(revision_context.critiques) == 1
+            and revision_context.candidates[0].idea_id == revision_context.critiques[0].idea_id,
         )
         dry_request = _request().model_copy(
             update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}
@@ -617,24 +597,25 @@ class SuggestionSuite:
             update={"source": "C:/private/plan.md"}
         )
         request = _request(items=(source_item,))
-        agent_text = (
-            SuggestionContextBridge().generator(request, ("verification",)).to_context_text()
+        window = SuggestionAgentContext.for_stage(
+            request.context, SuggestionCategories().prompt_section(("verification",))
         )
+        agent_text = window.to_context_text()
         results.check(
-            "agent context keeps evidence but prunes caller metadata",
+            "generator window keeps evidence and leaves caller metadata behind",
             "Evidence body" in agent_text
             and "C:/private/plan.md" not in agent_text
             and "Caller-supplied context value" not in agent_text
             and "Goal:" not in agent_text
             and "sha256" not in agent_text,
         )
-        bridged = SuggestionContextBridge().generator(request, ("verification",))
         results.check(
-            "agent context object drops caller metadata",
-            bridged.metadata == {}
-            and bridged.description == "Stage context contains only evidence and category guidance."
-            and bridged.items[0].source == "context"
-            and bridged.items[0].caller_supplied,
+            "generator window carries evidence only and never mutates the snapshot",
+            window.evidence[0].ref == source_item.ref
+            and window.evidence[0].content == source_item.content
+            and not window.candidates
+            and window.metadata == {}
+            and request.context.items[0].source == "C:/private/plan.md",
         )
         builder = SuggestionHandoffBuilder()
         result = SuggestionService(sdk=FakeSdk()).run(_request(items=(_item(),)))

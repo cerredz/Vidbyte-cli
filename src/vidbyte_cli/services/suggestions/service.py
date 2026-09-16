@@ -21,8 +21,8 @@ from ...types.suggestions import (
     CritiqueVerdict,
     RunStatus,
     StopReason,
+    SuggestionAgentContext,
     SuggestionCandidateBatch,
-    SuggestionContextPrimitive,
     SuggestionCritique,
     SuggestionCritiqueArtifact,
     SuggestionDraft,
@@ -32,7 +32,6 @@ from ...types.suggestions import (
     SuggestionResult,
 )
 from .categories import SuggestionCategories
-from .context_bridge import SuggestionContextBridge
 from .extra_compute import ExtraComputeService
 from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
@@ -67,7 +66,6 @@ class SuggestionService:
         # Injection keeps offline verification at the same typed agent boundary as production.
         self._sdk = sdk
         self._categories = SuggestionCategories()
-        self._context_bridge = SuggestionContextBridge(self._categories)
         self._selection = SuggestionSelection()
         self._handoffs = SuggestionHandoffBuilder()
         self._prompts = SuggestionPrompts()
@@ -97,9 +95,7 @@ class SuggestionService:
         drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...]
         try:
             if request.settings.extra_compute:
-                drafts = await ExtraComputeService(
-                    self._categories, self._prompts, self._context_bridge
-                ).generate(
+                drafts = await ExtraComputeService(self._categories, self._prompts).generate(
                     request,
                     categories,
                     pool_size,
@@ -140,9 +136,7 @@ class SuggestionService:
                         last_reviewed, usage, StopReason.ROUND_LIMIT, tuple(warnings)
                     )
                 self._check_limit(request, started, usage)
-                current = await self._revise(
-                    request, sdk, categories, current, revisions, started, usage
-                )
+                current = await self._revise(request, sdk, categories, revisions, started, usage)
                 before = {idea.id: idea for idea, _ in revisions}
                 unchanged = tuple(
                     idea
@@ -179,7 +173,7 @@ class SuggestionService:
         started: float,
         usage: dict[str, int],
     ) -> SuggestionCandidateBatch:
-        context = self._context_bridge.generator(request, categories)
+        context = self._stage_context(request, categories)
         prompt = self._prompts.generator_turn(request.goal, count)
         return cast(
             SuggestionCandidateBatch,
@@ -207,7 +201,7 @@ class SuggestionService:
         started: float,
         usage: dict[str, int],
     ) -> SuggestionCritiqueArtifact:
-        context = self._context_bridge.critic(request, categories, ideas)
+        context = self._stage_context(request, categories, tuple(idea.to_draft() for idea in ideas))
         ids = ", ".join(idea.id for idea in ideas)
         prompt = self._prompts.critic_turn(request.goal, ids)
         return cast(
@@ -232,12 +226,16 @@ class SuggestionService:
         request: SuggestionRequest,
         sdk: Any,
         categories: tuple[str, ...],
-        current: tuple[SuggestionIdea, ...],
         revisions: tuple[tuple[SuggestionIdea, SuggestionCritique], ...],
         started: float,
         usage: dict[str, int],
     ) -> tuple[SuggestionIdea, ...]:
-        context = self._context_bridge.revision(request, categories, revisions)
+        context = self._stage_context(
+            request,
+            categories,
+            tuple(idea.to_draft() for idea, _ in revisions),
+            tuple(critique for _, critique in revisions),
+        )
         prompt = self._prompts.revision_turn(request.goal, len(revisions))
         batch = await self._call_agent(
             sdk,
@@ -289,7 +287,7 @@ class SuggestionService:
         role: Literal["generator", "critic"],
         system_prompt: str,
         prompt: str,
-        context: SuggestionContextPrimitive,
+        context: SuggestionAgentContext,
         model: str | None,
         schema: type[Any],
         request: SuggestionRequest,
@@ -433,6 +431,21 @@ class SuggestionService:
         merged = {idea.id: idea for idea in previous}
         merged.update({idea.id: idea for idea in current})
         return tuple(merged.values())
+
+    def _stage_context(
+        self,
+        request: SuggestionRequest,
+        categories: tuple[str, ...],
+        candidates: tuple[SuggestionDraft, ...] = (),
+        critiques: tuple[SuggestionCritique, ...] = (),
+    ) -> SuggestionAgentContext:
+        # One window type per stage: what a stage omits, it simply never passes here.
+        return SuggestionAgentContext.for_stage(
+            request.context,
+            self._categories.prompt_section(categories),
+            candidates,
+            critiques,
+        )
 
     def _check_limit(
         self, request: SuggestionRequest, started: float, usage: dict[str, int]

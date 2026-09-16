@@ -8,17 +8,16 @@ from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from ...types.suggestions import (
+    SuggestionAgentContext,
     SuggestionCandidateBatch,
-    SuggestionContextPrimitive,
     SuggestionDraft,
     SuggestionRequest,
 )
 from .categories import SuggestionCategories
-from .context_bridge import SuggestionContextBridge
 from .prompts.library import SuggestionPrompts
 
 AgentCall = Callable[
-    [Literal["generator", "critic"], str, SuggestionContextPrimitive, str | None],
+    [Literal["generator", "critic"], str, SuggestionAgentContext, str | None],
     Awaitable[SuggestionCandidateBatch],
 ]
 
@@ -26,15 +25,9 @@ AgentCall = Callable[
 class ExtraComputeService:
     """Fans out focused category windows and combines their typed drafts stably."""
 
-    def __init__(
-        self,
-        categories: SuggestionCategories,
-        prompts: SuggestionPrompts,
-        context_bridge: SuggestionContextBridge | None = None,
-    ) -> None:
+    def __init__(self, categories: SuggestionCategories, prompts: SuggestionPrompts) -> None:
         self._categories = categories
         self._prompts = prompts
-        self._context_bridge = context_bridge or SuggestionContextBridge(categories)
 
     async def generate(
         self,
@@ -46,7 +39,9 @@ class ExtraComputeService:
         per_category = max(1, math.ceil(pool_size / len(category_ids)))
 
         async def run_one(category_id: str) -> SuggestionCandidateBatch:
-            context = self._context_bridge.generator(request, (category_id,))
+            context = SuggestionAgentContext.for_stage(
+                request.context, self._categories.prompt_section((category_id,))
+            )
             prompt = self._prompts.generator_turn(request.goal, per_category)
             return await call("generator", prompt, context, None)
 
