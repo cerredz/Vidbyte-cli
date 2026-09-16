@@ -130,7 +130,22 @@ class SuggestionStore:
 
     def tools(self) -> tuple[Callable[..., Any], ...]:
         """Returns exactly the state tools exposed to the curation agent."""
-        return (self.add_suggestion, self.remove_suggestion, self.more_suggestions)
+
+        def add_tool(category_id: str, suggestion: SuggestionDraft) -> str:
+            return self.add_suggestion(category_id, suggestion)
+
+        def remove_tool(suggestion_id: str) -> str:
+            return self.remove_suggestion(suggestion_id)
+
+        def more_tool() -> str:
+            return self.more_suggestions()
+
+        # These public model-facing names match the workflow contract while the
+        # snake-case methods remain convenient for local tests and callers.
+        add_tool.__name__ = "AddSuggestionType"
+        remove_tool.__name__ = "RemoveSuggestion"
+        more_tool.__name__ = "MoreSuggestions"
+        return (add_tool, remove_tool, more_tool)
 
     @property
     def mutation_count(self) -> int:
