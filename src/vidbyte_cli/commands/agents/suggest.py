@@ -20,7 +20,7 @@ from ...lib.errors.failures import (
 )
 from ...lib.runtime.context import ApplicationContext as Context
 from ...services.suggestions.categories import SuggestionCategories
-from ...services.suggestions.context import SuggestionContextBuilder
+from ...services.suggestions.context import FUTURE_INTENDED_WORK_KIND, SuggestionContextBuilder
 from ...services.suggestions.service import SuggestionService
 from ...types.suggestions import SuggestionHorizon, SuggestionRequest, SuggestionSettings
 from .render import SuggestionRenderer
@@ -83,6 +83,14 @@ _COMPLETED_HELP = (
     "which is what keeps suggestions from restating done work. Use short declarative "
     "sentences naming the outcome, not the process. Omitting this flag means no "
     "completed work was supplied, not that nothing is complete."
+)
+
+_FUTURE_INTENDED_WORK_HELP = (
+    "Work the caller intends to do later but has not completed, repeatable once per statement. "
+    "The generator may use these plans to suggest prerequisites, sequencing, validation, or a "
+    "material refinement, so this is planned state rather than a hard exclusion list. Use one "
+    "short statement per intended outcome and do not describe it as already underway. Omitting "
+    "this flag means no future intended work was supplied, not that the caller has no plans."
 )
 
 _IN_PROGRESS_HELP = (
@@ -273,6 +281,12 @@ class SuggestRunCommand:
             help=_HANDOFF_FILE_HELP,
         )
         @click.option("--completed", "completed", multiple=True, help=_COMPLETED_HELP)
+        @click.option(
+            "--future-intended-work",
+            "future_intended_work",
+            multiple=True,
+            help=_FUTURE_INTENDED_WORK_HELP,
+        )
         @click.option("--in-progress", "in_progress", multiple=True, help=_IN_PROGRESS_HELP)
         @click.option("--decision", "decisions", multiple=True, help=_DECISION_HELP)
         @click.option("--constraint", "constraints", multiple=True, help=_CONSTRAINT_HELP)
@@ -409,6 +423,7 @@ class SuggestRunCommand:
             "context_files",
             "handoff_file",
             "completed",
+            "future_intended_work",
             "in_progress",
             "decisions",
             "constraints",
@@ -454,6 +469,7 @@ class SuggestRunCommand:
         for key in (
             "contexts",
             "completed",
+            "future_intended_work",
             "in_progress",
             "decisions",
             "constraints",
@@ -464,8 +480,16 @@ class SuggestRunCommand:
         ):
             if key in context_doc and not merged.get(key):
                 value = context_doc[key]
+                if key == "future_intended_work" and (
+                    not isinstance(value, list) or not all(isinstance(item, str) for item in value)
+                ):
+                    raise SuggestionInputInvalid()
                 if isinstance(value, list):
-                    merged[key] = tuple(str(item) for item in value)
+                    merged[key] = (
+                        tuple(value)
+                        if key == "future_intended_work"
+                        else tuple(str(item) for item in value)
+                    )
         return merged
 
     def _section(self, document: dict[str, object], name: str) -> dict[str, object]:
@@ -478,6 +502,7 @@ class SuggestRunCommand:
         mapping = {
             "contexts": "context",
             "completed": "completed",
+            "future_intended_work": FUTURE_INTENDED_WORK_KIND,
             "in_progress": "in-progress",
             "decisions": "decision",
             "constraints": "constraint",

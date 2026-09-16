@@ -25,6 +25,7 @@ from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: 
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     SUGGESTIONS_HANDOFF_KIND,
     SUGGESTIONS_RESULT_KIND,
+    SuggestionHandoff,
     SuggestionRequest,
     SuggestionSettings,
 )
@@ -151,6 +152,17 @@ class SuggestionSuite:
             "[Hidden Failure] completed work becomes a context item",
             len(snapshot.items) == 1 and snapshot.items[0].ref.startswith("ctx-"),
         )
+        planned = builder.build(
+            {"future-intended-work": ("Interview five users", "Prototype shorter setup")}, {}
+        )
+        results.check(
+            "[Edge Case] future intended work keeps kind and order",
+            [item.content for item in planned.items]
+            == ["Interview five users", "Prototype shorter setup"]
+            and all(item.kind == "future-intended-work" for item in planned.items),
+        )
+        empty = builder.build({"future-intended-work": ()}, {})
+        results.check("[Edge Case] omitted future intent creates no empty item", not empty.items)
         both = builder.build({"completed": ("same thing",), "in-progress": ("same thing",)}, {})
         results.check(
             "[Hidden Failure] contradictions surface a warning, not a silent pick",
@@ -200,6 +212,15 @@ class SuggestionSuite:
             "[Hidden Failure] rejected terms suppress matches",
             len(suppressed) <= len(outcome.ideas),
         )
+        exact = outcome.ideas[0].model_copy(update={"title": "Interview five users"})
+        prerequisite = outcome.ideas[0].model_copy(update={"title": "Validate interview script"})
+        planned = selection.suppress_exact_planned(
+            (exact, prerequisite), ("  Interview   five users ",)
+        )
+        results.check(
+            "[Silent Failure] exact planned echoes are removed but refinements remain",
+            len(planned) == 1 and planned[0].title == "Validate interview script",
+        )
         coverage = selection.coverage(outcome.ideas)
         results.check(
             "[Silent Failure] coverage counts primary categories",
@@ -222,6 +243,22 @@ class SuggestionSuite:
         results.check(
             "[Hidden Assumption] authority defaults to not-granted",
             rebuilt.authority == "not_granted_by_this_handoff",
+        )
+        planned_rebuilt = builder.build(
+            idea,
+            outcome.goal,
+            {"future-intended-work": ("Interview five users",)},
+        )
+        results.check(
+            "[Silent Failure] handoff preserves planned work and labels it as intended",
+            planned_rebuilt.future_intended_work == ("Interview five users",)
+            and "Future intended: Interview five users." in planned_rebuilt.current_state,
+        )
+        legacy = planned_rebuilt.model_dump()
+        legacy.pop("future_intended_work")
+        results.check(
+            "[Hidden Assumption] legacy handoffs default planned work to empty",
+            SuggestionHandoff.model_validate(legacy).future_intended_work == (),
         )
         first = builder.render_prompt(rebuilt)
         altered = rebuilt.model_copy(update={"suggested_steps": ("Something else entirely",)})
@@ -248,6 +285,10 @@ class SuggestionSuite:
         results.check(
             "[Hidden Failure] categories drive validation",
             registry.is_known("verification") and not registry.is_known("nope"),
+        )
+        results.check(
+            "[Hidden Assumption] prompts describe planned state distinctly",
+            "future-intended-work" in generator and "planned but unfinished" in critic,
         )
 
     def check_cli_contracts(self) -> None:
@@ -301,6 +342,80 @@ class SuggestionSuite:
         )
         results.check(
             "[Edge Case] structured stdin input works non-interactively", via_stdin.returncode == 0
+        )
+        planned_run = _run_cli(
+            [
+                "--json",
+                "--no-input",
+                "agents",
+                "suggest",
+                "run",
+                "--goal",
+                "Improve onboarding",
+                "--future-intended-work",
+                "Interview five users",
+                "--future-intended-work",
+                "Prototype shorter setup",
+                "--count",
+                "1",
+            ]
+        )
+        try:
+            planned_document = json.loads(planned_run.stdout)
+            planned_data = planned_document.get("data", {})
+            manifest_kinds = [item.get("kind") for item in planned_data.get("context_manifest", [])]
+            planned_handoff = planned_data.get("ideas", [])[0].get("handoff", {})
+        except (IndexError, json.JSONDecodeError):
+            manifest_kinds, planned_handoff = [], {}
+        results.check(
+            "[Edge Case] CLI future intent reaches manifest and handoff",
+            planned_run.returncode == 0
+            and manifest_kinds == ["future-intended-work", "future-intended-work"]
+            and planned_handoff.get("future_intended_work")
+            == ["Interview five users", "Prototype shorter setup"],
+        )
+        stdin_planned = json.dumps(
+            {
+                "goal": "Stdin planned goal",
+                "context": {"future_intended_work": ["Review the draft"]},
+            }
+        )
+        planned_via_stdin = _run_cli(
+            ["--json", "--no-input", "agents", "suggest", "run", "--input", "-"],
+            stdin_text=stdin_planned,
+        )
+        try:
+            stdin_data = json.loads(planned_via_stdin.stdout).get("data", {})
+            stdin_handoff = stdin_data.get("ideas", [])[0].get("handoff", {})
+        except (IndexError, json.JSONDecodeError):
+            stdin_handoff = {}
+        results.check(
+            "[Edge Case] structured future intent reaches the handoff",
+            planned_via_stdin.returncode == 0
+            and stdin_handoff.get("future_intended_work") == ["Review the draft"],
+        )
+        malformed_planned = _run_cli(
+            ["--json", "--no-input", "agents", "suggest", "run", "--input", "-"],
+            stdin_text=json.dumps(
+                {"goal": "Bad planned input", "context": {"future_intended_work": "done"}}
+            ),
+        )
+        results.check(
+            "[Hidden Failure] malformed future intent fails before generation",
+            malformed_planned.returncode != 0 and malformed_planned.stdout.strip() == "",
+        )
+        legacy_context = _run_cli(
+            ["--json", "--no-input", "agents", "suggest", "run", "--input", "-"],
+            stdin_text=json.dumps({"goal": "Legacy context", "context": {"completed": [7]}}),
+        )
+        try:
+            legacy_data = json.loads(legacy_context.stdout).get("data", {})
+            legacy_handoff = legacy_data.get("ideas", [])[0].get("handoff", {})
+        except (IndexError, json.JSONDecodeError):
+            legacy_handoff = {}
+        results.check(
+            "[Hidden Assumption] legacy context coercion remains compatible",
+            legacy_context.returncode == 0 and legacy_handoff.get("completed_work") == ["7"],
         )
         dry = _run_cli(
             ["--json", "--no-input", "agents", "suggest", "run", "--goal", "Dry goal", "--dry-run"]

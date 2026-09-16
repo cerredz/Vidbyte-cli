@@ -138,6 +138,7 @@ class SuggestionHandoff(BaseModel):
     current_state: str = Field(min_length=1, max_length=4096)
     relevant_decisions: tuple[str, ...] = ()
     completed_work: tuple[str, ...] = ()
+    future_intended_work: tuple[str, ...] = ()
     in_progress_work: tuple[str, ...] = ()
     constraints: tuple[str, ...] = ()
     required_context: tuple[str, ...] = ()

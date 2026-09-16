@@ -27,6 +27,7 @@ from ...types.suggestions import (
     SuggestionSettings,
 )
 from .categories import SuggestionCategories
+from .context import FUTURE_INTENDED_WORK_KIND
 from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
 from .selection import SuggestionSelection
@@ -59,6 +60,8 @@ class SuggestionService:
         deduped = self._selection.deduplicate(eligible)
         rejected = self._rejected_terms(request)
         kept = self._selection.suppress_rejected(deduped, rejected)
+        planned = self._planned_terms(request)
+        kept = self._selection.suppress_exact_planned(kept, planned)
         trimmed = list(kept[: settings.requested_count])
         final = self._attach_handoffs(trimmed, request)
         ranked = self._selection.rank(tuple(final), settings.requested_count)
@@ -235,6 +238,12 @@ class SuggestionService:
         for item in request.context_items:
             grouped.setdefault(item.kind, []).append(item.content)
         return {key: tuple(values) for key, values in grouped.items()}
+
+    def _planned_terms(self, request: SuggestionRequest) -> tuple[str, ...]:
+        # Keeps future intent available for exact-echo filtering without hard suppression.
+        return tuple(
+            item.content for item in request.context_items if item.kind == FUTURE_INTENDED_WORK_KIND
+        )
 
     def _missing(self, request: SuggestionRequest) -> tuple[str, ...]:
         # Names high-value absent inputs instead of claiming completeness.
