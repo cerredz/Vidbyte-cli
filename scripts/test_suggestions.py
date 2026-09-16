@@ -28,13 +28,24 @@ from vidbyte_cli.services.suggestions.context import SuggestionContextBuilder  #
 from vidbyte_cli.services.suggestions.context_bridge import (  # noqa: E402
     SuggestionContextBridge,
 )
+from vidbyte_cli.services.suggestions.critique_agent import (  # noqa: E402
+    SuggestionCritiqueAgent,
+)
+from vidbyte_cli.services.suggestions.generator_agent import (  # noqa: E402
+    SuggestionGeneratorAgent,
+)
 from vidbyte_cli.services.suggestions.handoff import SuggestionHandoffBuilder  # noqa: E402
 from vidbyte_cli.services.suggestions.prompts.library import SuggestionPrompts  # noqa: E402
+from vidbyte_cli.services.suggestions.result import (  # noqa: E402
+    SuggestionResultBuilder,
+    SuggestionWorkflowOutcome,
+)
 from vidbyte_cli.services.suggestions.sdk import (  # noqa: E402
     SuggestionAgentSettingsInput,
     SuggestionSdk,
     SuggestionTextInput,
 )
+from vidbyte_cli.services.suggestions.selection import SuggestionSelection  # noqa: E402
 from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: E402
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     MAX_CONTEXT_CHARS,
@@ -44,6 +55,7 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     CritiqueConfidence,
     CritiqueEvidenceCheck,
     CritiqueVerdict,
+    StopReason,
     SuggestionCandidateBatch,
     SuggestionContextItem,
     SuggestionContextPrimitive,
@@ -338,6 +350,14 @@ class SuggestionSuite:
 
     def check_request_boundary(self) -> None:
         results = self.results
+        service = SuggestionService(sdk=FakeSdk())
+        results.check(
+            "service composes generator critic context and result stages",
+            isinstance(service._generator, SuggestionGeneratorAgent)
+            and isinstance(service._critic, SuggestionCritiqueAgent)
+            and isinstance(service._context_bridge, SuggestionContextBridge)
+            and isinstance(service._results, SuggestionResultBuilder),
+        )
         built = SuggestionRequestBuilder().build(
             {
                 "goal": "Build through the dedicated request collaborator",
@@ -475,6 +495,13 @@ class SuggestionSuite:
         results.check(
             "dry run never constructs an agent", dry.returned_count == 0 and not dry_fake.turns
         )
+        result_builder = SuggestionResultBuilder(
+            SuggestionCategories(), SuggestionSelection(), SuggestionHandoffBuilder()
+        )
+        empty = result_builder.build(
+            _request(), SuggestionWorkflowOutcome((), {}, StopReason.DRY_RUN)
+        )
+        results.check("result stage builds a stable dry-run envelope", empty.returned_count == 0)
 
     def check_extra_compute(self) -> None:
         results = self.results
