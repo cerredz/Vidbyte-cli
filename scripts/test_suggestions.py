@@ -36,6 +36,7 @@ from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: 
 from vidbyte_cli.services.suggestions.store import SuggestionStore  # noqa: E402
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     MAX_CONTEXT_CHARS,
+    MAX_SUGGESTIONS,
     SUGGESTIONS_HANDOFF_KIND,
     SUGGESTIONS_RESULT_KIND,
     ContextManifestEntry,
@@ -43,6 +44,7 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     CritiqueEvidenceCheck,
     CritiqueVerdict,
     SuggestionCandidateBatch,
+    SuggestionCategoryGroup,
     SuggestionCompletion,
     SuggestionContextItem,
     SuggestionContextPrimitive,
@@ -286,7 +288,7 @@ def _request(
         context=context,
         context_manifest=manifest,
         settings=SuggestionSettings(
-            requested_count=count,
+            suggestions_number=count,
             categories=categories,
             extra_compute=extra_compute,
             rounds=rounds,
@@ -385,6 +387,34 @@ class SuggestionSuite:
         results.check("run no longer accepts a JSON input file", rejected.returncode == 2)
         bad_count = _run_cli(["agents", "suggest", "run", "--goal", "x", "--count", "1"])
         results.check("count below 2 fails before model calls", bad_count.returncode == 2)
+        maximum = _run_cli(
+            [
+                "agents",
+                "suggest",
+                "run",
+                "--goal",
+                "x",
+                "--suggestions-number",
+                "50",
+                "--dry-run",
+            ]
+        )
+        results.check(
+            "suggestions number accepts the configured maximum",
+            maximum.returncode == 0,
+        )
+        too_many = _run_cli(
+            ["agents", "suggest", "run", "--goal", "x", "--suggestions-number", "51"]
+        )
+        results.check(
+            "suggestions number rejects values above the configured maximum",
+            too_many.returncode == 2,
+        )
+        results.check(
+            "suggestion settings expose the named number",
+            SuggestionSettings(suggestions_number=MAX_SUGGESTIONS).suggestions_number
+            == MAX_SUGGESTIONS,
+        )
         try:
             SuggestionRunInput(goal="x", count=1)
         except ValueError:
@@ -443,6 +473,24 @@ class SuggestionSuite:
             and all(idea.handoff.idea_id == idea.id for idea in result.ideas)
             and all(idea.evidence_refs == ("ctx-001",) for idea in result.ideas),
         )
+        results.check(
+            "final result exposes category groups without losing the flat view",
+            tuple(
+                sorted(
+                    (idea for group in result.suggestions for idea in group.suggestions),
+                    key=lambda idea: idea.rank,
+                )
+            )
+            == result.ideas
+            and tuple(group.category for group in result.suggestions)
+            == ("verification", "experiment"),
+        )
+        results.check(
+            "structured result has deterministic human rendering",
+            result.to_string().startswith("4/4 ideas for:")
+            and "[verification]" in result.to_string()
+            and "First action:" in result.to_string(),
+        )
         revised = next((idea for idea in result.ideas if idea.id == "idea-001"), None)
         results.check(
             "curation tool update preserves identity and increments revision",
@@ -460,12 +508,16 @@ class SuggestionSuite:
             ),
         )
         dry_request = _request().model_copy(
-            update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}
+            update={"settings": SuggestionSettings(suggestions_number=4, dry_run=True)}
         )
         dry_fake = FakeSdk()
         dry = SuggestionService(sdk=dry_fake).run(dry_request)
         results.check(
             "dry run never constructs an agent", dry.returned_count == 0 and not dry_fake.turns
+        )
+        results.check(
+            "empty results expose no phantom category groups",
+            not dry.suggestions and dry.to_string().startswith("No suggestions for:"),
         )
         failed = SuggestionService(sdk=FakeSdk(curation_failure=True)).run(
             _request(rounds=2, items=(_item(),))
@@ -583,6 +635,23 @@ class SuggestionSuite:
             SUGGESTIONS_HANDOFF_KIND == "suggestions.handoff"
             and SUGGESTIONS_RESULT_KIND == "suggestions.result",
         )
+        results.check(
+            "category group type validates category membership",
+            isinstance(result.suggestions[0], SuggestionCategoryGroup),
+        )
+        try:
+            SuggestionCategoryGroup(
+                category="experiment",
+                suggestions=(result.ideas[0],),
+            )
+        except ValueError:
+            mismatched_group_rejected = True
+        else:
+            mismatched_group_rejected = False
+        results.check(
+            "category group rejects an idea from another category",
+            mismatched_group_rejected,
+        )
 
     def check_cli_contracts(self) -> None:
         results = self.results
@@ -591,6 +660,7 @@ class SuggestionSuite:
             "expanded context and extra compute controls are visible",
             help_result.returncode == 0
             and "--extra-compute" in help_result.stdout
+            and "--suggestions-number" in help_result.stdout
             and "--trajectory" in help_result.stdout
             and "--files" in help_result.stdout
             and "--context-file" not in help_result.stdout

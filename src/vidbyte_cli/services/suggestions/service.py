@@ -16,6 +16,7 @@ from ...lib.errors.failures import (
     SuggestionSdkUnavailable,
 )
 from ...types.suggestions import (
+    MAX_SUGGESTION_POOL,
     RunStatus,
     StopReason,
     SuggestionCandidateBatch,
@@ -37,7 +38,7 @@ from .selection import SuggestionSelection
 from .store import SuggestionStore, ToolCallLimitReached
 
 _POOL_MULTIPLE = 2
-_POOL_CAP = 40
+_POOL_CAP = MAX_SUGGESTION_POOL
 
 
 class _WorkflowLimit(Exception):
@@ -94,7 +95,7 @@ class SuggestionService:
             "curation_calls": 0,
         }
         categories = request.settings.categories or self._categories.ids()
-        pool_size = min(request.settings.requested_count * _POOL_MULTIPLE, _POOL_CAP)
+        pool_size = min(request.settings.suggestions_number * _POOL_MULTIPLE, _POOL_CAP)
         warnings: list[str] = list(request.context_warnings)
         drafts: SuggestionCandidateBatch | tuple[SuggestionDraft, ...]
         store: SuggestionStore | None = None
@@ -143,7 +144,7 @@ class SuggestionService:
                     finalized = self._finalize(store.snapshot(), request)
                     reason = (
                         StopReason.COMPLETED
-                        if len(finalized) >= request.settings.requested_count
+                        if len(finalized) >= request.settings.suggestions_number
                         else StopReason.COUNT_SHORTFALL
                     )
                     return _WorkflowOutcome(finalized, usage, reason, tuple(warnings))
@@ -399,7 +400,7 @@ class SuggestionService:
                 idea for idea in selected if idea.horizon.value == request.settings.horizon.value
             )
         selected = tuple(self._handoff_refresh(idea, request) for idea in selected)
-        return self._selection.rank(selected, request.settings.requested_count)
+        return self._selection.rank(selected, request.settings.suggestions_number)
 
     def _handoff_refresh(self, idea: SuggestionIdea, request: SuggestionRequest) -> SuggestionIdea:
         return idea.model_copy(update={"handoff": self._handoffs.build(idea, request)})
@@ -493,7 +494,7 @@ class SuggestionService:
             run_id=f"sug-{uuid4().hex[:12]}",
             status=status,
             goal=request.goal,
-            requested_count=request.settings.requested_count,
+            requested_count=request.settings.suggestions_number,
             returned_count=len(ideas),
             settings=request.settings,
             context_manifest=request.context_manifest,
