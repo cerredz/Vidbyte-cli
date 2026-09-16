@@ -581,10 +581,10 @@ No backend, network, database, payment, or credential service is introduced.
 - Rollback is a normal revert in reverse order: output/gate, execution, then request plumbing.
   No persisted data or migration rollback is required.
 
-Implementation status: PR 1 is open as #57 (`feat/suggestion-agent-attachments-request`), PR 2 is
-open as #58 (`feat/suggestion-agent-attachments-execution`), and PR 3 is the current
-`feat/suggestion-agent-attachments-output` branch. The final verification script is registered in
-the canonical source gate; the shared resolver contract remains covered by the existing
+Implementation status: PR 1 is open as #57 (`feat/suggestion-agent-attachments-request`), PR 2
+was merged as #58 (`feat/suggestion-agent-attachments-execution`), and PR 3 is open as draft #62
+(`feat/suggestion-agent-attachments-output`). The final verification script is registered in the
+canonical source gate; the shared resolver contract remains covered by the existing
 `test-agent-attachments.py` gate.
 
 ---
