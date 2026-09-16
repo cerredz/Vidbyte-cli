@@ -27,7 +27,7 @@ whose mechanism, evidence, action, and completion signal stay inside that lens.
 - Turn the supplied descriptions and questions into the repository's full category prompt shape.
 - State boundaries against `business_growth`, `product_experience`, and the new sibling categories.
 - Keep category listing, selection, validation, packaging, and agent rendering data-driven.
-- Give all six business prompt assets touched by PR #59 the same generation contract:
+- Give all 36 category prompt assets in the live PR #59 tree the same generation contract:
   `Generation requirements`, `Candidate shape`, `Valid suggestion directions`, and
   `Alignment check`.
 - Make each of those sections materially deep enough to guide generation rather than merely label
@@ -41,8 +41,8 @@ whose mechanism, evidence, action, and completion signal stay inside that lens.
 - No changes to generation, critique, context, result, or service orchestration.
 - No removal or renaming of existing category IDs.
 - No market research or factual claims beyond the category guidance itself.
-- No requirement that the older 31 non-business category assets adopt this expanded business
-  structure in this PR; that would be a separate prompt-taxonomy migration.
+- No changes to category identifiers, registry ordering, loader behavior, or generated result
+  schemas while expanding the prompt assets.
 
 ---
 
@@ -61,12 +61,12 @@ lens applies, but the generator prompt only receives those explanations alongsid
 contract. That leaves a model free to produce a superficially related idea, such as a slogan under
 brand positioning or a new channel under customer and market.
 
-The requested follow-up therefore adds four long, category-specific sections to each of the five
-new assets and to the `business_growth` umbrella asset touched by this PR. The repeated headings
-make the assets easy to inspect, while the tailored prose makes the sections semantically distinct.
-The larger sections increase prompt context when several categories are selected, so the design
-keeps each section bounded, removes unnecessary repetition from use cases, and verifies the source
-assets directly rather than changing runtime orchestration.
+The requested follow-up therefore adds four long, category-specific sections to every one of the 36
+category assets in the live PR tree. The repeated headings make the assets easy to inspect, while
+the tailored prose makes the sections semantically distinct. The larger sections increase prompt
+context when several categories are selected, so the design keeps each section bounded, removes
+unnecessary repetition from use cases, and verifies the source assets directly rather than changing
+runtime orchestration.
 
 ---
 
@@ -77,10 +77,10 @@ assets directly rather than changing runtime orchestration.
 1. Register exactly five new IDs: `customer_market`, `business_model_monetization`,
    `brand_positioning`, `distribution_sales`, and `customer_relationship_service`.
 2. Map each ID to a same-named packaged Markdown file.
-3. Each business prompt asset has one `Description` of six-to-eight sentences, category-specific
-   `Why use / use cases`, `Generation requirements`, `Candidate shape`, `Valid suggestion
-   directions`, `Things to consider` with eight-to-ten bullets, `Alignment check`, and `When not to
-   use` guidance.
+3. Each of the 36 category prompt assets has one `Description` of six-to-eight sentences,
+   category-specific `Why use / use cases`, `Generation requirements`, `Candidate shape`, `Valid
+   suggestion directions`, `Things to consider` with eight-to-ten bullets, `Alignment check`, and
+   `When not to use` guidance.
 4. Each of the four new generation sections is approximately twice the earlier guidance target:
    `Generation requirements` is about 200-340 words, `Candidate shape` about 240-400 words,
    `Valid suggestion directions` about 160-320 words, and `Alignment check` about 200-340 words.
@@ -96,8 +96,8 @@ assets directly rather than changing runtime orchestration.
 7. The prompts include the caller-supplied considerations, distinguish adjacent categories, and
    instruct the model to label missing evidence instead of inventing it.
 8. Category listing and `--category` validation expose the five entries without an SDK/provider.
-9. The wheel verification lists all five new files explicitly, and the offline suggestion suite
-   verifies the required structure in all six PR-touched business prompt assets.
+9. The wheel verification lists all 36 category files explicitly, and the offline suggestion suite
+   verifies the required structure in every category prompt asset.
 
 ### Non-Functional Requirements
 
@@ -109,7 +109,7 @@ assets directly rather than changing runtime orchestration.
 
 ## 5. High-Level Design
 
-Add five `CategoryDefinition` records to the registry and maintain six prompt assets under the
+Add five `CategoryDefinition` records to the registry and maintain all 36 prompt assets under the
 existing category directory. The category command, request builder, and service already consume the
 registry, so no new dispatch path is needed. Update the offline suite and wheel check to prove that
 registry, source assets, installed assets, and CLI listing agree. The prompt assets remain the only
@@ -156,8 +156,7 @@ CategoryDefinition("customer_market", "Customer and Market", summary, "customer_
 
 ### 6.2 Prompt Assets
 
-**File(s):** the five new category files listed in Section 9 and the modified
-`business_growth.md`
+**File(s):** `src/vidbyte_cli/services/suggestions/prompts/categories/*.md` (36 assets)
 **Type:** New and modified
 
 #### What it does
@@ -183,7 +182,7 @@ shapes, valid idea mechanisms, considerations, alignment tests, and exclusion bo
 
 The optional `Evidence and assumptions` and `Weak suggestion patterns` sections are included where
 they clarify a distinct failure mode. They may be omitted only when the required sections already
-cover the same behavior without repetition.
+cover the same behavior without repetition. The four required sections are present in all 36 files.
 
 #### Logic / Algorithm
 
@@ -230,8 +229,8 @@ cover the same behavior without repetition.
 #### What it does
 
 Checks that the five entries are visible, selectable, structurally valid, and included in the wheel,
-and that all six business prompt assets touched by this PR contain the expanded structure with
-category-specific minimum word bands.
+and that all 36 category prompt assets contain the expanded structure with category-specific minimum
+word bands.
 
 #### Logic / Algorithm
 
@@ -240,9 +239,8 @@ category-specific minimum word bands.
 3. Add one selected-category and one CLI listing assertion for the new values.
 4. Add the five paths to `_WHEEL_RUNTIME_PROMPTS`.
 5. Document the 36-lens vocabulary in README where the count is described.
-6. Add a structure table for the six PR-touched business prompt assets, requiring the four new
-   headings and their word bands, plus the existing title, description, considerations, and
-   exclusion sections.
+6. Add a structure table for all 36 category prompt assets, requiring the four new headings and
+   their word bands, plus the existing title, description, considerations, and exclusion sections.
 7. Assert that selected prompt text contains category-specific anchor terms and does not collapse
    into one shared section body.
 
@@ -279,7 +277,7 @@ category-list result grows from 31 to 36 entries.
 | CREATE | `src/vidbyte_cli/services/suggestions/prompts/categories/brand_positioning.md` | Brand and positioning prompt. |
 | CREATE | `src/vidbyte_cli/services/suggestions/prompts/categories/distribution_sales.md` | Distribution and sales prompt. |
 | CREATE | `src/vidbyte_cli/services/suggestions/prompts/categories/customer_relationship_service.md` | Customer relationship and service prompt. |
-| MODIFY | `src/vidbyte_cli/services/suggestions/prompts/categories/business_growth.md` | Apply the same generation contract to the commercial umbrella prompt. |
+| MODIFY | `src/vidbyte_cli/services/suggestions/prompts/categories/*.md` | Apply the expanded generation contract to every one of the 36 category assets. |
 | MODIFY | `src/vidbyte_cli/services/suggestions/categories.py` | Register five categories. |
 | MODIFY | `scripts/test_suggestions.py` | Verify 36 categories and new selections. |
 | MODIFY | `scripts/run_ci.py` | Verify new assets in the wheel. |
@@ -298,22 +296,22 @@ category-list result grows from 31 to 36 entries.
 - [Edge Case] All-category rendering preserves registry order.
 - [Hidden Failure] C004 catches a missing description or too few considerations in a new asset.
 - [Silent Failure] Human/JSON category listing includes all five new entries.
-- [Edge Case] Each of the six PR-touched business assets has all required headings and stays
+- [Edge Case] Each of the 36 category assets has all required headings and stays
   inside the declared word band for each expanded section.
 - [Hidden Failure] A prompt with headings but an empty or generic section body fails the focused
   anchor-term and distinctness checks.
 - [Silent Failure] A category's `Candidate shape` names the fields the generator actually returns
   and does not silently omit evidence, assumptions, or completion guidance.
 - [Hidden Assumption] Missing context is handled as a labeled assumption or discovery action in
-  every business category rather than being converted into a factual claim.
+  every category rather than being converted into a factual claim.
 
 ### Integration Tests
 
 - Run `scripts/test_suggestions.py` with the fake SDK.
 - Run `python lint/run.py --rule C004` and the full `python scripts/run_ci.py` gate.
 - Inspect the built wheel for all five new Markdown paths.
-- Run the focused prompt-contract checks against source files and against the installed wheel copy,
-  confirming that section names, minimum word bands, and category anchors survive packaging.
+- Run the focused prompt-contract checks against all source files and against the installed wheel
+  copy, confirming that section names, minimum word bands, and category anchors survive packaging.
 
 ### Manual / QA Test Cases
 
@@ -353,9 +351,9 @@ No new dependency or external service.
   for cross-cutting plans.
 - [ ] Should category prompts be authored on the prompt-depth branch first? Recommendation: yes if
   that branch lands before this one; otherwise port only its structure, not unrelated edits.
-- [ ] Should the four-section contract later become mandatory for all 36 categories? This PR keeps
-  the migration limited to the six business assets touched by PR #59 so the context-size increase
-  can be reviewed before broad adoption.
+- [ ] Should the four-section contract later become mandatory for non-category prompt assets as
+  well? This PR limits the migration to the 36 category assets because those are the reusable
+  taxonomy contracts supplied to the suggestion generator.
 
 ---
 
