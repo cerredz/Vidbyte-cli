@@ -10,6 +10,7 @@ Never publishes, never needs credentials, never calls a live Vidbyte endpoint.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -34,6 +35,23 @@ _WHEEL_RUNTIME_PROMPTS = (
     "vidbyte_cli/services/persistence/prompts/persistence_system.md",
     "vidbyte_cli/services/persistence/prompts/persistence_turn.md",
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
+)
+
+_WHEEL_SUGGESTION_CATEGORY_PROMPTS = (
+    "continuation",
+    "prerequisite",
+    "completion",
+    "bottleneck",
+    "experiment",
+    "investigation",
+    "alternative",
+    "simplification",
+    "leverage",
+    "strategy",
+    "long_term_suggestions",
+    "adjacent_opportunity",
+    "preparation",
+    "coordination",
 )
 
 
@@ -116,7 +134,11 @@ class CiRunner:
             sys.stderr.write(f"Expected one wheel, found {len(wheels)}.\n")
             return 1
         with zipfile.ZipFile(wheels[0]) as archive:
-            for prompt in _WHEEL_RUNTIME_PROMPTS:
+            prompts = _WHEEL_RUNTIME_PROMPTS + tuple(
+                f"vidbyte_cli/services/suggestions/prompts/categories/{name}.md"
+                for name in _WHEEL_SUGGESTION_CATEGORY_PROMPTS
+            )
+            for prompt in prompts:
                 if prompt not in archive.namelist() or not archive.read(prompt):
                     sys.stderr.write(f"The wheel is missing the runtime prompt {prompt}.\n")
                     return 1
@@ -140,6 +162,26 @@ class CiRunner:
         for label, arguments in gates:
             if status := self._run(label, arguments, cwd=workspace):
                 return status
+        category_listing = subprocess.run(
+            (str(console), "--format", "json", "agents", "suggest", "categories"),
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if category_listing.returncode:
+            sys.stderr.write(category_listing.stderr)
+            return category_listing.returncode
+        try:
+            document = json.loads(category_listing.stdout)
+            listed_ids = [item["id"] for item in document["data"]["categories"]]
+        except (KeyError, TypeError, json.JSONDecodeError):
+            sys.stderr.write("Installed category listing was not valid JSON.\n")
+            return 1
+        if listed_ids != list(_WHEEL_SUGGESTION_CATEGORY_PROMPTS):
+            sys.stderr.write("Installed category listing does not match the registry.\n")
+            return 1
+        sys.stdout.write("==> installed category listing\n")
         return 0
 
     def _environment_executables(self, environment: Path) -> tuple[Path, Path]:

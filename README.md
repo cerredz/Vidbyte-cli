@@ -64,8 +64,10 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
 | `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate ranked next-action ideas with handoffs locally (free, no admission) |
-| `vidbyte-cli agents suggest categories` | List the 17 suggestion categories (no model, no credentials) |
+| `vidbyte-cli agents suggest categories` | List the 14 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
+
+Use `--category long_term_suggestions` for directions that connect a 3-6 month capability path to a 2 year+ strategic horizon. The `categories` command is the authoritative list of accepted category IDs.
 
 ### Research threads
 

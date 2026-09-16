@@ -16,6 +16,24 @@ from pathlib import Path
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPOSITORY_ROOT / "src"))
 
+_CATEGORY_IDS = (
+    "continuation",
+    "prerequisite",
+    "completion",
+    "bottleneck",
+    "experiment",
+    "investigation",
+    "alternative",
+    "simplification",
+    "leverage",
+    "strategy",
+    "long_term_suggestions",
+    "adjacent_opportunity",
+    "preparation",
+    "coordination",
+)
+_REMOVED_CATEGORY_IDS = ("stop_or_defer", "risk_prevention", "verification", "cross_domain")
+
 from vidbyte_cli.services.suggestions.categories import SuggestionCategories  # noqa: E402
 from vidbyte_cli.services.suggestions.context import SuggestionContextBuilder  # noqa: E402
 from vidbyte_cli.services.suggestions.handoff import SuggestionHandoffBuilder  # noqa: E402
@@ -137,6 +155,12 @@ class SuggestionSuite:
             "[Hidden Failure] unknown category fails before model calls",
             bad_category.returncode != 0,
         )
+        for category in _REMOVED_CATEGORY_IDS:
+            removed = _run_cli(["agents", "suggest", "run", "--goal", "x", "--category", category])
+            results.check(
+                f"[Hidden Failure] removed category {category} fails before model calls",
+                removed.returncode != 0,
+            )
         empty_goal = _run_cli(["agents", "suggest", "run", "--goal", ""])
         results.check("[Edge Case] empty goal fails before model calls", empty_goal.returncode != 0)
         both = _run_cli(["agents", "suggest", "run", "--goal", "x", "--input", "whatever.json"])
@@ -243,11 +267,38 @@ class SuggestionSuite:
         )
         registry = SuggestionCategories()
         results.check(
-            "[Edge Case] registry holds 17 versioned categories", len(registry.ids()) == 17
+            "[Edge Case] registry holds the revised 14-category vocabulary",
+            registry.ids() == _CATEGORY_IDS,
         )
         results.check(
-            "[Hidden Failure] categories drive validation",
-            registry.is_known("verification") and not registry.is_known("nope"),
+            "[Hidden Failure] removed categories are no longer known",
+            all(not registry.is_known(category) for category in _REMOVED_CATEGORY_IDS)
+            and not registry.is_known("nope"),
+        )
+        long_term = registry.describe("long_term_suggestions")
+        results.check(
+            "[Silent Failure] long-term category names both planning horizons",
+            "3-6 month" in long_term.description and "2 year+" in long_term.description,
+        )
+        try:
+            assets = {
+                item.category_id: prompts.category_prompt(item.prompt_name)
+                for item in registry.definitions()
+            }
+            assets_ok = len(assets) == len(_CATEGORY_IDS) and all(assets.values())
+        except (FileNotFoundError, OSError):
+            assets = {}
+            assets_ok = False
+        results.check(
+            "[Hidden Assumption] every retained category has a packaged prompt asset",
+            assets_ok,
+        )
+        selected = registry.prompt_section(("long_term_suggestions", "strategy"))
+        results.check(
+            "[Silent Failure] selected category assets preserve order and scope",
+            selected.startswith("# Long-Term Suggestions")
+            and selected.index("# Strategy") > selected.index("# Long-Term Suggestions")
+            and "# Continuation" not in selected,
         )
 
     def check_cli_contracts(self) -> None:
@@ -257,11 +308,39 @@ class SuggestionSuite:
         try:
             document = json.loads(categories.stdout)
             kind_ok = document.get("kind") == "suggestions.categories"
+            listed_ids = [item.get("id") for item in document.get("data", {}).get("categories", [])]
         except json.JSONDecodeError:
-            kind_ok = False
+            kind_ok, listed_ids = False, []
         results.check(
             "[Hidden Assumption] categories works without credentials",
-            categories.returncode == 0 and kind_ok,
+            categories.returncode == 0 and kind_ok and listed_ids == list(_CATEGORY_IDS),
+        )
+        long_term_run = _run_cli(
+            [
+                "--json",
+                "--no-input",
+                "agents",
+                "suggest",
+                "run",
+                "--goal",
+                "Long-term goal",
+                "--category",
+                "long_term_suggestions",
+                "--count",
+                "1",
+            ]
+        )
+        try:
+            long_term_document = json.loads(long_term_run.stdout)
+            long_term_ideas = long_term_document.get("data", {}).get("ideas", [])
+            new_category_ok = all(
+                idea.get("primary_category") == "long_term_suggestions" for idea in long_term_ideas
+            )
+        except json.JSONDecodeError:
+            long_term_ideas, new_category_ok = [], False
+        results.check(
+            "[Edge Case] new category is accepted by the service and CLI",
+            long_term_run.returncode == 0 and new_category_ok and len(long_term_ideas) <= 1,
         )
         run = _run_cli(
             [

@@ -8,7 +8,7 @@ _ANCHOR = "vidbyte_cli.services.suggestions.prompts"
 
 
 class SuggestionPrompts:
-    """Reads generator and critic Markdown once per run from the wheel."""
+    """Reads generator, critic, and category Markdown once per run from the wheel."""
 
     def __init__(self) -> None:
         # Immutable package data, so one per-run cache is sufficient.
@@ -32,6 +32,10 @@ class SuggestionPrompts:
         # Builds one critique turn over the candidate artifact only.
         return self._render("critic", goal=goal, candidates=candidates)
 
+    def category_prompt(self, name: str) -> str:
+        # Loads one category definition from the packaged prompt asset directory.
+        return self._read(name, category=True)
+
     def _render(self, name: str, **values: str) -> str:
         # Literal replacement because prompts contain JSON braces.
         rendered = self._read(name)
@@ -39,9 +43,12 @@ class SuggestionPrompts:
             rendered = rendered.replace("{{" + key + "}}", value)
         return rendered
 
-    def _read(self, name: str) -> str:
+    def _read(self, name: str, *, category: bool = False) -> str:
         # Resolves from the installed wheel so cwd never matters.
         if name not in self._cache:
-            source = resources.files(_ANCHOR).joinpath(f"{name}.md")
+            source = resources.files(_ANCHOR)
+            if category:
+                source = source.joinpath("categories")
+            source = source.joinpath(f"{name}.md")
             self._cache[name] = source.read_text(encoding="utf-8").strip()
         return self._cache[name]
