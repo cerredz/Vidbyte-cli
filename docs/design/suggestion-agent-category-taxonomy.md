@@ -1,6 +1,6 @@
 # Design Doc: Suggestion Agent Category Taxonomy
 
-**Status:** Draft
+**Status:** Implemented; full local gate passed
 **Author:** Codex
 **Created:** 2026-09-15
 **Last Updated:** 2026-09-15
@@ -110,6 +110,7 @@ class CategoryDefinition:
     title: str
     summary: str
     prompt_name: str
+
 
 class SuggestionCategories:
     def ids(self) -> tuple[str, ...]: ...
@@ -306,6 +307,7 @@ Complete list of every file that will be created, modified, or deleted:
 | MODIFY | `src/vidbyte_cli/services/suggestions/README.md` | Document the revised category registry and prompt asset boundary. |
 | MODIFY | `pyproject.toml` | Package category Markdown files in built distributions. |
 | MODIFY | `README.md` | Update the public category count and new category usage. |
+| MODIFY | `docs/design/suggestion-agent.md` | Cross-reference this taxonomy as the superseding category vocabulary. |
 | MODIFY | `scripts/test_suggestions.py` | Add exact taxonomy, rejection, acceptance, prompt, and list-output checks. |
 | MODIFY | `scripts/run_ci.py` | Verify every category asset is present in the built wheel. |
 | DELETE | N/A | No existing files are deleted; the removed categories are registry entries, not files. |

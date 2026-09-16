@@ -5,6 +5,8 @@
 **Created:** 2026-09-10
 **Source of truth:** Codex rollout `2026-09-09T22-34-29` ordinals 131/132 (CLI-first suggestion agent with generator+critic, optional context flags, 17-category registry, structured handoff). If a change is not described here, do not implement it.
 
+**Taxonomy update:** The original 17-category plan is superseded by [Suggestion Agent Category Taxonomy](suggestion-agent-category-taxonomy.md) for the category vocabulary and its model-facing prompt assets. The rest of this document remains the implementation contract for the agent workflow.
+
 ---
 
 ## 1. Overview
@@ -18,7 +20,7 @@ Add `vidbyte-cli agents suggest`, the first specialized (next-action) agent: a l
 - Ship `agents suggest run|/categories|handoff` locally in `vidbyte-cli`, agreeing with the Codex thread's CLI-first decision (caller is usually another agent with a task snapshot).
 - Accept a nonempty goal via `--goal` or structured `--input` JSON (plus `--input -` for stdin), with generation controls (`--count`, `--category`, `--all-categories`, `--horizon`, `--rounds`, provider/model/token/timeout, `--dry-run`).
 - Accept all 13 optional context flags from the thread (`--context`, `--context-file`, `--handoff-file`, `--completed`, `--in-progress`, `--decision`, `--constraint`, `--avoid`, `--question`, `--capability`, `--success`, `--artifact`, `--previous-suggestions`), all optional and repeatable (except single-path inputs where noted).
-- Own a versioned 17-category registry driving CLI validation, prompt instructions, and schema validation without drift.
+- Own a versioned category registry driving CLI validation, prompt instructions, and schema validation without drift.
 - Run generator + independent critic with explicit revise loop in `service.py` using ordinary linear SDK agents, separate histories, bounded candidate pool (2x count, cap 40), selection up to count, deterministic handoff assembly (no `HandoffAgent` formatting call).
 - Emit existing envelope (`schema_version`, `kind`, `data`) with `kinds` `suggestions.result` and `suggestions.handoff`; stdout carries results only.
 - Make `--help` and `categories` work without credentials; package prompts in the wheel; keep `scripts/run_ci.py` green.
@@ -67,7 +69,7 @@ New `agents` command family (distinct from `runtime` primitives) → `services/s
 - `service.py`: `SuggestionService.run(SuggestionRequest) -> SuggestionResult`; orchestrates context → generation → critique rounds → selection → handoff; enforces pool cap (2x count, max 40), round/token/deadline stops, partial-result fallback, usage aggregation, prompt_version stamping; never imports Click.
 - `sdk.py`: only module importing `vidbyte-sdk`, lazily inside methods; resolves provider config via existing credential infrastructure; maps CLI provider names to SDK identifiers explicitly; constructs generator/critic with no execution tools; normalizes replies via `AgentMessage.structured`; exposes `is_provider_error`/`is_schema_error` classification following `ensemble/sdk.py`.
 - `context.py`: reads explicit files only (context-file/artifact/handoff-file/previous-suggestions/input), enforces UTF-8/Markdown/JSON schemas, size caps, hashing, stable `ctx-N` refs, contradiction surfacing, omission reporting.
-- `categories.py`: `SuggestionCategory` StrEnum (17 IDs) + descriptions + generation guidance; single owner for CLI `Choice`, prompt text, and schema validation.
+- `categories.py`: versioned category registry + descriptions + generation guidance; single owner for CLI `Choice`, prompt text, and schema validation.
 - `selection.py`: eligibility (evidence IDs ⊆ manifest, category validity), ranking, exact-dedup in code, shortfall explanation, `category_coverage` computation.
 - `handoff.py`: deterministic assembly + `execution_prompt` rendering from structured fields; `authority` default constant.
 - `prompts/library.py` + `prompts/generator.md` + `prompts/critic.md`: literal `{{token}}` replacement, `importlib.resources` loading, no model sentences in `.py`.
