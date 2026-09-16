@@ -153,10 +153,10 @@ class SuggestionRunInput:
             raise ValueError("max_total_tokens cannot exceed 20000000")
         if self.timeout_seconds is not None and self.timeout_seconds > 86_400:
             raise ValueError("timeout_seconds cannot exceed 86400")
-        if type(self.max_agent_calls) is not int or not 1 <= self.max_agent_calls <= 128:
-            raise ValueError("max_agent_calls must be between 1 and 128")
-        if type(self.max_tool_calls) is not int or not 1 <= self.max_tool_calls <= 256:
-            raise ValueError("max_tool_calls must be between 1 and 256")
+        if type(self.max_agent_calls) is not int or not 1 <= self.max_agent_calls <= 2048:
+            raise ValueError("max_agent_calls must be between 1 and 2048")
+        if type(self.max_tool_calls) is not int or not 1 <= self.max_tool_calls <= 4096:
+            raise ValueError("max_tool_calls must be between 1 and 4096")
         if type(self.dry_run) is not bool:
             raise TypeError("dry_run must be a boolean")
 

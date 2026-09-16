@@ -131,14 +131,14 @@ class SuggestRunCommand:
         )
         @click.option(
             "--max-agent-calls",
-            type=click.IntRange(1, 128),
+            type=click.IntRange(1, 2048),
             default=64,
             show_default=True,
             help=_MAX_AGENT_CALLS_HELP,
         )
         @click.option(
             "--max-tool-calls",
-            type=click.IntRange(1, 256),
+            type=click.IntRange(1, 4096),
             default=64,
             show_default=True,
             help=_MAX_TOOL_CALLS_HELP,

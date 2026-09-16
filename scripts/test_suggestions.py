@@ -11,6 +11,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,8 +33,27 @@ from vidbyte_cli.services.suggestions.sdk import (  # noqa: E402
     SuggestionSdk,
     SuggestionTextInput,
 )
-from vidbyte_cli.services.suggestions.service import SuggestionService  # noqa: E402
+from vidbyte_cli.services.suggestions.service import (  # noqa: E402
+    CurationPassInput,
+    SuggestionService,
+)
 from vidbyte_cli.services.suggestions.store import SuggestionStore  # noqa: E402
+from vidbyte_cli.services.suggestions.warnings import (  # noqa: E402
+    SHORT_AGENT_CALL_LIMIT,
+    SHORT_CURATION_FAILED,
+    SHORT_CURATION_INCOMPLETE,
+    SHORT_TIME_LIMIT,
+    SHORT_TOKEN_LIMIT,
+    SHORT_TOOL_CALL_LIMIT,
+    guidance_agent_call_limit,
+    guidance_curation_failed,
+    guidance_curation_incomplete,
+    guidance_time_limit,
+    guidance_token_limit,
+    guidance_tool_call_limit,
+    prompt_with_guidance,
+    short_count_shortfall,
+)
 from vidbyte_cli.types.suggestions import (  # noqa: E402
     MAX_CONTEXT_CHARS,
     SUGGESTIONS_HANDOFF_KIND,
@@ -50,6 +70,7 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     SuggestionCritiqueArtifact,
     SuggestionDraft,
     SuggestionRequest,
+    SuggestionRunAccounting,
     SuggestionSettings,
 )
 
@@ -106,11 +127,13 @@ class FakeSdk:
         extra_compute: bool = False,
         curation_failure: bool = False,
         incomplete_curation: bool = False,
+        flaky_curation: bool = False,
     ) -> None:
         self.revision = revision
         self.extra_compute = extra_compute
         self.curation_failure = curation_failure
         self.incomplete_curation = incomplete_curation
+        self.flaky_curation = flaky_curation
         self.settings: list[SuggestionAgentSettingsInput] = []
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
@@ -153,6 +176,8 @@ class FakeSdk:
             self.curation_calls += 1
             if self.curation_failure:
                 raise RuntimeError("simulated curation provider failure")
+            if self.flaky_curation and self.curation_calls == 1:
+                raise RuntimeError("simulated transient curation failure")
             if self.incomplete_curation:
                 return SuggestionCompletion(completed=False, summary="Could not finish.")
             if self.curation_calls > 1:
@@ -321,6 +346,11 @@ class SuggestionSuite:
     def run(self) -> None:
         self.check_categories_and_prompts()
         self.check_request_boundary()
+        self.check_guardrail_bounds()
+        self.check_run_accounting()
+        self.check_curation_pass_input()
+        self.check_warning_guidance()
+        self.check_curation_retry()
         self.check_sdk_context_boundary()
         self.check_generation_and_revision()
         self.check_extra_compute()
@@ -392,6 +422,215 @@ class SuggestionSuite:
         else:
             strict_rejection = False
         results.check("request dataclass rejects invalid values at construction", strict_rejection)
+
+    def check_guardrail_bounds(self) -> None:
+        results = self.results
+        accepted = SuggestionRunInput(goal="x", max_agent_calls=2048, max_tool_calls=4096)
+        results.check(
+            "request dataclass accepts the 2048 and 4096 upper bounds",
+            accepted.max_agent_calls == 2048 and accepted.max_tool_calls == 4096,
+        )
+        settings = SuggestionSettings(max_agent_calls=2048, max_tool_calls=4096)
+        results.check(
+            "settings accept the 2048 and 4096 upper bounds",
+            settings.max_agent_calls == 2048 and settings.max_tool_calls == 4096,
+        )
+        rejected = 0
+        for override in (
+            {"max_agent_calls": 0},
+            {"max_agent_calls": 2049},
+            {"max_tool_calls": 0},
+            {"max_tool_calls": 4097},
+        ):
+            try:
+                SuggestionRunInput(goal="x", **override)
+            except (TypeError, ValueError):
+                rejected += 1
+        results.check("request dataclass rejects zero and over-limit budgets", rejected == 4)
+        try:
+            SuggestionSettings(max_agent_calls=2049)
+            settings_rejection = False
+        except ValueError:
+            settings_rejection = True
+        results.check("settings reject an agent-call cap above 2048", settings_rejection)
+        capped = _run_cli(
+            [
+                "--json",
+                "agents",
+                "suggest",
+                "run",
+                "--goal",
+                "Bounded goal",
+                "--max-agent-calls",
+                "2048",
+                "--max-tool-calls",
+                "4096",
+                "--dry-run",
+            ]
+        )
+        results.check("CLI accepts the 2048 and 4096 upper bounds", capped.returncode == 0)
+        too_many_agents = _run_cli(
+            ["agents", "suggest", "run", "--goal", "x", "--max-agent-calls", "2049"]
+        )
+        results.check("CLI rejects an agent-call cap above 2048", too_many_agents.returncode == 2)
+        too_many_tools = _run_cli(
+            ["agents", "suggest", "run", "--goal", "x", "--max-tool-calls", "4097"]
+        )
+        results.check("CLI rejects a tool-call cap above 4096", too_many_tools.returncode == 2)
+
+    def check_run_accounting(self) -> None:
+        results = self.results
+        accounting = SuggestionRunAccounting()
+        accounting.note_attempt()
+        accounting.note_completion("generation", 10)
+        accounting.note_completion("critique", 0)
+        results.check(
+            "accounting separates attempted turns from completed phase turns",
+            accounting.to_dict()
+            == {
+                "tokens": 10,
+                "agent_calls": 1,
+                "generation_calls": 1,
+                "critique_calls": 1,
+                "curation_calls": 0,
+            },
+        )
+        rejected = 0
+        for override in ({"tokens": -1}, {"agent_calls": True}, {"generation_calls": "3"}):
+            try:
+                SuggestionRunAccounting(**override)
+            except (TypeError, ValueError):
+                rejected += 1
+        results.check("accounting rejects negative, boolean, and mistyped counters", rejected == 3)
+        try:
+            SuggestionRunAccounting().note_completion("editing", 5)
+            phase_rejection = False
+        except (TypeError, ValueError):
+            phase_rejection = True
+        results.check("accounting rejects unknown phases", phase_rejection)
+        try:
+            SuggestionRunAccounting().note_completion("generation", -5)
+            token_rejection = False
+        except (TypeError, ValueError):
+            token_rejection = True
+        results.check("accounting rejects negative token observations", token_rejection)
+
+    def check_curation_pass_input(self) -> None:
+        results = self.results
+        request = _request(items=(_item(),))
+        store = SuggestionStore(request, ("verification", "experiment"))
+        idea = SuggestionService(sdk=FakeSdk())._ideas_from_drafts(
+            SuggestionCandidateBatch(ideas=(_draft("verification", evidence_refs=("ctx-001",)),)),
+            request,
+        )[0]
+        artifact = SuggestionCritiqueArtifact(critiques=(_critique("idea-001"),))
+        base: dict[str, object] = {
+            "request": request,
+            "sdk": FakeSdk(),
+            "categories": ("verification",),
+            "current": (idea,),
+            "artifact": artifact,
+            "store": store,
+            "started": time.monotonic(),
+            "accounting": SuggestionRunAccounting(),
+            "warnings": [],
+        }
+        passed = CurationPassInput(**base)  # type: ignore[arg-type]
+        results.check(
+            "curation pass accepts one validated dataclass",
+            isinstance(passed, CurationPassInput)
+            and passed.remaining_rounds == 0
+            and passed.guidance == "",
+        )
+        rejected = 0
+        for override in (
+            {"categories": ["verification"]},
+            {"sdk": None},
+            {"started": "now"},
+            {"warnings": ()},
+            {"remaining_rounds": -1},
+            {"guidance": None},
+            {"accounting": {}},
+        ):
+            try:
+                CurationPassInput(**{**base, **override})  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                rejected += 1
+        results.check("curation pass dataclass rejects mistyped inputs", rejected == 7)
+
+    def check_warning_guidance(self) -> None:
+        results = self.results
+        guides = (
+            guidance_agent_call_limit(64, 64),
+            guidance_tool_call_limit(64),
+            guidance_curation_failed(1),
+            guidance_curation_incomplete(1),
+            guidance_token_limit(1000, 1000),
+            guidance_time_limit(600),
+        )
+        results.check(
+            "every guardrail guidance clears 300 tokens",
+            all(len(text.split()) >= 260 and len(text) >= 1200 for text in guides),
+        )
+        shorts = (
+            SHORT_TOOL_CALL_LIMIT,
+            SHORT_CURATION_FAILED,
+            SHORT_CURATION_INCOMPLETE,
+            SHORT_AGENT_CALL_LIMIT,
+            SHORT_TOKEN_LIMIT,
+            SHORT_TIME_LIMIT,
+        )
+        results.check(
+            "short warnings stay stable single-line strings",
+            all("\n" not in text and text for text in shorts)
+            and all("committed" in text for text in shorts),
+        )
+        results.check(
+            "shortfall warning names the surviving count",
+            "3 worthwhile" in short_count_shortfall(3),
+        )
+        results.check(
+            "guidance attaches to the next prompt without touching empty prompts",
+            prompt_with_guidance("Do the work.", "") == "Do the work."
+            and "<Run Guidance>" in prompt_with_guidance("Do the work.", "Keep going."),
+        )
+        terminal = SuggestionService(sdk=FakeSdk()).run(
+            _request(max_agent_calls=1, items=(_item(),))
+        )
+        results.check(
+            "terminal agent stops carry model-facing recovery guidance",
+            terminal.stop_reason.value == "agent_call_limit"
+            and SHORT_AGENT_CALL_LIMIT in terminal.warnings
+            and any(len(warning) >= 1200 for warning in terminal.warnings),
+        )
+        capped = SuggestionService(sdk=FakeSdk(revision=True)).run(
+            _request(rounds=1, max_tool_calls=1, items=(_item(),))
+        )
+        results.check(
+            "terminal tool stops carry model-facing recovery guidance",
+            capped.stop_reason.value == "tool_call_limit"
+            and SHORT_TOOL_CALL_LIMIT in capped.warnings
+            and any(len(warning) >= 1200 for warning in capped.warnings),
+        )
+
+    def check_curation_retry(self) -> None:
+        results = self.results
+        flaky = FakeSdk(flaky_curation=True)
+        result = SuggestionService(sdk=flaky).run(_request(rounds=2, items=(_item(),)))
+        results.check(
+            "a failed curation retries in the next round instead of ending the run",
+            result.stop_reason.value == "completed"
+            and result.returned_count == 4
+            and flaky.curation_calls == 2
+            and bool(result.warnings),
+        )
+        doomed = SuggestionService(sdk=FakeSdk(flaky_curation=True)).run(
+            _request(rounds=1, items=(_item(),))
+        )
+        results.check(
+            "a failed curation in the final round returns the committed snapshot",
+            doomed.stop_reason.value == "provider_failed" and doomed.returned_count == 4,
+        )
 
     def check_sdk_context_boundary(self) -> None:
         results = self.results

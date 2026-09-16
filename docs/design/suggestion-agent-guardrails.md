@@ -18,9 +18,10 @@ remain unchanged.
 ## 3. Scope and non-goals
 
 In scope: typed settings and CLI options, counters, store enforcement, stop
-reasons, and deterministic partial-result handling. Out of scope: retries,
-provider-specific backoff, a persistent budget service, or changing category
-selection and final result schemas.
+reasons, deterministic partial-result handling, a validated curation-pass input,
+and model-facing recovery guidance for every guardrail. Out of scope: retrying a
+pass that exhausted a budget cap, provider-specific backoff, a persistent budget
+service, or changing category selection and final result schemas.
 
 ## 4. Existing behavior and constraints
 
@@ -32,12 +33,31 @@ result.
 
 ## 5. Proposed design
 
-Add `max_agent_calls` and `max_tool_calls` to `SuggestionSettings`, with bounded
-defaults and CLI plumbing. `_call_agent` checks the agent budget before creating
-a new agent and records every completed turn. `SuggestionStore` receives the
-validated tool budget and raises a typed internal limit when it is exhausted.
-The workflow catches these limits at transaction boundaries, finalizes the last
-committed store snapshot, and returns the matching stop reason and warning.
+Add `max_agent_calls` (1–2048) and `max_tool_calls` (1–4096) to
+`SuggestionSettings`, with bounded defaults and CLI plumbing. `_call_agent`
+checks the agent budget before creating a new agent and records every completed
+turn. `SuggestionStore` receives the validated tool budget and raises a typed
+internal limit when it is exhausted. The workflow catches these limits at
+transaction boundaries, finalizes the last committed store snapshot, and returns
+the matching stop reason and warning.
+
+Turn counting lives in `SuggestionRunAccounting`, a strictly validated mutable
+dataclass, because the SDK's `UsageTracker` prices provider-reported token
+payloads per model call and cannot count CLI-observed turns without coupling the
+service to the SDK's pricing registries. The versioned result keeps the plain
+`usage` mapping, converted once from the accounting object, so the result schema
+is unchanged. One curation pass takes a single strictly validated
+`CurationPassInput` dataclass instead of nine positional arguments.
+
+The existing rounds/tokens/time checks remain independent. A limit is checked
+before a call, so the configured cap is never exceeded. The initial generation
+and independent critic remain fatal provider failures when no committed slate
+exists. A curation pass that fails on quality (provider error or incomplete
+receipt) in a non-terminal round keeps its short warning, carries long
+model-facing guidance into the next round's curator prompt, and retries there;
+budget exhaustion (`agent_call_limit`, `tool_call_limit`, token, time) always
+ends the run with the committed snapshot, because retrying the same pass could
+not succeed without exceeding the cap.
 
 The existing rounds/tokens/time checks remain independent. A limit is checked
 before a call, so the configured cap is never exceeded. The initial generation
@@ -52,7 +72,8 @@ the preceding PR.
 **Files:** `src/vidbyte_cli/types/suggestions.py`
 
 Add `AGENT_CALL_LIMIT` and `TOOL_CALL_LIMIT`. Add positive, bounded settings
-fields with defaults that preserve current behavior. Keep Pydantic `extra="forbid"`
+fields (agent calls 1–2048, tool calls 1–4096) with defaults that preserve
+current behavior. Keep Pydantic `extra="forbid"`
 so callers cannot silently misspell a budget.
 
 ### 6.2 Expose CLI controls
@@ -86,7 +107,9 @@ guardrail stop from a provider/tool contract failure.
 Cover cap-before-call, cap-after-commit, tool-cap transaction isolation, CLI
 validation, typed stop reasons, and usage counters. Add one hidden-failure test
 for a curation cap and one silent-failure test proving no uncommitted mutation
-leaks into the final result.
+leaks into the final result. Cover the 2048/4096 bounds, the accounting and
+curation-pass dataclass validators, the 300-token guidance floor, and the
+non-terminal curation retry that recovers to a completed run.
 
 ## 7. Alternatives considered
 
@@ -110,8 +133,14 @@ leaks into the final result.
 
 ## 9. Observability and failure semantics
 
-Usage includes all attempted/completed agent turns and the existing phase
-counters. Limit warnings are stable, non-sensitive strings. Provider failures
+Usage includes all attempted agent turns and the completed per-phase counters,
+converted from `SuggestionRunAccounting` to the unchanged result mapping. Short
+limit warnings are stable, non-sensitive strings. Every guardrail additionally
+owns long model-facing guidance (at least 300 tokens with explicit next steps)
+in `services/suggestions/warnings.py`: guidance for a retried curation failure
+enters the next curator prompt as model context, while guidance for a terminal
+guardrail stop is appended beside its short warning so the JSON result envelope
+carries recovery instructions to the calling agent. Provider failures
 continue to use the existing typed failure path when no committed snapshot is
 available; curation failures and guardrail stops return typed partial results.
 
@@ -140,6 +169,10 @@ reverting this PR; no persisted state or migration is involved.
 - [x] Count every generator, critic, and curator turn in one agent budget.
 - [x] Keep tool budgets run-local and transaction-safe.
 - [x] Return committed partial results on curation guardrail stops.
+- [x] Retry quality-failed curation in a later round with model-facing guidance;
+      never retry a pass that exhausted a budget cap.
+- [x] Count turns in `SuggestionRunAccounting`, not the SDK `UsageTracker`,
+      which prices provider payloads rather than CLI-observed turns.
 
 ## 13. Implementation checklist
 
