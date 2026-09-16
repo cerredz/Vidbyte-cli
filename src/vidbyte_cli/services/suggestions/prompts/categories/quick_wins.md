@@ -25,64 +25,46 @@ A quick-win suggestion offers a small, inexpensive action with a useful near-ter
 
 ## Generation requirements
 
-Every quick-win suggestion must offer a small, low-cost action with a concrete near-term payoff and a
-low distraction risk. The proposal should:
+Every quick-win suggestion must offer a small, low-cost action with a concrete near-term payoff and a low
+distraction risk. The category exists because not everything valuable has to be planned: some payoffs are
+close enough and cheap enough that deliberating about them costs more than doing them. Both halves of
+that have to hold. The cost side means implementation, coordination, and decision cost all stay small,
+with no long chain of follow-up work hiding behind a modest first step — the most common failure here is
+a migration, dependency, or new capability disguised as a quick fix. The benefit side means a result the
+caller would actually notice, since easy, pleasant, and visible are not the same as useful. Because small
+actions expand when nobody is watching, the proposal needs a stopping point, and because a quick win is
+still attention spent, it has to say what it would mean if the payoff failed to appear. The proposal
+should:
 
 - Name the bounded action, immediate benefit, owner, and reason it is worth doing soon.
-- Keep implementation, coordination, and decision cost small enough that the payoff does not require a long follow-up chain.
+- Keep implementation, coordination, and decision cost small enough that the payoff does not require a
+  long follow-up chain.
 - Connect the benefit to the caller's goal, user value, reduced friction, evidence, or momentum.
 - Distinguish a genuinely useful result from an action that is merely easy, pleasant, or visible.
-- Use supplied context to establish the opportunity and avoid inventing impact or urgency.
 - Define a stopping point and avoid allowing the quick win to become a larger project by default.
-- Account for maintenance, quality, trust, accessibility, and opportunity cost even when the action is small.
+- Account for maintenance, quality, trust, accessibility, and opportunity cost even when the action is
+  small.
 - Prefer a result that creates evidence or unlocks a more consequential choice.
 - State what would show the payoff did not materialize and what happens then.
-- Keep small near-term payoff with bounded cost as the primary mechanism; route required work, major upside, and allocation conflicts elsewhere.
-
-## Candidate shape
-
-Shape the candidate as a low-friction action with a visible payoff and a firm boundary. The reader
-should know why it is useful now and why it should not expand.
-
-- In the **summary**, name the small action, near-term benefit, effort boundary, and connection to the goal.
-- In the **action sequence**, start, complete, and inspect the action without requiring a long chain of future work.
-- In **decision points**, choose owner, scope, stopping point, and whether the result justifies continuation.
-- In **considerations**, cover distraction, maintenance, quality, trust, accessibility, opportunity cost, and reversibility.
-- In **dependencies**, name only the access, input, or permission genuinely needed to begin.
-- In **evidence references**, cite the current friction or opportunity; do not cite ease as value.
-- In **assumptions**, label expected payoff and fit with a short observation or measurement.
-- In the **completion criterion**, require the action and a visible near-term result, plus a stop or follow-up decision.
-- If the action is required for the main commitment, use completion, continuation, or prerequisite.
-
-## Valid suggestion directions
-
-Use this category for bounded useful moves:
-
-- Remove a small recurring friction with immediate payoff.
-- Create a lightweight artifact, shortcut, or decision record that helps current work.
-- Run a cheap check that produces evidence for a larger choice.
-- Repair a small communication, handoff, or configuration issue.
-- Reuse an available resource to produce a near-term customer or team benefit.
-- Complete a small cleanup that prevents immediate rework or confusion.
-- Package a result for a known recipient without creating a new system.
-- Make a reversible improvement whose value can be seen quickly.
-- Stop after the payoff or evidence is visible rather than adding polish.
+- Verify that no migration, dependency, or new capability is hiding behind the small first step.
 
 ## Alignment check
 
-The candidate is aligned when a small, inexpensive action produces a concrete near-term benefit and
-does not demand a long uncertain follow-up chain. Ease is not enough; the payoff and stopping point must
-be explicit. A quick win may create evidence for larger work but should not become that work automatically.
+Alignment, for quick wins, means the candidate is cheap enough to just do and useful enough to be worth
+doing. It sits outside the main plan without competing with it: the caller can take it now, finish it
+soon, and return to the real work with something concretely better — less friction, a piece of evidence,
+a bit of momentum. An aligned candidate names the action, the payoff, the owner, and the point at which
+it stops. Ease alone does not qualify it. An action that is quick and produces nothing the caller would
+notice has spent attention for a pleasant feeling.
 
-Reject or reroute candidates that:
-
-- Are required to complete the main goal; use completion or continuation.
-- Carry substantial upside and exposure; use big bets.
-- Require choosing among competing commitments; use prioritization.
-- Have only aesthetic or pleasant value with no meaningful result.
-- Hide a major dependency, migration, or new capability behind a “small” first step.
-
-The primary decision must be whether this small move earns its attention now.
+The second half of alignment is making sure the cost is really small. Quick wins are where large work
+hides: a small first step toward a migration, a dependency that surfaces later, a capability that has to
+be maintained forever. An aligned candidate checks for that and states what happens if the payoff does
+not arrive. Work required to complete the main goal belongs to completion or continuation, since it is
+not optional. Substantial upside with real exposure belongs to big bets. A choice among competing
+commitments belongs to prioritization, and something with only aesthetic appeal and no result belongs
+nowhere. Keep the candidate here only when the live question is whether this small move earns its
+attention now.
 
 ## When not to use
 Do not use this category when the action is required for the main goal, because continuation, completion, or prerequisite may describe it better. Avoid it when the benefit is only that the task is easy, or when follow-up work is large and uncertain. If the opportunity has major upside and meaningful exposure, use big bets; if attention is scarce, resolve the tradeoff with prioritization.

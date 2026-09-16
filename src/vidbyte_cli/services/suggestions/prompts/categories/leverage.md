@@ -26,64 +26,43 @@ A leverage suggestion creates one asset or improvement that benefits several cre
 ## Generation requirements
 
 Every leverage suggestion must create one bounded asset, improvement, relationship, or decision that
-benefits multiple credible future efforts. The proposal should:
+benefits several credible future efforts. The category exists because repeated cost is invisible when
+paid one instance at a time: the same lookup, the same setup, the same negotiation, absorbed again and
+again until someone notices the pattern. Leverage pays that cost once. The requirement that keeps it
+honest is real consumers — at least two identifiable future uses, not a hypothetical audience — because
+an abstraction built for imagined reuse is pure overhead. Timing matters just as much: generalizing
+before the shared pattern is visible produces the wrong abstraction, and the wrong abstraction is harder
+to remove than the duplication it replaced. Reuse is also not free. Ownership, maintenance, adoption,
+and the cost of changing the asset later are part of the investment, and a proposal that omits them is
+understating the price. The proposal should:
 
 - Name at least two realistic downstream consumers or uses rather than relying on hypothetical scale.
 - Explain the shared mechanism that makes reuse valuable and why one investment serves those consumers.
 - Delay abstraction until a repeated pattern, common interface, or durable need is visible.
 - Include ownership, maintenance, adoption, and update cost rather than treating reuse as free.
 - Preserve the current outcome while making future work faster, clearer, safer, or less coordinated.
-- Use supplied context to identify repeated work, consumers, or avoided cost; label future reuse as an assumption.
 - Define the smallest reusable asset that can test whether the pattern is actually shared.
 - Avoid generalizing unstable details or creating a platform before use cases justify it.
-- Measure adoption, reuse, avoided effort, quality, or coordination rather than counting code or documentation alone.
-- Keep multi-consumer future benefit as the primary mechanism; route simplification, long-term direction, and one-off completion elsewhere.
-
-## Candidate shape
-
-Shape the candidate as a reusable investment with named consumers and a payback path. The reader should
-know what is shared, who will use it, how it will be maintained, and when generalization stops.
-
-- In the **summary**, name the repeated cost, reusable asset, credible consumers, and expected benefit.
-- In the **action sequence**, identify the common pattern, build the smallest asset, apply it to one or more consumers, and review reuse.
-- In **decision points**, choose abstraction boundary, ownership, interface, adoption path, maintenance level, and deferments.
-- In **considerations**, cover reuse, stability, complexity, documentation, discoverability, compatibility, ownership, and opportunity cost.
-- In **dependencies**, name consumers, examples, data, interface decisions, maintenance capacity, or adoption authority.
-- In **evidence references**, cite repeated work and named downstream uses; do not cite imagined scale as proof.
-- In **assumptions**, label future consumers, reuse frequency, and maintenance burden with a trial or review condition.
-- In the **completion criterion**, require an adopted asset, demonstrated reuse, or a justified decision not to generalize.
-- If the benefit is only current-task simplification, use simplification or completion.
-
-## Valid suggestion directions
-
-Use this category for investments that pay across efforts:
-
-- Create a template, interface, checklist, dataset, tool, or decision record used by named consumers.
-- Capture a repeated pattern after several concrete instances rather than abstracting in advance.
-- Automate a recurring coordination, validation, or transformation cost.
-- Build shared observability, documentation, or onboarding that reduces repeated explanation.
-- Preserve a reusable relationship, access path, or evidence base for credible future work.
-- Standardize a stable boundary while leaving unstable implementation details local.
-- Repackage one artifact so several teams, agents, or workflows can discover and apply it.
-- Measure whether adoption and avoided work repay maintenance and coordination cost.
-- Stop generalization when the next consumer cannot be named or the pattern diverges.
+- Measure adoption, reuse, avoided effort, quality, or coordination rather than counting artifacts.
+- Say when to stop generalizing if adoption or the shared pattern fails to appear.
 
 ## Alignment check
 
-The candidate is aligned when one bounded effort credibly benefits multiple future consumers through
-reuse, reduced coordination, accumulated knowledge, or avoided repeated cost. It must name the consumers
-and maintenance owner. Generality without adoption is not leverage.
+Alignment, for leverage, means the candidate spends once to make several later efforts cheaper. The
+caller is paying a repeated cost — rebuilding the same setup, re-answering the same question,
+re-negotiating the same agreement — and one bounded investment could remove it from all of them. An
+aligned candidate names the consumers who would actually benefit, explains the shared mechanism that
+makes one asset serve them, and keeps the asset small enough to test whether the pattern is real.
+Generality with no adopter is not leverage; it is an abstraction the caller now has to maintain.
 
-Reject or reroute candidates that:
-
-- Remove complexity from one current result; use simplification.
-- Describe a broad capability or market to develop over years; use long-term directions.
-- Finish a one-off obligation; use completion.
-- Build an abstraction before a shared pattern or consumer exists.
-- Add machinery whose maintenance exceeds the named downstream benefit.
-
-The primary decision must be whether a reusable asset earns its cost across real future work. The
-candidate should also identify when to stop generalizing if adoption or the shared pattern disappears.
+The second half of alignment is total cost. An asset has an owner, a maintenance burden, an adoption
+curve, and a future in which it must change, so an aligned candidate counts those against the benefit
+and says when to stop generalizing if the shared pattern never materializes. Removing complexity from
+one current result belongs to simplification, because its value is local. A broad capability or market
+to develop over years belongs to long-term directions. Finishing a one-off obligation belongs to
+completion, and building an abstraction before any shared pattern or consumer exists belongs nowhere at
+all. Keep the candidate here only when the live question is whether a reusable asset earns its cost
+across real future work.
 
 ## When not to use
 Do not use this category for a one-off task, a hypothetical audience, or an abstraction whose consumers cannot be named. Avoid it when generalization would slow the current work or lock in an unstable pattern. If the goal is to remove complexity from the current result, use simplification; if the asset supports a broader future capability rather than repeated near-term use, use long-term directions.

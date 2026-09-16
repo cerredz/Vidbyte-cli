@@ -28,13 +28,11 @@ whose mechanism, evidence, action, and completion signal stay inside that lens.
 - State boundaries against `business_growth`, `product_experience`, and the new sibling categories.
 - Keep category listing, selection, validation, packaging, and agent rendering data-driven.
 - Give all 36 category prompt assets in the live PR #59 tree the same generation contract:
-  `Generation requirements`, `Candidate shape`, `Valid suggestion directions`, and
-  `Alignment check`.
+  `Generation requirements` and `Alignment check`.
 - Make each of those sections materially deep enough to guide generation rather than merely label
-  the category: approximately twice the earlier 100-200-word guidance targets, with category-
-  specific content rather than copied boilerplate.
-- Add optional evidence, failure-mode, context-signal, and success-signal guidance where it closes
-  a gap that the four required sections do not already cover.
+  the category, with category-specific content rather than copied boilerplate.
+- Keep both sections about the suggestion category itself. Candidate field shape belongs to the
+  generator prompt and the handoff, which already render it, so no category asset restates it.
 
 ### Non-Goals
 
@@ -78,21 +76,17 @@ runtime orchestration.
    `brand_positioning`, `distribution_sales`, and `customer_relationship_service`.
 2. Map each ID to a same-named packaged Markdown file.
 3. Each of the 36 category prompt assets has one `Description` of six-to-eight sentences,
-   category-specific `Why use / use cases`, `Generation requirements`, `Candidate shape`, `Valid
-   suggestion directions`, `Things to consider` with eight-to-ten bullets, `Alignment check`, and
-   `When not to use` guidance.
-4. Each of the four new generation sections is approximately twice the earlier guidance target:
-   `Generation requirements` is about 200-340 words, `Candidate shape` about 240-400 words,
-   `Valid suggestion directions` about 160-320 words, and `Alignment check` about 200-340 words.
-   Small variance is acceptable when needed for readable, non-repetitive prose.
-5. The four sections are specific to the category's primary mechanism, not shared boilerplate.
-   Requirements state non-negotiable ingredients, shape maps those ingredients to candidate fields,
-   directions provide distinct mechanisms, and alignment check distinguishes the category from its
-   siblings.
-6. Each asset adds evidence/assumption handling, required-context signals, weak-suggestion
-   patterns, or success signals when those ideas are not already covered by the required sections.
-   Optional sections should add evidence or evaluation guidance rather than inflate the prompt with
-   duplicated prose.
+   category-specific `Why use / use cases`, `Things to consider` with eight-to-ten bullets,
+   `Generation requirements`, `Alignment check`, and `When not to use` guidance, in that order.
+4. `Generation requirements` opens with a substantial paragraph explaining why the category imposes
+   the requirements it does, then lists them; the whole section runs at least 260 words.
+   `Alignment check` is one or two paragraphs of prose of at least 200 words.
+5. Both sections are specific to the category's primary mechanism, not shared boilerplate.
+   Requirements state the non-negotiable ingredients of a suggestion in this category, and the
+   alignment check explains what alignment means here and distinguishes the category from siblings.
+6. Neither section carries output shape, environment, or run information. The candidate's fields,
+   the use of supplied context, and assumption labelling are contracts of the generator prompt and
+   the handoff, so a category asset that repeats them makes one contract editable in two places.
 7. The prompts include the caller-supplied considerations, distinguish adjacent categories, and
    instruct the model to label missing evidence instead of inventing it.
 8. Category listing and `--category` validation expose the five entries without an SDK/provider.
@@ -170,19 +164,17 @@ shapes, valid idea mechanisms, considerations, alignment tests, and exclusion bo
 # <Title>
 ## Description
 ## Why use / use cases
-## Generation requirements
-## Candidate shape
-## Valid suggestion directions
-## Evidence and assumptions
 ## Things to consider
+## Generation requirements
 ## Alignment check
 ## Weak suggestion patterns
 ## When not to use
 ```
 
-The optional `Evidence and assumptions` and `Weak suggestion patterns` sections are included where
-they clarify a distinct failure mode. They may be omitted only when the required sections already
-cover the same behavior without repetition. The four required sections are present in all 36 files.
+The optional `Weak suggestion patterns` section is included where it names a distinct failure mode
+the required sections do not already cover. `Generation requirements` and `Alignment check` are
+present in all 36 files, and no file carries a `Candidate shape`, `Valid suggestion directions`, or
+`Evidence and assumptions` section.
 
 #### Logic / Algorithm
 
@@ -196,19 +188,17 @@ cover the same behavior without repetition. The four required sections are prese
    ownership, and repeatable acquisition economics.
 5. Define relationship/service around onboarding, support, education, recovery, retention, renewal,
    advocacy, customer effort, and service capacity.
-6. For each asset, write `Generation requirements` as 10-14 imperative bullets of roughly 200-340
-   words; require the category's objects, causal mechanism, evidence, uncertainty, and outcome.
-7. Write `Candidate shape` as 10-14 field-oriented bullets of roughly 240-400 words; explain what
-   the summary, action sequence, decision points, considerations, dependencies, assumptions,
-   evidence references, and completion criterion mean in this category.
-8. Write `Valid suggestion directions` as 12-16 concise mechanism directions of roughly 160-320
-   words; vary the mechanisms without turning the section into a list of finished suggestions.
-9. Write `Alignment check` as roughly 200-340 words: state the positive primary-mechanism test,
-   list category-specific near misses, and route those misses to the correct sibling or umbrella.
-10. Add evidence, context, failure-mode, and success-signal guidance when it contributes something
-    not already stated in those four sections.
-11. Give every asset explicit sibling and umbrella boundaries, and preserve the existing C004
-    description and consideration shape.
+6. For each asset, open `Generation requirements` with a paragraph explaining why the category
+   imposes its requirements — what it exists to protect and how suggestions in it fail — then list
+   nine or more imperative requirements of the suggestion itself: the category's objects, causal
+   mechanism, uncertainty, and outcome. Keep the section at 260 words or more.
+7. Write `Alignment check` as one or two prose paragraphs of 200 words or more. Explain what
+   alignment means for this category in plain terms, so a reader who knows nothing else can tell
+   whether a candidate belongs, then name the sibling categories that near misses route to.
+8. Add weak-suggestion or success-signal guidance only when it contributes something not already
+   stated in those two sections.
+9. Give every asset explicit sibling and umbrella boundaries, and preserve the existing C004
+   description and consideration shape.
 
 #### Edge Cases & Error Handling
 
@@ -296,14 +286,14 @@ category-list result grows from 31 to 36 entries.
 - [Edge Case] All-category rendering preserves registry order.
 - [Hidden Failure] C004 catches a missing description or too few considerations in a new asset.
 - [Silent Failure] Human/JSON category listing includes all five new entries.
-- [Edge Case] Each of the 36 category assets has all required headings and stays
-  inside the declared word band for each expanded section.
+- [Edge Case] Each of the 36 category assets has all required headings and clears the word floor
+  for each expanded section.
 - [Hidden Failure] A prompt with headings but an empty or generic section body fails the focused
   anchor-term and distinctness checks.
-- [Silent Failure] A category's `Candidate shape` names the fields the generator actually returns
-  and does not silently omit evidence, assumptions, or completion guidance.
-- [Hidden Assumption] Missing context is handled as a labeled assumption or discovery action in
-  every category rather than being converted into a factual claim.
+- [Silent Failure] A reinstated `Candidate shape` or `Valid suggestion directions` section fails
+  the removed-section check, so the candidate contract cannot drift back into the category assets.
+- [Hidden Failure] A bulleted reroute table reintroduced into `Alignment check` fails the prose
+  check, because it is the shape the explanatory paragraphs replaced.
 
 ### Integration Tests
 

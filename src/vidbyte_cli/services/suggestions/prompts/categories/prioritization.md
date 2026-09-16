@@ -26,63 +26,45 @@ A prioritization suggestion helps the caller choose among competing goals, tasks
 ## Generation requirements
 
 Every prioritization suggestion must help the caller choose among competing commitments using explicit
-values and opportunity costs. The proposal should:
+values and opportunity costs. The category exists for the situation where the problem is not a shortage
+of things to do but a surplus: several commitments are each defensible, capacity is finite, and not
+choosing means all of them advance too slowly to matter. The requirement that makes a prioritization
+real is the displacement — saying what gets less attention, is delayed, delegated, or dropped — because
+a ranking that costs nothing has not allocated anything. The comparison has to run on the caller's stated
+outcomes and constraints rather than on urgency alone, since urgency measures who is asking loudest, not
+what matters most, and reversibility and cost of delay often matter more. The chosen priority also has to
+land somewhere concrete, or the decision evaporates before it changes behavior. Because circumstances
+move, the ordering needs a condition that would revise it. The proposal should:
 
 - Name the outcome, commitments, resources, and time horizon being prioritized.
 - Make clear what receives attention and what is delayed, reduced, delegated, or stopped as a result.
-- Use urgency, consequence, reversibility, cost of delay, evidence, and caller values rather than loudness alone.
+- Use urgency, consequence, reversibility, cost of delay, evidence, and caller values rather than
+  loudness alone.
 - Distinguish a true priority conflict from a missing goal, owner, prerequisite, or strategy.
-- Use supplied context to identify constraints, completed work, obligations, and consequences; label uncertain estimates.
-- Define a decision rule that can be applied consistently and revisited when evidence or deadlines change.
+- Define a decision rule that can be applied consistently and revisited when evidence or deadlines
+  change.
 - Protect safety, quality, trust, and essential commitments from being traded for superficial speed.
 - Make the chosen priority small enough to become a real next commitment.
 - State the review date, trigger, or evidence that should change the ordering.
-- Keep allocation among competing commitments as the primary mechanism; route stopping, strategy, and blockers to focused categories.
-
-## Candidate shape
-
-Shape the candidate as an explicit allocation choice with displaced work visible. The reader should know
-why one commitment wins now, what is protected, and when the choice will be revisited.
-
-- In the **summary**, name the competing commitments, chosen priority, and consequence of delay.
-- In the **action sequence**, define criteria, compare commitments, choose the order, communicate displacement, and begin the top commitment.
-- In **decision points**, choose urgency, impact, reversibility, cost of delay, quality floor, and review trigger.
-- In **considerations**, cover values, deadlines, dependencies, capacity, risk, morale, trust, and opportunity cost.
-- In **dependencies**, name obligations, owners, deadlines, approvals, or prerequisites that constrain the ordering.
-- In **evidence references**, cite stated goals, deadlines, consequences, and current state; do not cite anxiety as urgency.
-- In **assumptions**, label uncertain impact, effort, and timing estimates and state how they affect confidence.
-- In the **completion criterion**, require a recorded priority, displaced commitment, owner, first action, and revisit condition.
-- If one commitment should be abandoned rather than ranked, use stop or defer.
-
-## Valid suggestion directions
-
-Use this category for explicit allocation choices:
-
-- Rank work by consequence, urgency, reversibility, or cost of delay.
-- Protect a critical commitment while deferring lower-value work.
-- Choose between immediate progress and evidence-gathering based on information value.
-- Allocate scarce capacity, review attention, or specialist access to the highest-leverage obligation.
-- Make a quality, scope, or deadline tradeoff explicit rather than silently underdelivering everywhere.
-- Reorder dependent work so a true blocker or high-cost delay is addressed first.
-- Decide what to delegate, simplify, or stop to make the priority feasible.
-- Set a review trigger when deadlines, evidence, or external conditions change.
-- Communicate displaced work and revisit conditions to affected owners.
+- Account for what the displaced commitments cost while they wait.
 
 ## Alignment check
 
-The candidate is aligned when several meaningful commitments compete and the primary intervention chooses
-where scarce attention or capacity goes. It must make the tradeoff visible, including what is displaced.
-Priority is not merely labeling the loudest task urgent.
+Alignment, for prioritization, means the candidate allocates scarce attention among things that are all
+worth doing. The caller is not short of options; they are short of capacity, and the decision is which
+commitment gets it now. An aligned candidate names the commitments in contention, applies criteria the
+caller would recognize as theirs — consequence, reversibility, cost of delay, evidence, stated values —
+and reaches an ordering concrete enough to act on. The displacement is what makes it a priority:
+a candidate that elevates something without saying what now waits has ranked nothing, and calling the
+loudest request urgent is not a criterion.
 
-Reject or reroute candidates that:
-
-- Should be abandoned because their value no longer justifies cost; use stop or defer.
-- Require a broad directional choice rather than an ordering among commitments; use strategy.
-- Are blocked by a true missing condition; use prerequisite.
-- Have one obvious next action with no allocation conflict; use continuation or immediate next steps.
-- Need the desired outcome clarified before priorities can be compared; use goal clarification.
-
-The primary decision must be what receives scarce attention now and what deliberately receives less.
+The second half of alignment is checking that allocation is really the problem. Many things look like
+priority conflicts and are not. A commitment whose value no longer justifies its cost belongs to stop or
+defer rather than the bottom of a list; a broad directional choice that would govern many later
+orderings belongs to strategy; work held up by a true missing condition belongs to prerequisite; a
+single obvious next action with nothing competing belongs to continuation or immediate next steps; and
+an outcome too unclear to compare against belongs to goal clarification. Keep the candidate here only
+when the live question is what receives scarce attention now and what deliberately receives less.
 
 ## When not to use
 Do not use this category when there is only one meaningful commitment or when the next step is already determined by an accepted plan. Avoid it when the caller lacks a clear outcome or when the apparent competition is caused by a missing owner or prerequisite. If the work should be abandoned rather than ranked, use stop or defer; if a broader direction must be chosen, use strategy.

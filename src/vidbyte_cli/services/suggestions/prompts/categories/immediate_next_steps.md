@@ -26,63 +26,44 @@ An immediate-next-steps suggestion identifies an action the caller can take from
 ## Generation requirements
 
 Every immediate-next-steps suggestion must identify an action the caller can begin from the present
-state without another round of abstract planning. The proposal should:
+state without another round of abstract planning. The category exists for the situation where the full
+path is not worth designing yet — either because it is unknown, disputed, or cheaper to discover by
+moving — and the binding question is simply what to do now. The requirement is therefore availability:
+the action must run on the information, tools, access, and authority the caller already has, or on one
+small prerequisite obtained as part of the move. It also has to be small enough to start without
+translating an aspiration into tasks, because a step that still needs decomposition is a plan rather
+than a next step. The best candidates buy something specific — progress, information, or reduced risk —
+that makes the decision after it easier to take. Since the move may fail or reveal a blocker, the
+proposal has to say what follows in each case. The proposal should:
 
-- Name the current state, desired near-term result, and gap the next action closes.
-- Use information, tools, access, and authority already available unless obtaining one small prerequisite is the action.
+- Name the current state, the desired near-term result, and the gap the next action closes.
+- Use information, tools, access, and authority already available unless obtaining one small
+  prerequisite is the action.
 - Be concrete enough that an executor can start without translating an aspiration into tasks.
 - Prefer information gain, progress, or risk reduction that makes the following decision easier.
 - Distinguish the first useful action from a full plan, strategy, or optional expansion.
-- Use supplied context to respect completed, in-progress, blocked, and forbidden work.
 - State dependencies, owner, effort boundary, and a completion signal for the immediate move.
-- Label uncertainty and propose a check when acting immediately could cause avoidable harm.
+- Flag uncertainty and propose a check when acting immediately could cause avoidable harm.
 - Define what the caller should do next after the action succeeds, fails, or reveals a blocker.
-- Keep near-term movement from the current state as the primary mechanism; route accepted-plan execution, final closure, and broad choices elsewhere.
-
-## Candidate shape
-
-Shape the candidate as the smallest useful move available now. It should reduce distance to a result
-or increase information without pretending to solve every later step.
-
-- In the **summary**, name the current state, immediate action, and near-term result.
-- In the **action sequence**, begin with available inputs, perform the first bounded move, inspect its result, and choose the next branch.
-- In **decision points**, identify what can be decided now, what should remain deferred, and what result changes the next step.
-- In **considerations**, cover effort, risk, dependency, reversibility, owner, distraction, and completion evidence.
-- In **dependencies**, name only conditions that genuinely block starting; do not turn preferences into prerequisites.
-- In **evidence references**, cite the current state, goal, and available resource; do not cite a future result.
-- In **assumptions**, label what the immediate action relies on and include a cheap check when necessary.
-- In the **completion criterion**, require a visible artifact, observation, decision, or state change that enables the following move.
-- If an accepted plan already determines this exact action, use continuation rather than reopening the next step.
-
-## Valid suggestion directions
-
-Use this category for actions that can begin now:
-
-- Inspect, collect, or transform an available input into the next useful artifact.
-- Send the specific request, handoff, or question that unlocks near-term progress.
-- Run a small check that reduces uncertainty before a consequential action.
-- Draft the smallest version of a deliverable that can be reviewed or tested.
-- Resolve the first local blocker when the broader route is already clear.
-- Record current state, ownership, or a decision so work can resume without reconstruction.
-- Prepare one dependency that is genuinely needed for the next step.
-- Choose the immediate action with the highest information or progress value.
-- Define a stop or reassessment point after the first move.
+- Choose a move whose result is visible soon enough to inform the decision that follows it.
 
 ## Alignment check
 
-The candidate is aligned when the caller can begin it from the current state and its result makes
-progress or the next decision visible. It should be smaller than a strategy and more concrete than a
-general recommendation. The action can reveal a new plan, but it should not require one before starting.
+Alignment, for immediate next steps, means the candidate is startable right now. The caller is at a
+particular point with particular resources, and this category answers what can be done from there —
+without first settling a strategy, agreeing a plan, or obtaining something they do not have. An aligned
+candidate is concrete enough to hand to someone and small enough to finish before the situation changes,
+and its result either moves the work forward or makes the next decision clearer. The action may well
+reveal what the larger plan should be; what it must not do is require that plan to exist first.
 
-Reject or reroute candidates that:
-
-- Advance an already accepted route without a new immediate choice; use continuation.
-- Close the final obligation; use completion.
-- Depend on a missing condition that must be obtained first; use prerequisite.
-- Need a broad tradeoff, goal decision, or stakeholder alignment before action; use the fitting category.
-- Are optional extensions rather than the next useful move; use adjacent opportunity or quick wins.
-
-The primary decision must be which concrete move is available from now and what its result will unlock.
+The second half of alignment is distinguishing this from its neighbours, which all describe doing
+something. Advancing a route the caller has already accepted belongs to continuation, because there the
+direction is settled and momentum is what matters. Closing the last remaining obligation belongs to
+completion. A missing condition that has to be obtained before anything can proceed belongs to
+prerequisite. A broad tradeoff, an unsettled goal, or stakeholder alignment that must come first belongs
+to its own category, and optional value that is not the next useful move belongs to adjacent opportunity
+or quick wins. Keep the candidate here only when the live question is which concrete move is available
+from now and what its result will unlock.
 
 ## When not to use
 Do not use this category when an accepted plan already determines the next step; use continuation instead. Avoid it when the first action requires a missing condition, a consequential decision, or broad alignment that must happen first. If the goal is unclear, use goal clarification; if a fact must be established before acting, use investigation or verification.

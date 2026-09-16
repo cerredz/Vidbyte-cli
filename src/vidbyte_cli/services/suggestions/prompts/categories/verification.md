@@ -26,63 +26,44 @@ A verification suggestion tests a claim that matters to the caller’s next deci
 ## Generation requirements
 
 Every verification suggestion must test a specific claim that matters to the caller's next decision.
-The proposal should:
+The category exists because work routinely rests on beliefs that were true once, were reported by
+someone else, or were never checked at all, and the cost of discovering that late is paid downstream.
+A verification is therefore defined by its claim, not by its activity: the proposal has to state what
+is believed, why being wrong about it would change something, and what observation would settle it.
+The check has to be narrower than the goal but representative of the risk, because a check that covers
+everything is a project and one that covers a convenient case proves nothing. It also has to be
+decided in advance — what counts as support, failure, contradiction, or unresolved — since a pass
+condition chosen after seeing the result is not a test. A verification observes rather than intervenes;
+the moment the system has to be changed to learn the answer, the work has become an experiment. The
+proposal should:
 
 - State the claim, requirement, behavior, readiness condition, or evidence being checked.
 - Explain why being wrong matters and which decision depends on the result.
 - Identify an authoritative source, reproducible observation, test, record, or acceptance condition.
 - Define support, failure, contradiction, and unresolved uncertainty before running the check.
 - Keep the check narrower than the entire goal while representative of the risk of proceeding.
-- Use supplied context to define the claim and constraints; label assumptions that the check must challenge.
-- Avoid changing the system or intervention as part of the check unless the task is actually an experiment.
+- Choose the case that carries the risk rather than the case that is easiest to inspect.
+- Avoid changing the system or intervention as part of the check.
 - Preserve a traceable evidence record another person can inspect.
 - State what the caller will do differently for each meaningful result.
-- Keep claim checking as the primary mechanism; route open-ended discovery, live intervention, and closure to focused categories.
-
-## Candidate shape
-
-Shape the candidate as a claim-and-check pair with a decision consequence. The reader should know the
-pass condition, the source, the boundary of the check, and how failure changes status or action.
-
-- In the **summary**, name the consequential claim, risk, source or observation, and dependent decision.
-- In the **action sequence**, define the check, run it against the right case, record evidence, and update the decision.
-- In **decision points**, choose acceptance condition, representative edge, source authority, failure response, and escalation.
-- In **considerations**, cover relevance, coverage, edge cases, reproducibility, authority, cost, timing, and ambiguity.
-- In **dependencies**, name access, test data, environment, reviewer, source, or permission required to inspect the claim.
-- In **evidence references**, cite the exact context item or authoritative result supporting or contradicting the claim.
-- In **assumptions**, label what the check does not establish and how residual uncertainty will be handled.
-- In the **completion criterion**, require recorded support, failure, contradiction, or unresolved status tied to a next action.
-- If the answer requires changing an intervention to learn its effect, use experiment.
-
-## Valid suggestion directions
-
-Use this category for focused claim checks:
-
-- Verify a requirement, acceptance condition, permission, configuration, or readiness state.
-- Reproduce a behavior under a relevant edge, failure, representative, or boundary case.
-- Trace a reported result, citation, measurement, or status to its authoritative source.
-- Check that a handoff, artifact, policy, or deployment is actually present and usable.
-- Compare intended design with observed behavior without changing the intervention.
-- Confirm that a prior fix remains effective after an adjacent change.
-- Record a pass, fail, contradiction, or unresolved result before a consequential release or handoff.
-- Verify a gate or safety condition whose absence would change whether proceeding is responsible.
-- Narrow an overbroad claim into the smallest check that can change the next decision.
 
 ## Alignment check
 
-The candidate is aligned when it checks a defined consequential claim against an observable or
-authoritative condition and makes the result actionable. It should not gather open-ended information or
-introduce a new intervention. A check without a pass condition or decision consequence is not useful verification.
+Alignment, for verification, means the candidate checks something the caller is about to rely on. There
+is a claim in play — a requirement is met, a fix still holds, a permission exists, a number came from
+where it says it did — and proceeding without confirming it carries a cost. An aligned candidate names
+that claim, points at an authoritative source or a reproducible observation, and fixes the pass
+condition before looking. The decision consequence is what makes it verification rather than curiosity:
+if no plan changes on a failure, the check is ceremony, and the candidate has not earned the caller's
+attention.
 
-Reject or reroute candidates that:
-
-- Need to discover an unknown through search, interview, or analysis; use investigation.
-- Need to change a live intervention to learn its effect; use experiment.
-- Close a remaining obligation rather than test a claim; use completion.
-- Clarify what outcome or requirement is desired; use goal clarification.
-- Repeat a check whose result cannot change any decision.
-
-The primary decision must be what claim is safe enough to proceed on and what evidence would make that status honest.
+The second half of alignment is restraint about method. Verification observes what is already true; it
+does not go looking for unknowns and it does not move the system to see what happens. A question that
+needs open-ended search, interview, or analysis belongs to investigation, and one that needs a live
+intervention changed to learn its effect belongs to experiment. Closing a remaining obligation is
+completion, and settling what outcome is even wanted is goal clarification. A repeat of a check whose
+result cannot change any decision belongs nowhere. Keep the candidate here only when the live question
+is which claim is safe enough to proceed on and what evidence would make that status honest.
 
 ## When not to use
 Do not use this category when the caller needs to discover an unknown fact through open-ended inquiry or test a new intervention whose effect is uncertain. Avoid it when the claim is too vague to define a pass condition or when the check cannot change the next decision. If a change must be tried to learn what happens, use experiment; if the current need is to close the remaining obligation, use completion.

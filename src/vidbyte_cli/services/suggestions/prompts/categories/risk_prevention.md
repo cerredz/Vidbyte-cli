@@ -26,63 +26,49 @@ A risk-prevention suggestion reduces the likelihood or impact of a plausible fai
 ## Generation requirements
 
 Every risk-prevention suggestion must reduce the likelihood or impact of a plausible consequential
-failure with a proportionate control. The proposal should:
+failure with a proportionate control. The category exists because some costs are only avoidable in
+advance, and the moment to pay for them is before the exposure begins rather than after it is realized.
+The requirement that keeps this useful is selectivity: anything can fail, so a proposal must name a
+specific exposure whose occurrence would change the caller's outcome, along with the trigger and the
+causal path to it. Proportion is the second requirement. A control is itself a cost — burden, friction,
+new failure modes, reduced accessibility — and a guard that costs more than the exposure it removes is a
+net loss, however prudent it sounds. Where prevention is impossible or too expensive, detection and
+recovery are legitimate answers. And because controls decay quietly, the proposal has to say who owns it,
+how it is tested, and what signal would show it is no longer working. The proposal should:
 
-- Name the exposure, trigger, affected outcome, and time when prevention matters.
-- Explain likelihood, impact, detectability, or reversibility without inventing unsupported probabilities.
-- Prefer prevention before exposure, while retaining detection, response, and recovery where prevention cannot be complete.
-- Choose a control, owner, signal, or boundary that addresses the causal path rather than adding generic caution.
-- Account for control burden, usability, accessibility, privacy, safety, and risks introduced by the control itself.
-- Use supplied incidents, constraints, failure modes, or obligations; label hypothetical risks as assumptions.
+- Name the exposure, trigger, affected outcome, and the time when prevention matters.
+- Explain likelihood, impact, detectability, or reversibility without inventing unsupported
+  probabilities.
+- Prefer prevention before exposure, while retaining detection, response, and recovery where prevention
+  cannot be complete.
+- Choose a control, owner, signal, or boundary that addresses the causal path rather than adding generic
+  caution.
+- Account for control burden, usability, accessibility, privacy, safety, and risks introduced by the
+  control itself.
 - Define how the control will be monitored, tested, maintained, and revised as conditions change.
-- Preserve necessary work while making the decision to accept, reduce, transfer, avoid, or monitor exposure explicit.
+- Preserve necessary work while making the decision to accept, reduce, transfer, avoid, or monitor
+  exposure explicit.
 - State what signal would show the risk is reduced or the control is failing.
-- Keep proportionate exposure reduction as the primary mechanism; route claim checks, bottlenecks, and abandonment decisions elsewhere.
-
-## Candidate shape
-
-Shape the candidate as a risk hypothesis with a control and recovery path. The reader should know what
-could fail, how the intervention changes exposure, who owns it, and how effectiveness is observed.
-
-- In the **summary**, name the risk, consequence, trigger, and proposed prevention or mitigation.
-- In the **action sequence**, assess the exposure, choose a control, assign ownership, test it, and define response if it fails.
-- In **decision points**, choose prevention versus detection, control strength, accepted residual risk, owner, and escalation.
-- In **considerations**, cover severity, likelihood, detectability, burden, safety, privacy, access, false positives, and maintenance.
-- In **dependencies**, name authority, monitoring, data, training, tooling, or recovery capability required for the control.
-- In **evidence references**, cite prior failures, requirements, incidents, or observed exposure; do not cite anxiety as likelihood.
-- In **assumptions**, label causal and severity assumptions with a check or monitoring signal.
-- In the **completion criterion**, require the control to be in place and an observable signal or recovery rehearsal to pass.
-- If no plausible consequence or owner exists, investigate or stop rather than adding a control.
-
-## Valid suggestion directions
-
-Use this category for proportionate safeguards:
-
-- Prevent a known failure before a risky action, release, handoff, or exposure.
-- Add validation, approval, isolation, fallback, rate limit, or recovery at the causal boundary.
-- Detect a failure early enough to reduce impact and assign a response owner.
-- Reduce blast radius, access, dependency, or irreversible commitment.
-- Test a control under a representative edge or failure condition.
-- Replace a fragile manual step with a safer repeatable guard where evidence supports it.
-- Record accepted residual risk and the condition that would trigger stronger protection.
-- Remove an exposure entirely when the cost of prevention is lower than its plausible consequence.
-- Monitor control burden so protection does not create inaccessible or unsafe work.
+- Show that the guard costs less than the exposure it is meant to remove.
 
 ## Alignment check
 
-The candidate is aligned when it protects a valuable outcome from a plausible consequential failure and
-defines a proportionate control, owner, and signal. It should address a specific exposure rather than
-list every imaginable concern. Prevention is stronger when it acts before exposure begins.
+Alignment, for risk prevention, means the candidate protects an outcome the caller cares about from a
+failure that could plausibly happen. There is an exposure — a way the work can go wrong, with a trigger
+and a causal path — and the candidate intervenes on that path before the cost is realized. An aligned
+candidate names the exposure specifically, says what it would damage and when prevention has to be in
+place, and proposes a control with an owner and a signal. Listing every imaginable concern is the
+opposite of this: a guard earns its place by attaching to one plausible, consequential failure rather
+than to general caution.
 
-Reject or reroute candidates that:
-
-- Need to establish whether a claim is true; use verification.
-- Reflect a repeated flow constraint rather than a failure exposure; use bottleneck.
-- Have no plausible consequence, owner, or maintenance path.
-- Should be abandoned because exposure cannot be justified; use stop or defer.
-- Add generic warnings without changing likelihood, impact, detection, or recovery.
-
-The primary decision must be which safeguard changes the risk path enough to justify its burden.
+The second half of alignment is proportion. Controls have their own cost — friction, maintenance, lost
+accessibility, sometimes new failure modes — so an aligned candidate weighs the guard against the
+exposure, prefers prevention where it is achievable and falls back to detection and recovery where it is
+not, and says how the control stays alive as conditions change. Establishing whether a claim is even
+true belongs to verification; a repeated flow constraint rather than a failure exposure belongs to
+bottleneck; and concluding that the exposure cannot be justified at all belongs to stop or defer. A
+warning that changes no likelihood, impact, detection, or recovery belongs nowhere. Keep the candidate
+here only when the live question is which safeguard changes the risk path enough to justify its burden.
 
 ## When not to use
 Do not use this category for every hypothetical concern, a goal that is merely unclear, or a claim that needs verification rather than protection. Avoid it when the control burden exceeds the plausible consequence or when no owner can maintain it. If the right answer is to abandon an exposure entirely, use stop or defer; if the risk comes from one limiting constraint, use bottleneck.

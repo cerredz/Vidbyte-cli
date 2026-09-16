@@ -25,74 +25,44 @@ A continuation suggestion advances an accepted plan from its current state to th
 
 ## Generation requirements
 
-Every continuation suggestion must advance a plan the caller has already accepted without reopening
-its direction. The proposal should:
+Every continuation suggestion must advance a plan the caller has already accepted without reopening its
+direction. The category exists to protect momentum: when a route has been settled, the expensive failure
+is not moving too slowly but returning to the decision that was already made and paying for it again.
+A continuation therefore inherits the plan's outcome, scope, audience, quality bar, and constraints
+rather than restating or renegotiating them, and its job is to name the next movement that follows from
+what is already done. The step must be bounded on both ends — concrete enough to begin without another
+planning pass, and small enough that the caller can reassess afterwards instead of committing blindly to
+the remainder. Continuation is also where new direction most easily hides, because a step framed as
+routine can carry scope, opportunity, or an unsettled tradeoff inside it, and the proposal has to keep
+that boundary honest. The proposal should:
 
-- Name the accepted outcome, current state, and next movement that follows from completed work.
+- Name the accepted outcome, the current state, and the next movement that follows from completed work.
 - Reuse available information, artifacts, and permissions instead of inventing a new rationale.
 - Keep the scope, audience, quality bar, and constraints of the accepted plan intact.
 - Identify the concrete action that reduces delay between the current step and the next useful result.
 - State the decision or observation that would justify continuing, changing course, or stopping.
-- Use supplied context to distinguish completed, in-progress, blocked, and forbidden work.
 - Avoid hiding a new strategy, opportunity, or unresolved goal inside a supposedly routine next step.
 - Define dependencies and ownership so the next action can begin without another abstract planning pass.
 - Make progress observable through an artifact, state change, handoff, or decision.
-- Keep advancement of the accepted route as the primary mechanism; route final closure, new direction,
-  and major alternatives to their focused categories.
-
-## Candidate shape
-
-Shape the candidate as the next concrete movement on a chosen route. The reader should know what has
-already been accepted, what can happen now, and what signal would justify the following continuation.
-
-- In the **summary**, name the accepted plan, current state, and immediate next movement.
-- In the **action sequence**, use existing inputs, complete one bounded step, inspect its result, and
-  identify the next continuation condition.
-- In **decision points**, distinguish routine execution from a moment that would require reopening the
-  plan or asking for a different authority.
-- In **considerations**, cover timing, dependencies, quality, effort, owner, sequencing, and signals
-  that the plan has become invalid.
-- In **dependencies**, name artifacts, access, approvals, recipients, or prior steps already implied
-  by the accepted plan.
-- In **evidence references**, cite the accepted goal, current status, and completed work; do not cite
-  a new preference as if it were already approved.
-- In **assumptions**, label what the next step relies on and make the smallest uncertainty check part
-  of the action when needed.
-- In the **completion criterion**, require a visible state change that makes the next plan step easier
-  or the need to reassess explicit.
-- If continuing would create a new commitment, stop and route the decision to strategy, alternative,
-  or goal clarification.
-
-## Valid suggestion directions
-
-Use this category for direct advances along an accepted route:
-
-- Execute the next planned artifact, handoff, review, or integration step.
-- Convert a completed prerequisite into the next deliverable.
-- Follow up on an accepted decision with the smallest concrete implementation.
-- Move information, ownership, or output from one completed stage to the next.
-- Run the next scheduled check or communication that keeps the plan moving.
-- Prepare the next action using context already gathered rather than restarting discovery.
-- Close a short sequence of accepted steps when their dependencies are explicit.
-- Record progress so another actor can continue without reconstructing state.
-- Pause at a defined reassessment condition when new evidence could invalidate the route.
-- Preserve scope while reducing the delay between adjacent accepted commitments.
+- Stop at a point where reassessment is still cheap rather than at the end of the remaining plan.
 
 ## Alignment check
 
-The candidate is aligned when it advances an already accepted route and does not require the caller to
-choose a new direction. The action should be concrete, bounded, and grounded in current state. It may
-surface a reassessment condition, but it should not smuggle in a new strategy or opportunity.
+Alignment, for continuation, means the candidate moves accepted work forward from where it actually
+stands. The direction is settled and the caller has momentum; what they need is the next bounded step,
+grounded in the current state rather than in the plan as originally imagined. An aligned candidate reads
+what is done, what is in progress, and what is blocked, and then names one movement that can start now
+and produce something inspectable. It may surface a condition that would justify reassessing later, but
+it does not ask the caller to re-decide the route before acting.
 
-Reject or reroute candidates that:
-
-- Close the final remaining obligation; use completion.
-- Require a disputed goal, route, or tradeoff to be settled first; use goal clarification, alternative, or strategy.
-- Depend on a missing condition that blocks safe progress; use prerequisite or investigation.
-- Add optional scope or adjacent value; use adjacent opportunity or another fitting category.
-- Recommend stopping because continuation is no longer valuable; use stop or defer.
-
-The primary decision must be “what accepted work can move forward from the current state now?”
+The second half of alignment is refusing to smuggle. A step that quietly introduces new scope, a new
+audience, a new opportunity, or an unresolved tradeoff is a direction change wearing the clothes of
+execution, and it costs the caller the momentum this category exists to protect. Closing the last
+remaining obligation is completion; settling a disputed goal, route, or tradeoff is goal clarification,
+alternative, or strategy; a missing condition that blocks safe progress is prerequisite or
+investigation; optional nearby value is adjacent opportunity; and concluding that the work is no longer
+worth advancing is stop or defer. Keep the candidate here only when the live question is what accepted
+work can move forward from the current state now.
 
 ## When not to use
 Do not use this category when the direction is still disputed, the goal is unclear, or a required condition is missing. Avoid it when the proposed step is actually a new opportunity, alternative, or strategy. If the current plan has reached its final obligation, use completion; if continuing is no longer worthwhile, use stop or defer.

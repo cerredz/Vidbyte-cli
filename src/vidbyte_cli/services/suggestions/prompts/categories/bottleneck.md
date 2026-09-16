@@ -26,7 +26,16 @@ A bottleneck suggestion targets the constraint that limits useful progress throu
 ## Generation requirements
 
 Every bottleneck suggestion must identify the limiting point whose movement would change downstream
-flow, quality, or completion. The proposal should:
+flow, quality, or completion. The category exists because effort spent anywhere other than the
+constraint produces activity rather than progress, and that distinction is invisible from inside a busy
+system. The first requirement is therefore diagnostic: the proposal must separate the point that
+governs the flow from the point that is most visible, most complained about, or most overloaded, which
+are frequently different things. It then has to say what kind of constraint it is — capacity,
+dependency, policy, skill, decision authority, resource, or a repeated failure — because the class
+determines what relief is even possible. Relief must be proportionate to the constraint, and the
+proposal has to anticipate where the constraint will move once this one is relieved, since a system
+always has a next limiting point. Because a constraint diagnosis can be wrong, the suggestion needs an
+observable signal that would confirm or refute it. The proposal should:
 
 - Name the system, workflow, or outcome being constrained and the observable flow that matters.
 - Distinguish the governing constraint from a visible inconvenience, symptom, queue, or downstream
@@ -34,69 +43,31 @@ flow, quality, or completion. The proposal should:
 - Explain how the limiting point reduces throughput, quality, learning, or decision speed.
 - Identify whether the constraint is capacity, dependency, policy, skill, decision, resource, or
   repeated failure.
-- Use supplied observations, delays, queues, failure rates, or ownership evidence; label inferred
-  causes as assumptions.
-- Propose a proportionate intervention that increases flow without merely moving the queue elsewhere.
+- Propose a proportionate intervention that increases flow rather than merely moving the queue
+  elsewhere.
 - Account for quality, safety, workload, and the possibility that relief creates a new bottleneck.
 - Define the measure and observation window that would show the constraint moved.
 - Include a fallback if the intervention reveals the presumed constraint was not governing.
-- Keep system-level constraint relief as the primary mechanism; route priority conflicts, prerequisites,
-  and stopping decisions to their focused categories.
-
-## Candidate shape
-
-Shape the candidate as a constraint hypothesis with a causal chain from limiting point to downstream
-result. The proposal should tell an executor what to observe, what to change, and how to find the next
-constraint after relief.
-
-- In the **summary**, name the constrained outcome, suspected bottleneck, and downstream effect.
-- In the **action sequence**, measure the flow, confirm the limiting point, apply a bounded relief,
-  and observe whether throughput or quality changes.
-- In **decision points**, choose which constraint to address, how much capacity or authority to add,
-  and when to stop if the queue moves elsewhere.
-- In **considerations**, cover utilization, wait time, quality, dependency, handoff, safety,
-  ownership, cost, and displacement of work.
-- In **dependencies**, name the data, owner, decision authority, capability, resource, or partner
-  required to alter the constraint.
-- In **evidence references**, cite repeated observations of delay, queue, failure, or capacity;
-  do not treat one frustrating incident as a system bottleneck.
-- In **assumptions**, label the causal link and pair it with a measurement or small intervention.
-- In the **completion criterion**, require evidence that the target flow improved or that the
-  diagnosis changed to a different limiting point.
-- If no repeated constraint can be observed, recommend investigation or verification first.
-
-## Valid suggestion directions
-
-Use this category for moves that increase the flow through a limiting point:
-
-- Remove a repeated approval, handoff, queue, or decision delay.
-- Add capacity, automation, skill, or tooling at the stage that governs throughput.
-- Protect a scarce resource from interruptions or competing work.
-- Resolve a dependency that repeatedly stalls a downstream stage.
-- Reduce rework or failure at the constraint instead of optimizing unconstrained work.
-- Change batch size, sequence, or work-in-progress limits around the bottleneck.
-- Make ownership or escalation explicit where unresolved decisions block flow.
-- Measure whether relieving one constraint exposes the next governing constraint.
-- Stop or defer low-value work that consumes the scarce stage.
-- Improve quality at the limiting point when speed alone would amplify failure.
+- Name who owns the limiting point, since a constraint nobody owns cannot be relieved by a suggestion.
 
 ## Alignment check
 
-The candidate is aligned when relieving one repeated limiting point is expected to improve a larger
-flow, outcome, or quality measure. It must explain why this point governs progress and how relief will
-be observed. A list of slow tasks is not a bottleneck diagnosis unless one constraint has a downstream
-effect.
+Alignment, for bottleneck, means the candidate acts on the one point that governs how much useful work
+gets through. Every system has a slowest stage, and until that stage moves, improvements anywhere else
+accumulate as inventory rather than as output. An aligned candidate therefore argues that a specific
+point is governing — that work waits on it, that quality or decision speed degrades because of it, that
+relieving it would be felt downstream — and proposes relief sized to that constraint. Naming a slow or
+unpleasant task is not a diagnosis. The candidate has to connect the limiting point to a downstream
+effect the caller can observe.
 
-Reject or reroute candidates that:
-
-- Address one isolated claim or incident with no repeated flow effect; use verification or risk prevention.
-- Choose among competing commitments without a governing stage; use prioritization.
-- Name a condition required before work can begin; use prerequisite.
-- Improve a local experience without showing system-level constraint relief; use product experience or simplification.
-- Recommend abandoning work because relief is not worth the cost; use stop or defer.
-
-The primary decision must be whether moving this constraint changes the system rather than merely making
-one task feel easier.
+The second half of alignment is system thinking. Relief moves the constraint rather than removing it,
+so an aligned candidate says where the next limiting point is expected to appear and what would show
+the intervention worked. A single isolated claim or incident with no repeated flow effect belongs to
+verification or risk prevention; a conflict among competing commitments with no governing stage belongs
+to prioritization; a condition that must hold before work can start belongs to prerequisite; a local
+improvement with no system-level effect belongs to product experience or simplification; and a decision
+that relief is not worth the cost belongs to stop or defer. Keep the candidate here only when moving
+this constraint would change the system rather than make one task feel easier.
 
 ## When not to use
 Do not use this category when the problem is a single unverified claim, an unclear goal, or a one-off unfinished task. Avoid it when no repeated constraint or system-level effect can be shown. If several commitments compete for attention, use prioritization; if the work should stop because the constraint is not worth relieving, use stop or defer.

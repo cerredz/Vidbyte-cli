@@ -25,16 +25,13 @@ _CATEGORY_PROMPT_DIR = (
 )
 _REQUIRED_CATEGORY_SECTIONS = (
     "Generation requirements",
-    "Candidate shape",
-    "Valid suggestion directions",
     "Alignment check",
 )
 _CATEGORY_SECTION_MIN_WORDS = {
-    "Generation requirements": 140,
-    "Candidate shape": 150,
-    "Valid suggestion directions": 90,
-    "Alignment check": 110,
+    "Generation requirements": 260,
+    "Alignment check": 200,
 }
+_REMOVED_CATEGORY_SECTIONS = ("Candidate shape", "Valid suggestion directions")
 _FOCUSED_CATEGORY_ANCHORS = {
     "customer_market": ("audience", "problem", "demand"),
     "business_model_monetization": ("value", "payer", "cost"),
@@ -385,6 +382,26 @@ class SuggestionSuite:
         results.check(
             "all category prompts carry the expanded generation contract",
             len(prompt_files) == 36 and contract_sections,
+        )
+        # The handoff already renders the structured candidate shape, so a category asset
+        # that restates it makes the same contract editable in two places.
+        no_removed_sections = all(
+            not _category_section(path.read_text(encoding="utf-8"), heading)
+            for path in prompt_files
+            for heading in _REMOVED_CATEGORY_SECTIONS
+        )
+        # The alignment check explains what alignment means for the category, so it stays
+        # prose; a bullet list there collapses back into the reroute table it replaced.
+        alignment_is_prose = all(
+            not re.search(
+                r"(?m)^\s*-\s",
+                _category_section(path.read_text(encoding="utf-8"), "Alignment check"),
+            )
+            for path in prompt_files
+        )
+        results.check(
+            "category prompts keep category guidance and drop output-shape sections",
+            no_removed_sections and alignment_is_prose,
         )
         focused_anchors = all(
             all(term in (path.read_text(encoding="utf-8")).lower() for term in terms)

@@ -26,7 +26,16 @@ A reframing suggestion offers a different interpretation of the problem that cou
 ## Generation requirements
 
 Every reframing suggestion must offer a different interpretation of the problem that changes what the
-caller can do next. The proposal should:
+caller can do next. The category exists because a problem statement silently determines its own solution
+space: once something is understood as a capacity problem, every available answer is about capacity, and
+the possibility that it was a routing problem never comes up. Repeated symptoms are the usual signal
+that a frame is wrong. A reframe therefore has to name the current interpretation and the assumption
+inside it — about cause, ownership, value, constraint, audience, or outcome — before offering another
+one. The new frame has to be anchored in the same evidence rather than in clever wording, since a
+reinterpretation that fits nothing observable is a slogan. Above all it has to change the action set: if
+the caller's options look the same under both frames, nothing was reframed. And because a frame is a
+hypothesis rather than a discovery, the proposal has to say what would show it is wrong. The proposal
+should:
 
 - State the current frame, repeated symptom, or assumed cause and why it may be limiting action.
 - Offer a materially different frame about cause, ownership, value, constraint, audience, or outcome.
@@ -37,52 +46,26 @@ caller can do next. The proposal should:
 - Keep the reframe connected to the caller's goal and avoid expanding the problem unnecessarily.
 - Account for who may be affected if responsibility, value, or risk is understood differently.
 - Define a small question, observation, or experiment that can reveal whether the new frame is useful.
-- Keep changed interpretation as the primary mechanism; route many novel ideas, transfers, and execution to their focused categories.
-
-## Candidate shape
-
-Shape the candidate as a lens change with an action consequence. The reader should see what the old
-frame hides, what the new frame reveals, and how to test whether it improves the next decision.
-
-- In the **summary**, name the current interpretation, alternative frame, and decision that could change.
-- In the **action sequence**, surface evidence, state the reframe, derive changed options, and run a small test or observation.
-- In **decision points**, choose the causal interpretation, ownership, boundary, and evidence threshold for using it.
-- In **considerations**, cover fit to evidence, action change, incentives, responsibility, risk, dignity, and reversibility.
-- In **dependencies**, name observations, stakeholders, records, or experiments needed to challenge the frame.
-- In **evidence references**, cite the symptom, pattern, or contradiction that motivates the reframe; do not cite the reframe itself.
-- In **assumptions**, label the causal and contextual claims that the new frame requires.
-- In the **completion criterion**, require a changed question, option set, or test that demonstrates whether the frame is useful.
-- If the interpretation is already clear and action is known, use immediate next steps or continuation.
-
-## Valid suggestion directions
-
-Use this category for useful shifts in perspective:
-
-- Reframe an activity as an outcome, constraint, or customer problem.
-- Reassign apparent individual failure to a system, interface, incentive, or ownership pattern when evidence supports it.
-- Treat a repeated symptom as a bottleneck, prerequisite, risk, or decision rather than a task.
-- Change the comparison set, time horizon, beneficiary, or definition of value.
-- Reinterpret a request as a question about authority, trust, learning, or capacity.
-- Surface the tradeoff hidden by a single success metric or familiar narrative.
-- Ask what must be true for the current frame to hold and observe it directly.
-- Use the reframe to propose one action that would not exist under the old interpretation.
-- Preserve the old frame as a competing hypothesis when evidence remains mixed.
 
 ## Alignment check
 
-The candidate is aligned when a changed interpretation alters the available action, decision, or
-tradeoff. It should remain connected to evidence and be testable. Renaming the same recommendation or
-using a metaphor that changes nothing is not reframing.
+Alignment, for reframing, means the candidate changes what the problem is taken to be, and the caller's
+options change with it. The same facts are on the table; what shifts is the interpretation — where the
+cause sits, who owns it, what is actually valuable, which constraint is binding, whose problem it is.
+An aligned candidate makes the current frame visible first, because a frame nobody has articulated
+cannot be traded for another, then offers a different reading and spells out which actions, questions,
+or tradeoffs become available under it. The test is practical: if the caller would do the same things
+under both readings, the candidate has renamed the problem rather than reframed it.
 
-Reject or reroute candidates that:
-
-- Generate many unrelated alternatives; use creative exploration.
-- Borrow a mechanism from another field; use cross-domain.
-- Execute a route whose meaning is already settled; use continuation or immediate next steps.
-- Need factual evidence rather than a changed interpretation; use investigation or verification.
-- Change the broad direction without a specific frame-to-action connection; use strategy.
-
-The primary decision must be which interpretation makes a materially different next action worth testing.
+The second half of alignment is evidential honesty. A reframe is a lens to test, not a truth that has
+been uncovered, so an aligned candidate stays tied to supplied evidence, holds the new interpretation as
+a hypothesis, and names a small observation that would support or reject it. Generating many unrelated
+alternatives belongs to creative exploration; borrowing a working mechanism from another field belongs
+to cross-domain; acting on a route whose meaning is already settled belongs to continuation or immediate
+next steps; needing facts about the world rather than a changed reading belongs to investigation or
+verification; and changing broad direction without a specific frame-to-action link belongs to strategy.
+Keep the candidate here only when the live question is which interpretation makes a materially different
+next action worth testing.
 
 ## When not to use
 Do not use this category when the problem is already well-defined and only needs execution, evidence gathering, or a priority choice. Avoid it when the alternate frame is a metaphor with no changed action or when it merely renames the same problem. If many novel possibilities are needed, use creative exploration; if a tested mechanism comes from another field, use cross-domain.

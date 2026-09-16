@@ -25,8 +25,16 @@ A creative-exploration suggestion deliberately expands the possibility space bey
 
 ## Generation requirements
 
-Every creative-exploration suggestion must expand the possibility space in a bounded way that can
-return to the caller's goal. The proposal should:
+Every creative-exploration suggestion must expand the possibility space in a bounded way that can return
+to the caller's goal. The category exists because a working approach narrows what the caller can even
+imagine: after enough time inside one frame, the remaining options all look like versions of the current
+one. Exploration earns its place by producing contrast, so the proposal has to name the assumption it is
+deliberately violating and change a dimension that actually matters — audience, medium, sequence, scale,
+constraint, resource, or the definition of value — rather than generating wording variants of the same
+idea. The output must stay evaluable: enough connection to the original problem that the caller can tell
+which possibilities are worth anything. And it must be bounded, because idea generation has no natural
+stopping point and will consume whatever time it is given. A selection rule or synthesis step decided up
+front is what turns divergence into a decision rather than a detour. The proposal should:
 
 - Name the assumption, familiar pattern, or narrow possibility space being deliberately varied.
 - Change a meaningful dimension such as audience, medium, sequence, scale, constraint, resource, or
@@ -34,67 +42,29 @@ return to the caller's goal. The proposal should:
 - Explain why the exploration could reveal a useful direction for the stated goal.
 - Use a constraint, exercise, contrast, or generative move that produces inspectable alternatives.
 - Preserve enough connection to the original problem that the output can be evaluated.
-- Use supplied context to anchor the exploration; label imagined scenarios as possibilities rather
-  than facts.
 - Define a selection rule, test, or synthesis step so novelty does not become an unbounded brainstorm.
 - Make the cost, timebox, participation, and stopping point visible.
 - Avoid choosing the winner prematurely when the purpose is to create useful contrast.
-- Keep possibility expansion as the primary mechanism; route a single changed frame, transfer, or
-  execution step to its focused category.
-
-## Candidate shape
-
-Shape the candidate as a bounded exploration that produces contrast and a path back to action. The
-reader should know what will vary, what constraints remain fixed, and how a promising direction will
-be selected.
-
-- In the **summary**, name the original goal, assumption or dimension to vary, and new possibility
-  space the exploration should reveal.
-- In the **action sequence**, set the constraint, generate contrasting options, compare them against
-  the goal, and select a direction for testing or further work.
-- In **decision points**, choose the variation dimension, participation, timebox, selection rule,
-  and threshold for ending exploration.
-- In **considerations**, cover novelty, relevance, diversity, feasibility, inclusion, distraction,
-  evaluation cost, and the risk of returning to familiar answers.
-- In **dependencies**, name context, materials, participants, examples, or a safe space for trying
-  unusual alternatives.
-- In **evidence references**, cite the constraint or assumption being explored; do not present an
-  imagined option as evidence.
-- In **assumptions**, label why a new direction might matter and how selection will expose weak fits.
-- In the **completion criterion**, require a small set of meaningfully different options and a clear
-  next test, choice, or reason to stop.
-- If the route is already chosen and only execution remains, use continuation or immediate next steps.
-
-## Valid suggestion directions
-
-Use this category for structured ways to create useful contrast:
-
-- Vary the audience, user, beneficiary, or context while preserving the core outcome.
-- Change medium, channel, sequence, scale, or resource to expose different mechanisms.
-- Invert an assumption, constraint, ownership model, or definition of success.
-- Combine two distant but relevant patterns without claiming the analogy is proven.
-- Generate deliberately extreme, minimal, reversible, or inclusive versions of the approach.
-- Explore what would make the result valuable to a different participant or setting.
-- Use a timeboxed exercise that produces alternatives before selecting one.
-- Compare options by a small set of caller-relevant criteria rather than personal preference.
-- Prototype the most surprising viable direction to learn whether novelty survives contact with use.
-- Preserve a rejected alternative when it may become useful under changed constraints.
+- Produce possibilities that differ from each other, not only from the current approach.
 
 ## Alignment check
 
-The candidate is aligned when it deliberately expands meaningful possibilities and includes a way to
-select or test what emerges. It should create contrast rather than a list of synonyms. The exploration
-may be imaginative, but its connection to the goal, boundary, and next decision must remain visible.
+Alignment, for creative exploration, means the candidate widens the set of options the caller is
+choosing from. The problem is not that the current approach is failing but that it is the only one in
+view, and the value of this category is contrast: several possibilities that differ from each other in a
+way that makes a later choice better informed. An aligned candidate says which assumption it is varying
+and along what dimension, and produces alternatives concrete enough to compare. A list of near-synonyms
+or restatements is not divergence, and neither is a single new idea presented as an exploration.
 
-Reject or reroute candidates that:
-
-- Ask for one changed interpretation of an existing problem; use reframing.
-- Borrow a mechanism from another field with a concrete transfer; use cross-domain.
-- Execute an already selected route; use continuation or immediate next steps.
-- Verify a claim or test one defined intervention; use verification or experiment.
-- Rank existing commitments without generating possibilities; use prioritization.
-
-The primary decision must be how to create useful divergence before committing to a direction.
+The second half of alignment is the return path. Divergence is only useful if it converges, so an
+aligned candidate carries a boundary — a timebox, a participation limit, a stopping point — and a rule
+for selecting or testing what emerges. Without that it becomes an open-ended detour from the goal that
+motivated it. A single changed interpretation of the existing problem belongs to reframing; a concrete
+mechanism borrowed from another field belongs to cross-domain; executing an already selected route
+belongs to continuation or immediate next steps; checking a claim or testing one defined intervention
+belongs to verification or experiment; and ranking existing commitments without generating anything new
+belongs to prioritization. Keep the candidate here only when the live question is how to create useful
+divergence before committing to a direction.
 
 ## When not to use
 Do not use this category when the caller already has a clear route and needs execution, verification, or prioritization. Avoid it when the request is only for more ideas but no decision, selection rule, or boundary exists. If the desired novelty comes from borrowing a tested mechanism from another field, use cross-domain; if a single interpretation must change, use reframing.

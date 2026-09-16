@@ -30,85 +30,6 @@ or packaging experiment when the evidence is too weak for a permanent model chan
 - **A pricing change needs a safe trial.** A permanent change can damage trust or retention before its
   value is known. Use it when a cohort, pilot, or grandfathering plan can produce evidence.
 
-## Generation requirements
-
-Every business-model-and-monetization suggestion must explain how an offering creates value, how that
-value is captured, and which economic assumption the action will test. Treat price as one part of a
-system that includes users, payers, delivery obligations, incentives, support, and cash timing. The
-proposal should:
-
-- Identify who receives value, who pays, who approves the purchase, and who bears delivery or
-  switching cost when those roles differ.
-- Name the value unit being charged for, such as access, usage, outcome, seat, transaction, service,
-  license, or bundle, and explain why it matches customer value.
-- Connect the proposed price or packaging change to an explicit customer behavior and business
-  outcome rather than treating revenue as the only success measure.
-- Include delivery, support, acquisition, infrastructure, refund, and compliance costs that may
-  scale differently from revenue.
-- State the incentive changes for customers, partners, operators, and the business, including ways
-  the design could encourage waste, gaming, overuse, or distrust.
-- Use only economic evidence in the context; label willingness to pay, margin, elasticity, and
-  retention effects as assumptions when they are not observed.
-- Prefer a reversible cohort, pilot, grandfathering rule, or package comparison when a permanent
-  model change would expose existing customers to avoidable harm.
-- Define an economic metric and a customer-protection metric that could falsify the proposal.
-- Account for fairness, accessibility, procurement, cancellation, refund, and communication duties
-  that affect whether customers can understand and accept the model.
-- Keep value capture as the primary mechanism; route audience discovery, brand meaning, channel
-  access, and post-purchase service mechanisms to their focused categories.
-
-## Candidate shape
-
-Shape the candidate as an economic hypothesis with a bounded way to test it. Another agent should be
-able to see what changes for the customer, what changes for the business, and what would make the
-model unattractive even if top-line revenue increases.
-
-- In the **summary**, name the customer value being captured, the payer or segment, and the pricing,
-  packaging, contract, or business-model change being proposed.
-- In the **action sequence**, map current economics, design the smallest model variant, protect
-  existing customers, run the test, and review the result against pre-set decision rules.
-- In **decision points**, choose the pricing unit, tiers, commitment, payment timing, eligibility,
-  grandfathering, refund, and expansion rules that materially change the model.
-- In **considerations**, cover contribution margin, payback, conversion, retention, expansion,
-  support load, operational capacity, customer fairness, and trust.
-- In **dependencies**, name cost data, a representative cohort, billing capability, contract review,
-  delivery capacity, or an owner who can monitor the experiment.
-- In **evidence references**, cite observed value, usage, cost, retention, pricing, or service data;
-  do not cite revenue growth alone as proof of healthy economics.
-- In **assumptions**, state uncertain willingness to pay, elasticity, behavior, cost, or segment
-  responses and pair each material assumption with a measurement plan.
-- In the **completion criterion**, require an experiment result and a continue, change, or stop
-  decision that includes both economic and customer-protection signals.
-- If the context lacks cost or value evidence, recommend discovery or a low-risk pricing probe rather
-  than inventing a margin, price point, or conversion forecast.
-
-## Valid suggestion directions
-
-Use this category to vary how value is captured and how the model protects sustainable delivery. Keep
-each direction tied to a measurable economic hypothesis rather than a generic request to charge more:
-
-- Replace a poorly aligned pricing unit with one that tracks the value customers actually receive.
-- Compare subscription, usage, transaction, project, license, or outcome-based payment cadences.
-- Segment packages by meaningful differences in value, support, risk, or purchasing authority.
-- Design free, trial, starter, or paid tiers with a credible conversion and expansion path.
-- Bundle product, service, education, support, or implementation around a complete customer outcome.
-- Test a marketplace, licensing, referral, or revenue-share model with explicit participant incentives.
-- Introduce commitment, minimums, credits, or volume rules that improve planning without trapping users.
-- Use cohort pricing, pilots, grandfathering, or staged rollout to limit transition risk.
-- Remove an exception or cost-to-serve pattern that makes otherwise healthy revenue unprofitable.
-- Compare acquisition, delivery, support, refund, and infrastructure costs across model variants.
-- Design renewal, expansion, cancellation, and recovery rules that make continued value visible.
-- Identify a model constraint that protects quality or capacity while demand grows.
-
-## Evidence and assumptions
-
-Do not turn a price request, competitor price, or revenue target into evidence that customers perceive
-value or that the business can deliver profitably. Separate usage from willingness to pay, revenue
-from contribution margin, and conversion from retention. Treat missing cost, cohort, and service data
-as a reason to define a safe test. If the context does not identify the payer or value unit, make that
-uncertainty explicit and propose a discovery step before selecting a number. Every forecast should be
-framed as an assumption with a falsifying metric and a customer-protection guardrail.
-
 ## Things to consider
 
 - What customer value is being charged for, and how often is it received?
@@ -120,32 +41,56 @@ framed as an assumption with a falsifying metric and a customer-protection guard
 - What economic metric would falsify the proposal: margin, payback, conversion, or retention?
 - What bounded cohort or pilot can test the change without trapping existing customers?
 
+## Generation requirements
+
+Every business-model-and-monetization suggestion must explain how an offering creates value, how that
+value is captured, and which economic assumption the action will test. Price is the visible part of a
+system that also includes who receives value, who the payer is, what the business owes in return, what serving
+each customer costs, and when the cash actually arrives. A proposal that moves the number without the
+system produces revenue that does not survive delivery. The value unit is the central choice: charging
+by access, usage, outcome, seat, transaction, service, or bundle decides what customers optimize and
+what they resent, so it has to line up with where they perceive value. Costs that scale differently from
+revenue — support, infrastructure, acquisition, refunds, compliance — determine whether growth improves
+the business or strains it. Model changes also land on existing customers who bought under different
+terms, which makes reversibility, grandfathering, and clear communication part of the design rather than
+afterthoughts. The proposal should:
+
+- Identify who receives value, who pays, who approves the purchase, and who bears delivery or switching
+  cost when those roles differ.
+- Name the value unit being charged for and explain why it matches where the customer perceives value.
+- Connect the proposed price or packaging change to an explicit customer behavior and business outcome
+  rather than treating revenue as the only success measure.
+- Include delivery, support, acquisition, infrastructure, refund, and compliance costs that may scale
+  differently from revenue.
+- State the incentive changes for customers, partners, operators, and the business, including ways the
+  design could encourage waste, gaming, overuse, or distrust.
+- Prefer a reversible cohort, pilot, grandfathering rule, or package comparison when a permanent change
+  would expose existing customers to avoidable harm.
+- Define an economic metric and a customer-protection metric that could falsify the proposal.
+- Account for fairness, accessibility, procurement, cancellation, refund, and communication duties.
+- Keep the model explainable, since a customer who cannot predict their bill cannot commit to it.
+
 ## Alignment check
 
-The candidate is aligned when its primary mechanism changes how an offering creates value, captures
-value, prices access, packages delivery, or sustains the economics of serving customers. The proposal
-must connect the economic change to customer value and delivery cost. A channel, message, product, or
-service artifact may be used to run the test, but the candidate should remain an economic decision
-with explicit safeguards.
+Alignment, for business model and monetization, means the candidate changes the exchange. Value flows to
+someone and money flows back, and this category decides the shape of that trade: what is being sold,
+what unit it is metered in, who pays, when, on what terms, and what the business owes in return. An
+aligned candidate treats price as part of that system rather than a number to adjust, connects the change
+to a customer behavior it expects to see, and counts the costs of delivering what has been sold. Revenue
+alone is not the test. A model that earns more while making each customer more expensive to serve, or
+harder to keep, has moved value rather than created it.
 
-Reject or reroute candidates that:
-
-- Ask which audience has the problem or whether demand exists before a value-capture choice is
-  possible; use customer and market.
-- Change what the offering should mean, promise, or be compared against; use brand and positioning.
-- Add a discovery channel, sales motion, partner route, or checkout improvement while price and
-  packaging remain unchanged; use distribution and sales.
-- Improve onboarding, support, recovery, renewal, or advocacy without changing value capture; use
-  customer relationship and service.
-- Add functionality or redesign an interaction whose primary issue is usability rather than the
-  commercial model; use product and experience.
-- Coordinate several commercial mechanisms without one economic decision being primary; use business
-  and growth.
-
-When several mechanisms appear together, retain this category only when the value-capture or
-delivery-economics choice is the result that determines whether the plan is viable. A new package is
-not automatically monetization if the real uncertainty is whether anyone wants the offer, how it is
-understood, or whether customers can successfully use it after purchase.
+The second half of alignment is protecting the people already inside the model. Existing customers
+bought under different terms, so an aligned candidate carries reversibility, cohort boundaries, or
+grandfathering where a permanent change would harm them, and pairs its economic metric with one that
+would reveal that harm. A channel, message, product, or service artifact may be used to run the test, but
+the candidate stays an economic decision. Establishing whether demand exists at all belongs to customer
+and market; changing what the offering means or is compared against belongs to brand and positioning;
+adding a route to purchase while price and packaging stay fixed belongs to distribution and sales;
+improving onboarding, support, or renewal without changing value capture belongs to customer
+relationship and service; a usability problem belongs to product and experience; and a plan coordinating
+several mechanisms with no primary economic decision belongs to business and growth. Keep the candidate
+here only when the value-capture or delivery-economics choice determines whether the plan is viable.
 
 ## Weak suggestion patterns
 

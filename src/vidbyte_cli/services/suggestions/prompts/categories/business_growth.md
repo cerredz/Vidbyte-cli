@@ -26,66 +26,50 @@ A business and growth suggestion improves reach, sustainability, revenue, custom
 ## Generation requirements
 
 Every business-and-growth suggestion must improve durable commercial or organizational value through
-one or more coordinated mechanisms while preserving customer value and sustainable delivery. The proposal should:
+several coordinated mechanisms while preserving customer value and sustainable delivery. This is the
+umbrella category, and its defining requirement is interaction: it is for the commercial decisions
+whose difficulty comes from the way audience, offer, price, channel, relationship, and capacity pull
+against one another, not from any one of them being wrong. A proposal therefore has to name the
+mechanisms it is coordinating and explain why the coupling between them is the actual decision. Growth
+must trace back to customer value and to the caller's ability to deliver, because volume purchased with
+quality, trust, margin, or staff capacity is not durable. The tradeoffs have to be visible rather than
+implied, since a cross-cutting plan hides its costs in the seams. Where the interaction is uncertain, a
+staged or bounded move is preferred over scaling a commercial plan on a forecast. The proposal should:
 
-- Name the audience, value exchange, growth mechanism, and behavior that would indicate meaningful improvement.
-- Explain whether the primary mechanism is reach, activation, retention, expansion, pricing, distribution, relationship, or operating leverage.
-- Connect growth to a customer problem, outcome, or capacity reality rather than treating volume as value.
+- Name the audience, value exchange, growth mechanisms, and behavior that would indicate meaningful
+  improvement.
+- Explain which mechanisms interact and why coordinating them is the decision rather than optimizing
+  one.
+- Connect growth to a customer problem, outcome, or capacity reality rather than treating volume as
+  value.
 - Make the tradeoff visible across quality, trust, cost, service, margin, access, and opportunity cost.
-- Use supplied evidence about demand, behavior, economics, or capacity; label unsupported forecasts as assumptions.
-- Coordinate several focused mechanisms only when the cross-cutting interaction is itself the decision.
 - Prefer a bounded experiment or staged investment before scaling an uncertain commercial plan.
-- Define owners, dependencies, capacity, and signals that reveal whether growth is healthy and repeatable.
+- Define owners, dependencies, capacity, and signals that reveal whether growth is healthy and
+  repeatable.
 - State what would narrow, change, stop, or redirect the growth plan.
-- Keep cross-cutting commercial improvement as the primary mechanism; route single-mechanism choices to focused categories.
-
-## Candidate shape
-
-Shape the candidate as a commercial system hypothesis rather than a generic request for more users or
-revenue. The reader should know which mechanisms interact, what value is protected, and how sustainable
-growth will be recognized.
-
-- In the **summary**, name the audience, value exchange, coordinated mechanisms, and durable outcome.
-- In the **action sequence**, map the current commercial system, choose a bounded intervention, test the interaction, and review evidence.
-- In **decision points**, choose mechanism mix, priority, owner, capacity, investment, safeguards, and stop conditions.
-- In **considerations**, cover demand, value, acquisition, conversion, retention, margin, service, trust, quality, and capacity.
-- In **dependencies**, name data, teams, partners, product or service capability, authority, and operational readiness.
-- In **evidence references**, cite observed behavior, cost, customer value, or constraint; do not cite top-line ambition as proof.
-- In **assumptions**, label market, economics, capacity, and interaction assumptions with tests or review signals.
-- In the **completion criterion**, require a measurable commercial result plus evidence that quality and trust remain acceptable.
-- If one mechanism determines the choice, use the corresponding focused business category.
-
-## Valid suggestion directions
-
-Use this umbrella category for coordinated commercial moves:
-
-- Combine audience, route, offer, and relationship changes around one durable growth outcome.
-- Resolve an interaction between acquisition, activation, retention, expansion, and service capacity.
-- Stage a commercial investment so evidence from one mechanism informs the next.
-- Build a sustainable growth loop with explicit value, cost, owner, and capacity.
-- Coordinate a partnership, product, message, and support change when no single mechanism is primary.
-- Protect quality and trust while increasing demand or customer value.
-- Choose which commercial constraint or opportunity deserves cross-functional attention.
-- Compare growth paths by durable value rather than attention or revenue alone.
-- Define a review and stop rule for a multi-mechanism commercial plan.
+- Account for the load that growth places on delivery, support, and the people who absorb it.
+- Avoid presenting a single-mechanism change as a coordinated plan by listing mechanisms it does not
+  actually touch.
 
 ## Alignment check
 
-The candidate is aligned when several commercial mechanisms interact and the primary decision is how
-to improve the system as a whole. It must name audience, value, behavior, economics, and capacity. A
-single focused decision should be routed to its narrower category so this umbrella remains useful for
-cross-cutting plans.
+Alignment, for business and growth, means the candidate improves the commercial system as a whole
+rather than one part of it. Several mechanisms — who is served, what is offered, how it is priced, how
+it reaches people, what happens after the sale, how much the business can deliver — are moving at once,
+and the candidate's value comes from resolving how they fit together. An aligned proposal names the
+audience, the value exchange, the behavior that would show improvement, the economics, and the capacity
+that has to absorb it. Growth without customer value or delivery capacity is not durable, so a
+candidate that promises more users or more revenue without saying what those people receive or how they
+are served is not aligned however ambitious it sounds.
 
-Reject or reroute candidates that:
-
-- Primarily discover an audience or problem; use customer and market.
-- Primarily change pricing, packaging, or value capture; use business model and monetization.
-- Primarily change meaning, comparison, or trust; use brand and positioning.
-- Primarily change a route to purchase; use distribution and sales.
-- Primarily improve post-purchase value or service; use customer relationship and service.
-- Primarily improve a product interaction; use product and experience.
-
-The primary decision must be whether coordinating mechanisms produces more durable value than optimizing one in isolation.
+The second half of alignment is knowing when the umbrella is the wrong shape. This category stays
+useful only if single-mechanism decisions are routed to the focused business categories: audience and
+demand discovery to customer and market, value capture and pricing to business model and monetization,
+meaning and comparison to brand and positioning, route to purchase to distribution and sales, and
+post-purchase value to customer relationship and service. A product interaction belongs to product and
+experience, an operating constraint to bottleneck, and a long-range direction with no near-term
+mechanism to long-term directions or strategy. Keep the candidate here only when coordinating
+mechanisms would produce more durable value than optimizing any one of them alone.
 
 ## When not to use
 Do not use this umbrella when one commercial mechanism is the primary decision and a focused category can describe it more precisely. Use customer and market for audience or demand discovery, business model and monetization for value capture, brand and positioning for meaning and comparison, distribution and sales for route to purchase, and customer relationship and service for post-purchase value. Keep this category for cross-cutting growth plans or choices that intentionally combine several mechanisms.

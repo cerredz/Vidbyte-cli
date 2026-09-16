@@ -26,63 +26,47 @@ A learning suggestion targets knowledge or skill that will improve an upcoming r
 ## Generation requirements
 
 Every learning suggestion must build knowledge or skill that improves a real upcoming action, judgment,
-or independence. The proposal should:
+or independence. The category exists because some obstacles are not missing information or missing
+permission but missing capability — the caller could look the answer up and still not be able to do the
+thing. What separates a useful learning suggestion from a detour is the application: naming the task or
+decision where the capability will be exercised, soon enough that the learning is tested rather than
+stored. Size matters as much as subject. The smallest lesson that changes the next action beats a
+curriculum, because breadth defers the moment of application and application is where understanding
+actually forms. The proposal also has to define sufficiency, since learning has no natural endpoint and
+will happily absorb the time that the underlying work needed. Passive exposure is not evidence of
+transfer; something the caller produces or explains is. The proposal should:
 
 - Name the capability gap and the near-term task or decision where it will be applied.
 - Choose the smallest lesson, practice, example, or feedback loop that can make a material difference.
 - Separate learning needed to act safely now from broad curiosity or an open-ended curriculum.
-- Explain how understanding will be demonstrated in the caller's context rather than by passive exposure.
-- Use supplied context to identify repeated difficulty, upcoming demand, or a decision quality gap.
-- Label uncertainty about the right curriculum, teacher, resource, or transfer to practice.
+- Explain how understanding will be demonstrated in the caller's context rather than by passive
+  exposure.
+- Point at the repeated difficulty, upcoming demand, or decision-quality gap that makes the capability
+  worth building.
 - Account for time, cognitive load, prerequisites, accessibility, and the cost of delaying action.
-- Include an application, exercise, artifact, or explanation that reveals whether the capability transferred.
-- Define when learning is sufficient and what future signal would justify deeper investment.
-- Keep capability acquisition as the primary mechanism; route missing access, factual lookup, and reusable organizational assets to their categories.
-
-## Candidate shape
-
-Shape the candidate as an applied learning loop, not a reading list. The reader should know what to
-learn, why now, how to practice, and what evidence shows the new capability is usable.
-
-- In the **summary**, name the capability gap, upcoming application, and value of closing it.
-- In the **action sequence**, choose a focused resource, practice the relevant skill, apply it to the real task, and review the result.
-- In **decision points**, choose depth, resource, practice format, prerequisite, timebox, and sufficiency signal.
-- In **considerations**, cover transfer, retention, feedback, accessibility, effort, confidence, risk, and opportunity cost.
-- In **dependencies**, name a teacher, example, sandbox, source, practice partner, or access needed to learn.
-- In **evidence references**, cite repeated difficulty, upcoming work, or a concrete capability requirement; do not cite curiosity as urgency.
-- In **assumptions**, label the skill gap and expected transfer, then test them through application.
-- In the **completion criterion**, require an applied artifact, successful demonstration, or independent decision that shows useful understanding.
-- If the capability is an immediate prerequisite owned by another actor, use prerequisite or delegation instead.
-
-## Valid suggestion directions
-
-Use this category for targeted capability building:
-
-- Learn the smallest concept needed for an upcoming decision or implementation.
-- Practice a repeated task until the caller can perform or judge it independently.
-- Study an example, failure, or source and reproduce its mechanism in context.
-- Build a short exercise that exposes a specific misconception or skill gap.
-- Pair learning with feedback from a knowledgeable person or representative result.
-- Create a reference, checklist, or worked example that supports future application.
-- Compare two learning resources by their fit to the real task and time available.
-- Use a small project to test whether knowledge transfers beyond explanation.
-- Stop when the capability meets the stated task's quality and independence threshold.
+- Include an application, exercise, artifact, or explanation that reveals whether the capability
+  transferred.
+- Define when the learning is sufficient and what future signal would justify deeper investment.
+- Prefer building the capability once over repeatedly working around its absence.
 
 ## Alignment check
 
-The candidate is aligned when acquiring or practicing knowledge is necessary to improve a real action,
-judgment, or independence. It must include application and evidence of understanding. Reading, watching,
-or browsing alone is not a learning recommendation unless it is part of an applied loop.
+Alignment, for learning, means the candidate closes a capability gap that is limiting real work. The
+caller keeps hitting something they cannot yet do — judge a tradeoff, use a tool, read a system, hold a
+conversation — and looking up the answer does not fix it because the shortfall is skill rather than
+information. An aligned candidate names that gap, ties it to a specific upcoming task or decision, and
+chooses the smallest practice or lesson that would make a difference there. The application is not
+decoration: a recommendation to read, watch, or browse with nothing to produce afterwards leaves the
+caller unable to tell whether anything transferred.
 
-Reject or reroute candidates that:
-
-- Need a factual answer available through a focused search; use investigation or verification.
-- Require another person to provide access, authority, or a prerequisite; use prerequisite or delegation.
-- Build a reusable organizational asset for many consumers rather than one capability; use leverage.
-- Delay a safe immediate action without a clear transfer benefit.
-- Recommend a broad curriculum without a task, practice, or sufficiency signal.
-
-The primary decision must be what capability changes the next real action and how the caller will prove it is usable.
+The second half of alignment is proportion and boundary. Learning competes directly with doing, so an
+aligned candidate says when the capability is sufficient and what later signal would justify going
+deeper; without that it delays safe, available action indefinitely. A factual answer reachable by a
+focused search belongs to investigation or verification. A missing access, authority, or precondition
+that another person controls belongs to prerequisite or delegation, and a reusable asset built for many
+consumers rather than one person's capability belongs to leverage. A broad curriculum with no task,
+practice, or sufficiency signal belongs nowhere. Keep the candidate here only when the live question is
+which capability changes the next real action and how the caller will prove it is usable.
 
 ## When not to use
 Do not use this category when the missing issue is a fact that can be quickly investigated or a prerequisite that someone else must provide. Avoid it when learning would only delay a safe action or when no application and proof of understanding can be named. If the capability is needed immediately to unblock work, use prerequisite; if the goal is to capture a reusable organizational asset, use leverage.

@@ -30,85 +30,6 @@ advocacy behavior.
 - **Support cost grows faster than customers.** More demand can overwhelm a human service model.
   Use the lens when self-service, automation, or segmentation can preserve quality.
 
-## Generation requirements
-
-Every customer-relationship-and-service suggestion must improve the value, trust, or continuity a
-customer receives after joining, buying, or becoming dependent on an offering. Treat service as a
-relationship with outcomes and capacity, not as a count of contacts. The proposal should:
-
-- Name the lifecycle moment, customer goal, failure, confusion, disappointment, inactivity, or
-  success that makes the relationship intervention worthwhile.
-- Distinguish onboarding, education, support, account care, recovery, renewal, expansion, and
-  advocacy so the action targets the correct moment.
-- Connect the service change to customer value, effort, trust, accessibility, privacy, or continuity
-  rather than optimizing response volume or sentiment alone.
-- Explain whether the change solves a recurring cause, improves a human interaction, routes work,
-  creates self-service, or makes ongoing value visible.
-- Account for staffing, tooling, escalation, service levels, training, and the cost of delivering the
-  promise consistently at the expected scale.
-- Use only supplied evidence about customer outcomes, contacts, failures, retention, renewal, or
-  support load; label unverified causes and future behavior as assumptions.
-- Protect customers from coercive engagement, hidden effort, privacy overreach, inaccessible support,
-  and automation that removes necessary human judgment.
-- Define an observable customer and operating signal, such as time-to-value, resolution, recurrence,
-  retention, renewal, recovery, or earned advocacy.
-- Propose a bounded service, onboarding, recovery, or relationship experiment with a clear owner and
-  escalation path.
-- Keep post-purchase value and trust as the primary mechanism; route acquisition, pricing, promise,
-  and standalone interaction design to their focused categories.
-
-## Candidate shape
-
-Shape the candidate as a relationship hypothesis tied to a lifecycle moment and a customer outcome.
-Another agent should be able to see what the customer is trying to accomplish, where the relationship
-breaks, what service changes, and how quality and cost will be monitored.
-
-- In the **summary**, name the customer moment, recurring difficulty or opportunity, service
-  intervention, and intended outcome.
-- In the **action sequence**, observe the journey, identify the source of failure or value loss,
-  design the intervention, pilot it with safeguards, and review customer and operating signals.
-- In **decision points**, choose human versus self-service support, routing, education, escalation,
-  service promise, audience eligibility, and recovery authority.
-- In **considerations**, cover time-to-value, resolution, recurrence, effort, trust, accessibility,
-  privacy, staffing, capacity, retention, renewal, and advocacy.
-- In **dependencies**, name support or account owners, customer access, help content, product data,
-  escalation authority, service tooling, or a capacity commitment.
-- In **evidence references**, cite observed customer outcomes, support patterns, failure reports,
-  renewal behavior, or capacity limits; do not cite contact volume as proof of value.
-- In **assumptions**, identify uncertain root causes, customer preferences, service capacity, or
-  retention effects and pair each important assumption with an observation or pilot.
-- In the **completion criterion**, require a measured customer outcome, an operating result, and a
-  decision about whether to adopt, revise, or stop the relationship change.
-- If the problem is a standalone product interaction with no ongoing relationship mechanism, route it
-  to product and experience instead of adding service layers.
-
-## Valid suggestion directions
-
-Use this category to vary how continued value and trust are created after purchase or adoption. Keep
-each direction tied to a lifecycle problem and a customer outcome:
-
-- Shorten onboarding to the first meaningful outcome without hiding necessary setup or risk.
-- Replace repeated support symptoms with education, product feedback, routing, or root-cause repair.
-- Make ongoing value visible through checkpoints, summaries, coaching, or outcome reviews.
-- Design respectful reminders or follow-through support for customers who lose momentum.
-- Improve failure acknowledgement, recovery, escalation, compensation, and prevention.
-- Separate self-service, automation, specialist, and human care by issue complexity and customer need.
-- Standardize service quality across channels while preserving judgment for exceptional cases.
-- Clarify renewal or expansion value before a customer must decide whether to continue.
-- Create an earned advocacy moment after a customer achieves a meaningful outcome.
-- Reduce support cost by preventing recurrence rather than making customers work harder to get help.
-- Improve account or relationship ownership when customers repeat their story across teams.
-- Test a service-level promise that the organization can actually deliver at the expected volume.
-
-## Evidence and assumptions
-
-Do not equate more messages, faster replies, or higher contact volume with a healthier relationship.
-Separate customer-reported symptoms from the cause the service change is meant to address. Do not
-invent why customers churn, what support capacity exists, or whether automation will preserve trust.
-When the evidence is thin, observe a lifecycle moment, review representative cases, or run a small
-pilot with an escalation path. State what customer behavior and operating cost would support or weaken
-the proposal. Preserve privacy and accessibility as constraints, not optional improvements.
-
 ## Things to consider
 
 - How quickly should a new customer experience the first meaningful value?
@@ -120,30 +41,60 @@ the proposal. Preserve privacy and accessibility as constraints, not optional im
 - What support cost and staffing capacity scale with the proposed relationship?
 - What behavior would show healthy renewal, continued value, or an earned recommendation?
 
+## Generation requirements
+
+Every customer-relationship-and-service suggestion must improve the value, trust, or continuity a
+customer receives after joining, buying, or becoming dependent on an offering. The category exists
+because the sale is the beginning of an obligation: what the customer actually experiences afterwards —
+whether they reach the outcome they paid for, what happens when something fails, whether staying is
+easier than leaving — decides renewal, reputation, and referral far more than the purchase did. Service
+is a relationship with outcomes and capacity, not a count of contacts, so the proposal has to name the
+lifecycle moment it acts on and the customer goal at that moment. Different moments need different
+interventions, and blurring onboarding, support, recovery, renewal, and advocacy together produces
+action aimed at none of them. Delivering a service promise consistently costs staffing, tooling,
+training, and escalation, and a proposal that omits those is promising something the business cannot
+repeat. Customers are also vulnerable here, so the design must not rely on hidden effort, coercive
+engagement, or automation that removes judgment people need. The proposal should:
+
+- Name the lifecycle moment, customer goal, failure, confusion, disappointment, inactivity, or success
+  that makes the intervention worthwhile.
+- Distinguish onboarding, education, support, account care, recovery, renewal, expansion, and advocacy
+  so the action targets the correct moment.
+- Connect the service change to customer value, effort, trust, accessibility, privacy, or continuity
+  rather than optimizing response volume or sentiment alone.
+- Explain whether the change solves a recurring cause, improves a human interaction, routes work,
+  creates self-service, or makes ongoing value visible.
+- Account for staffing, tooling, escalation, service levels, training, and the cost of delivering the
+  promise consistently at the expected scale.
+- Protect customers from coercive engagement, hidden effort, privacy overreach, inaccessible support,
+  and automation that removes necessary human judgment.
+- Define an observable customer and operating signal such as time-to-value, resolution, recurrence,
+  retention, renewal, recovery, or earned advocacy.
+- Propose a bounded service, onboarding, recovery, or relationship experiment with a clear owner and
+  escalation path.
+- Prefer removing the cause of contact over handling the contact more efficiently.
+
 ## Alignment check
 
-The candidate is aligned when its primary mechanism improves value, trust, continuity, or service
-quality after a customer joins, buys, or begins relying on the offering. It should name a lifecycle
-moment and a customer outcome, not merely recommend more communication. Product, pricing, and channel
-artifacts may support the intervention, but the central change must concern the ongoing relationship
-and the cost or quality of delivering it.
+Alignment, for customer relationship and service, means the candidate improves what happens after the
+customer is already in. They have bought, joined, or come to depend on the offering, and the live
+questions are whether they reach the value they were promised, how the relationship handles failure and
+confusion, and whether continuing is worth it to them. An aligned candidate names the lifecycle moment —
+onboarding, education, support, account care, recovery, renewal, expansion, advocacy — and the customer
+outcome at that moment, then changes something that moves it. Recommending more communication is not an
+intervention; the substance is which moment gets better and how the customer would notice.
 
-Reject or reroute candidates that:
-
-- Acquire prospects or create the initial route to purchase; use distribution and sales.
-- Change price, packaging, payment timing, or value capture; use business model and monetization.
-- Define an unknown audience, problem, or market before the relationship begins; use customer and
-  market.
-- Change the remembered promise or comparison frame; use brand and positioning.
-- Fix a standalone interface, feature, or task interaction without an ongoing service mechanism; use
-  product and experience.
-- Combine acquisition, monetization, positioning, and retention into a broad commercial plan; use
-  business and growth.
-
-When several mechanisms appear together, keep the candidate here only when the post-purchase
-relationship or service outcome is the decision that determines whether the plan works. A reminder,
-feature, or discount is only a supporting instrument; the candidate must show how it changes ongoing
-value or trust without shifting the central problem to acquisition, pricing, or standalone usability.
+The second half of alignment is delivery capacity and the customer's protection. A service promise that
+staffing, tooling, escalation, or training cannot sustain fails worse than no promise, so an aligned
+candidate counts that cost and carries an owner and an escalation path. It also refuses designs that buy
+retention through hidden effort, coercive engagement, or automation that strands people who need
+judgment. Acquiring prospects or creating the route to purchase belongs to distribution and sales;
+changing price, packaging, or value capture belongs to business model and monetization; establishing an
+unknown audience or problem belongs to customer and market; changing the remembered promise belongs to
+brand and positioning; a standalone interface or task interaction with no ongoing service mechanism
+belongs to product and experience; and a combined commercial plan belongs to business and growth. Keep
+the candidate here only when the post-purchase relationship or service outcome determines whether the
+plan works.
 
 ## Weak suggestion patterns
 

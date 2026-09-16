@@ -89,7 +89,7 @@ Nested folders:
 
 | ID | Rule | Protected contract |
 |---|---|---|
-| C004 | suggestion-category-prompt-structure | Every suggestion category prompt has one title, a 6-8 sentence Description, and 8-10 Things to consider bullets, with no Timeline or Checklist section. |
+| C004 | suggestion-category-prompt-structure | Every suggestion category prompt has one title, a 6-8 sentence Description, 8-10 Things to consider bullets, and a prose Alignment check, with no Timeline, Checklist, Candidate shape, or Valid suggestion directions section. |
 | C005 | suggestion-help-section-depth | Every dynamic suggestion string/path input has a named Markdown asset with Purpose, boundaries, inputs, defaults, output, usage, examples, related commands, failure modes, and authentication sections; each section has 6-8 sentences and at least 100 words. |
 | C001 | command-help-description-depth | Every `click` command and option carries at least four substantial sentences of `help=`, and every positional argument is named in its command's help — because Click has no `help=` for arguments. Agents read `--help` once and have nothing else. |
 | C002 | paid-execute-comment-density | The method that calls an `admit_*` endpoint carries at least ten comment blocks — because it is the one method where a reordering spends a user's money, and the free-then-admit-then-verify-then-run ordering is load-bearing but invisible in the calls themselves. |

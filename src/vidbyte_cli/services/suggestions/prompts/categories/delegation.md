@@ -26,70 +26,48 @@ A delegation suggestion moves a defined piece of work to the person or agent bes
 ## Generation requirements
 
 Every delegation suggestion must move suitable execution to a capable recipient while preserving the
-caller's accountability for decisions that matter. The proposal should:
+caller's accountability for the decisions that matter. The category exists because attention is the
+caller's scarcest resource, and work that only needs capability rather than the caller's specific
+judgment is where that attention leaks. The first requirement is therefore a clean cut: which part of
+the work is judgment, authority, risk, or quality definition — and stays — and which part is execution,
+preparation, or information gathering that can move. The handoff then has to be specified well enough
+that the recipient can succeed without repeated interpretation, because vague delegation returns as
+rework and costs more than doing it directly. Delegation is not free: explanation and review have a
+price, and a handoff smaller than that price is a loss. Accountability does not move with the work, so
+the proposal has to say what the caller still owns and how divergence is caught early. The proposal
+should:
 
 - Separate judgment, authority, and quality decisions that must remain with the caller from execution
   another person or agent can perform.
 - Name a responsible recipient with the capability, capacity, context, and authority to accept the work.
 - Define the result, scope, constraints, inputs, format, deadline, and acceptance conditions clearly.
-- Make the handoff small enough that explanation and review cost do not exceed the benefit.
+- Make the handoff large enough that explanation and review cost less than the attention it releases.
 - Preserve privacy, safety, access, and escalation boundaries that the recipient must not cross.
-- Use supplied context to identify available work, recipient, and caller commitments; label capability
-  or capacity assumptions and verify them before relying on the handoff.
-- Define a feedback and review path that catches divergence without requiring the caller to redo the work.
+- Define a feedback and review path that catches divergence without requiring the caller to redo the
+  work.
 - State what the caller retains: outcome ownership, approval, risk decisions, or final acceptance.
 - Make completion observable through a delivered artifact, decision, or accepted handoff.
-- Keep transfer of execution with retained accountability as the primary mechanism; route shared
-  dependencies to coordination and missing capability to learning or prerequisite.
-
-## Candidate shape
-
-Shape the candidate as an executable handoff with explicit boundaries. The reader should know who does
-what, why that recipient is suitable, what support is available, and how the caller will know the work is acceptable.
-
-- In the **summary**, name the work to transfer, recipient, retained judgment, and expected benefit.
-- In the **action sequence**, prepare context, make the request, confirm acceptance, review the result,
-  and close or escalate the handoff.
-- In **decision points**, choose recipient, authority, quality bar, review depth, deadline, and recovery
-  path if the work is late or wrong.
-- In **considerations**, cover explanation cost, capacity, skill, trust, privacy, safety, autonomy,
-  feedback, rework, and caller attention.
-- In **dependencies**, name inputs, access, tools, examples, decisions, or permissions the recipient needs.
-- In **evidence references**, cite the task boundary, recipient capability, or prior handoff evidence;
-  do not assume willingness or availability.
-- In **assumptions**, label unknown skill, capacity, interpretation, and quality risks with a confirmation step.
-- In the **completion criterion**, require a usable result accepted by the accountable caller or an explicit escalation.
-- If no recipient can own the result, make the next action finding that owner rather than pretending delegation exists.
-
-## Valid suggestion directions
-
-Use this category for bounded transfers of execution:
-
-- Delegate repetitive preparation, collection, formatting, or routine analysis.
-- Transfer a well-specified artifact while keeping approval or risk judgment with the caller.
-- Use an agent or specialist for a task where its capabilities match the bounded result.
-- Create a handoff packet with examples, constraints, acceptance, and escalation.
-- Delegate follow-up, monitoring, or reconciliation with a defined reporting signal.
-- Split execution from decision ownership so a bottlenecked caller retains only high-value judgment.
-- Assign a recurring operating task after validating capacity and recovery conditions.
-- Establish a review checkpoint that prevents silent divergence without duplicating the work.
-- Return a task to the caller when authority, privacy, or uncertainty makes delegation unsafe.
+- Give the recipient the context and authority the work actually needs, not only the task description.
 
 ## Alignment check
 
-The candidate is aligned when execution can move to a named capable recipient while the caller retains
-the judgment, authority, and accountability that cannot be transferred. It must specify the result and
-feedback path. “Ask someone else” is not delegation without a bounded handoff.
+Alignment, for delegation, means the candidate relocates work without relocating responsibility. Some
+part of what the caller is holding does not require the caller specifically — it requires capability,
+capacity, or access that someone else has — and moving it frees attention for the part that does. An
+aligned candidate makes that cut explicit, names a recipient who can actually accept the work, and
+specifies the result, boundaries, and acceptance conditions closely enough that the recipient can finish
+without coming back for interpretation. Telling the caller to ask someone else is not delegation; the
+bounded handoff is the whole substance of the suggestion.
 
-Reject or reroute candidates that:
-
-- Need alignment among several owners or dependencies; use coordination.
-- Require capability that no recipient currently has; use learning or prerequisite.
-- Require the caller's unique judgment at every step, leaving no meaningful execution to transfer.
-- Are too small for handoff cost to be worthwhile; use immediate next steps or completion.
-- Hide an unclear goal or acceptance condition; use goal clarification before delegation.
-
-The primary decision must be what work can safely move elsewhere while accountability remains explicit.
+The second half of alignment is economics and retained ownership. Explaining and reviewing a task costs
+real attention, so a handoff smaller than that cost is a loss, and a handoff with no review path returns
+as rework. An aligned candidate says what the caller still owns — approval, risk decisions, final
+acceptance — and how divergence surfaces before it is expensive. Work needing several owners to agree
+belongs to coordination; work needing a capability nobody currently has belongs to learning or
+prerequisite; work requiring the caller's judgment at every step has nothing to transfer; and work too
+small to be worth explaining belongs to immediate next steps or completion. An unclear goal or
+acceptance condition has to be settled in goal clarification first. Keep the candidate here only when
+the live question is what can safely move elsewhere while accountability stays explicit.
 
 ## When not to use
 Do not use this category when the work requires the caller’s unique judgment at every step or when no responsible recipient exists. Avoid it when the handoff would be more expensive than completing the small task or when accountability would become ambiguous. If the real issue is unclear ownership among several interdependent parties, use coordination; if the capability is missing, use learning or prerequisite.
