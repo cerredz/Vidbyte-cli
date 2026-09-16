@@ -409,7 +409,6 @@ Complete list of every file that will be created or modified:
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/library.py` | Append the packaged rubric to the critic system prompt. |
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/revision.md` | Tell the generator to consume rubric assessments during repair. |
 | MODIFY | `src/vidbyte_cli/types/suggestions.py` | Add typed rubric ratings, assessment items, and the nested critique rubric. |
-| MODIFY | `src/vidbyte_cli/services/suggestions/service.py` | Bump the suggestion prompt version carried by results. |
 | MODIFY | `scripts/run_ci.py` | Verify the new prompt is present in the built wheel. |
 | MODIFY | `scripts/test_suggestions.py` | Update the existing offline fake critique to satisfy the required rubric artifact. |
 
@@ -481,4 +480,3 @@ No new external service or runtime dependency is introduced.
 - What: Ask another model to summarize the rubric before revision.
 - Why rejected: The existing critique artifact already travels to the generator, so another call adds
   latency, cost, and an unnecessary opportunity for diagnostic drift.
-
