@@ -66,6 +66,8 @@ _WHEEL_RUNTIME_PROMPTS = (
             "max_output_tokens",
             "max_total_tokens",
             "timeout",
+            "max_agent_calls",
+            "max_tool_calls",
             "dry_run",
             "mistakes",
             "forbidden",

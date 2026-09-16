@@ -41,6 +41,8 @@ _EXTRA_COMPUTE_HELP = _HELP.load("extra_compute")
 _MAX_OUTPUT_TOKENS_HELP = _HELP.load("max_output_tokens")
 _MAX_TOTAL_TOKENS_HELP = _HELP.load("max_total_tokens")
 _TIMEOUT_HELP = _HELP.load("timeout")
+_MAX_AGENT_CALLS_HELP = _HELP.load("max_agent_calls")
+_MAX_TOOL_CALLS_HELP = _HELP.load("max_tool_calls")
 _DRY_RUN_HELP = _HELP.load("dry_run")
 _MISTAKES_HELP = _HELP.load("mistakes")
 _FORBIDDEN_HELP = _HELP.load("forbidden")
@@ -126,6 +128,20 @@ class SuggestRunCommand:
         )
         @click.option(
             "--timeout-seconds", type=click.IntRange(1, 86400), default=None, help=_TIMEOUT_HELP
+        )
+        @click.option(
+            "--max-agent-calls",
+            type=click.IntRange(1, 128),
+            default=64,
+            show_default=True,
+            help=_MAX_AGENT_CALLS_HELP,
+        )
+        @click.option(
+            "--max-tool-calls",
+            type=click.IntRange(1, 256),
+            default=64,
+            show_default=True,
+            help=_MAX_TOOL_CALLS_HELP,
         )
         @click.option("--dry-run", is_flag=True, default=False, help=_DRY_RUN_HELP)
         @click.pass_obj

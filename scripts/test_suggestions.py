@@ -262,6 +262,8 @@ def _request(
     extra_compute: bool = False,
     rounds: int = 1,
     items: tuple[SuggestionContextItem, ...] = (),
+    max_agent_calls: int = 64,
+    max_tool_calls: int = 64,
 ) -> SuggestionRequest:
     goal = "Ship the first suggestion agent release"
     manifest = tuple(
@@ -288,6 +290,8 @@ def _request(
             categories=categories,
             extra_compute=extra_compute,
             rounds=rounds,
+            max_agent_calls=max_agent_calls,
+            max_tool_calls=max_tool_calls,
         ),
     )
 
@@ -481,6 +485,23 @@ class SuggestionSuite:
             and incomplete.returned_count == 4
             and bool(incomplete.warnings),
         )
+        agent_limited = SuggestionService(sdk=FakeSdk()).run(
+            _request(max_agent_calls=1, items=(_item(),))
+        )
+        results.check(
+            "agent-call cap stops before creating the next turn",
+            agent_limited.stop_reason.value == "agent_call_limit"
+            and agent_limited.returned_count == 4,
+        )
+        tool_limited = SuggestionService(sdk=FakeSdk(revision=True)).run(
+            _request(rounds=2, max_tool_calls=1, items=(_item(),))
+        )
+        results.check(
+            "tool-call cap discards an incomplete working copy",
+            tool_limited.stop_reason.value == "tool_call_limit"
+            and tool_limited.returned_count == 4
+            and tool_limited.ideas[0].revision == 1,
+        )
 
     def check_extra_compute(self) -> None:
         results = self.results
@@ -576,6 +597,12 @@ class SuggestionSuite:
             and "--handoff-file" not in help_result.stdout
             and "--artifact-file" not in help_result.stdout
             and "--input" not in help_result.stdout,
+        )
+        results.check(
+            "execution guardrail controls are visible",
+            help_result.returncode == 0
+            and "--max-agent-calls" in help_result.stdout
+            and "--max-tool-calls" in help_result.stdout,
         )
         categories = _run_cli(["--json", "agents", "suggest", "categories", "--view-all"])
         try:

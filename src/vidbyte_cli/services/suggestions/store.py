@@ -10,6 +10,10 @@ from ...types.suggestions import SuggestionDraft, SuggestionIdea, SuggestionRequ
 from .handoff import SuggestionHandoffBuilder
 
 
+class ToolCallLimitReached(Exception):
+    """Signals that a curation pass exhausted its run-local tool budget."""
+
+
 class SuggestionStore:
     """Provides copy-on-write suggestion state to the tool-enabled generator."""
 
@@ -18,6 +22,7 @@ class SuggestionStore:
         self._request = request
         self._categories = frozenset(categories)
         self._allowed_evidence = self._evidence_refs(request)
+        self._max_tool_calls = request.settings.max_tool_calls
         self._handoffs = SuggestionHandoffBuilder()
         self._ideas: dict[str, SuggestionIdea] = {}
         self._tool_calls = 0
@@ -40,6 +45,7 @@ class SuggestionStore:
         """Returns an isolated copy whose mutations are not yet committed."""
         copied = SuggestionStore(self._request, tuple(self._categories))
         copied._ideas = dict(self._ideas)
+        copied._max_tool_calls = self._max_tool_calls
         copied._tool_calls = self._tool_calls
         copied._more_requests = self._more_requests
         copied._mutations = self._mutations
@@ -139,8 +145,8 @@ class SuggestionStore:
 
     def _begin_tool_call(self) -> None:
         """Counts an attempted tool call and enforces the run-local cap."""
-        if self._tool_calls >= 64:
-            raise ValueError("suggestion tool-call cap reached")
+        if self._tool_calls >= self._max_tool_calls:
+            raise ToolCallLimitReached("suggestion tool-call cap reached")
         self._tool_calls += 1
 
     def _existing_update(self, suggestion: SuggestionDraft) -> SuggestionIdea | None:
@@ -189,4 +195,4 @@ class SuggestionStore:
         return frozenset(refs or {item.ref for item in request.context_items})
 
 
-__all__ = ["SuggestionStore"]
+__all__ = ["SuggestionStore", "ToolCallLimitReached"]
