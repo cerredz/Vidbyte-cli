@@ -23,5 +23,50 @@ A big bet is an ambitious move with unusually high potential upside and meaningf
 - Which external conditions make the timing unusually favorable or dangerous?
 - Who has authority to place the bet and who bears the downside?
 
+## Generation requirements
+
+Every big-bet suggestion must connect a substantial commitment to a correspondingly meaningful upside
+and make the uncertainty survivable. The category exists for moves whose scale, irreversibility, or
+exposure puts them beyond ordinary next-step advice, so the first requirement is proportion: the
+possible gain has to be large enough that incremental work would not reach it, and the commitment has
+to be large enough that placing it wrongly would hurt. Ambition alone does not qualify. A big bet needs
+a thesis — a specific reason the caller has a credible claim on this opportunity now rather than at any
+other time — and a named central uncertainty that the thesis could be wrong about. Because the downside
+is real, the proposal must keep the caller solvent while the bet is tested: current obligations
+protected, exposure staged, and the authority to stop held by someone. A bounded probe is preferred
+wherever one can genuinely reduce the uncertainty, but the proposal must be honest about what the probe
+cannot learn. The proposal should:
+
+- Name the outcome that could materially improve and explain why incremental work is unlikely to reach
+  it.
+- Describe the scale of commitment in time, money, people, reputation, capability, or opportunity cost
+  without inventing quantities absent from context.
+- Identify the central uncertainty and the concrete downside if the bet is wrong.
+- Explain why the caller has a credible right to test this opportunity now.
+- Preserve current obligations and define what must not be sacrificed while the bet is explored.
+- Separate a bounded probe from the full commitment and state what the probe can actually learn.
+- Define decision gates, reversibility, kill criteria, and the authority for increasing exposure.
+- Account for affected customers, partners, staff, safety, trust, and operational capacity.
+- Describe what a partial success looks like, so the bet can be reduced rather than only won or lost.
+
+## Alignment check
+
+Alignment, for big bets, means the candidate is a consequential wager rather than an energetic plan.
+Two things have to be large at once: the upside, measured against the caller's current goal, and the
+exposure — the money, time, reputation, capability, or optionality that would be spent and not
+recovered. A candidate with a large upside and no real commitment is an ordinary improvement, and a
+candidate with a large commitment and no distinctive upside is simply an expensive way to stay where
+the caller already is. The proposal also has to admit what it does not know. A bet whose outcome is
+predictable is not a bet, and one whose central uncertainty is left unnamed cannot be staged, gated, or
+stopped.
+
+The second half of alignment is governance. Because the exposure is meaningful, an aligned candidate
+carries decision gates, kill criteria, and an owner with the authority to halt it; without those, scale
+is recklessness rather than a bet. Small, low-risk improvements belong to quick wins or immediate next
+steps. A choice among ordinary routes without unusual upside belongs to alternative or strategy, a
+proportionate control for one specific exposure belongs to risk prevention, and open-ended generation
+of possibilities without a selected thesis belongs to creative exploration. Keep the candidate here
+only when the live decision is whether and how to place a bounded, consequential bet.
+
 ## When not to use
 Do not use this category for ordinary improvements, speculative ideas with no material upside, or proposals whose cost has not been bounded. Avoid it when a small experiment can answer the key question before any large commitment. If the issue is selecting a broad direction among several viable paths, use strategy; if it is preventing a specific failure, use risk prevention.

@@ -23,5 +23,50 @@ A learning suggestion targets knowledge or skill that will improve an upcoming r
 - What can be deferred until after the immediate commitment?
 - What future action, judgment, or independence should improve?
 
+## Generation requirements
+
+Every learning suggestion must build knowledge or skill that improves a real upcoming action, judgment,
+or independence. The category exists because some obstacles are not missing information or missing
+permission but missing capability — the caller could look the answer up and still not be able to do the
+thing. What separates a useful learning suggestion from a detour is the application: naming the task or
+decision where the capability will be exercised, soon enough that the learning is tested rather than
+stored. Size matters as much as subject. The smallest lesson that changes the next action beats a
+curriculum, because breadth defers the moment of application and application is where understanding
+actually forms. The proposal also has to define sufficiency, since learning has no natural endpoint and
+will happily absorb the time that the underlying work needed. Passive exposure is not evidence of
+transfer; something the caller produces or explains is. The proposal should:
+
+- Name the capability gap and the near-term task or decision where it will be applied.
+- Choose the smallest lesson, practice, example, or feedback loop that can make a material difference.
+- Separate learning needed to act safely now from broad curiosity or an open-ended curriculum.
+- Explain how understanding will be demonstrated in the caller's context rather than by passive
+  exposure.
+- Point at the repeated difficulty, upcoming demand, or decision-quality gap that makes the capability
+  worth building.
+- Account for time, cognitive load, prerequisites, accessibility, and the cost of delaying action.
+- Include an application, exercise, artifact, or explanation that reveals whether the capability
+  transferred.
+- Define when the learning is sufficient and what future signal would justify deeper investment.
+- Prefer building the capability once over repeatedly working around its absence.
+
+## Alignment check
+
+Alignment, for learning, means the candidate closes a capability gap that is limiting real work. The
+caller keeps hitting something they cannot yet do — judge a tradeoff, use a tool, read a system, hold a
+conversation — and looking up the answer does not fix it because the shortfall is skill rather than
+information. An aligned candidate names that gap, ties it to a specific upcoming task or decision, and
+chooses the smallest practice or lesson that would make a difference there. The application is not
+decoration: a recommendation to read, watch, or browse with nothing to produce afterwards leaves the
+caller unable to tell whether anything transferred.
+
+The second half of alignment is proportion and boundary. Learning competes directly with doing, so an
+aligned candidate says when the capability is sufficient and what later signal would justify going
+deeper; without that it delays safe, available action indefinitely. A factual answer reachable by a
+focused search belongs to investigation or verification. A missing access, authority, or precondition
+that another person controls belongs to prerequisite or delegation, and a reusable asset built for many
+consumers rather than one person's capability belongs to leverage. A broad curriculum with no task,
+practice, or sufficiency signal belongs nowhere. Keep the candidate here only when the live question is
+which capability changes the next real action and how the caller will prove it is usable.
+
 ## When not to use
 Do not use this category when the missing issue is a fact that can be quickly investigated or a prerequisite that someone else must provide. Avoid it when learning would only delay a safe action or when no application and proof of understanding can be named. If the capability is needed immediately to unblock work, use prerequisite; if the goal is to capture a reusable organizational asset, use leverage.

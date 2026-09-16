@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -18,6 +19,41 @@ from typing import Any
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
+
+_CATEGORY_PROMPT_DIR = (
+    REPOSITORY_ROOT / "src" / "vidbyte_cli" / "services" / "suggestions" / "prompts" / "categories"
+)
+_REQUIRED_CATEGORY_SECTIONS = (
+    "Generation requirements",
+    "Alignment check",
+)
+_CATEGORY_SECTION_MIN_WORDS = {
+    "Generation requirements": 260,
+    "Alignment check": 200,
+}
+_REMOVED_CATEGORY_SECTIONS = ("Candidate shape", "Valid suggestion directions")
+_FOCUSED_CATEGORY_ANCHORS = {
+    "customer_market": ("audience", "problem", "demand"),
+    "business_model_monetization": ("value", "payer", "cost"),
+    "brand_positioning": ("audience", "comparison", "proof"),
+    "distribution_sales": ("channel", "funnel", "purchase"),
+    "customer_relationship_service": ("lifecycle", "support", "retention"),
+}
+
+
+def _category_section(text: str, heading: str) -> str:
+    """Returns one level-two category section body for structural prompt checks."""
+    match = re.search(
+        rf"(?ms)^## {re.escape(heading)}\s*(.*?)(?=^## |\Z)",
+        text,
+    )
+    return match.group(1) if match else ""
+
+
+def _word_count(text: str) -> int:
+    """Counts words without treating Markdown punctuation as prompt content."""
+    return len(re.findall(r"[\w]+(?:[-'][\w]+)*", text))
+
 
 from vidbyte_cli.commands.agents.suggestion.request_builder import (  # noqa: E402
     SuggestionRequestBuilder,
@@ -308,13 +344,77 @@ class SuggestionSuite:
     def check_categories_and_prompts(self) -> None:
         results = self.results
         registry = SuggestionCategories()
-        results.check("registry exposes all 31 categories", len(registry.ids()) == 31)
+        new_categories = (
+            "customer_market",
+            "business_model_monetization",
+            "brand_positioning",
+            "distribution_sales",
+            "customer_relationship_service",
+        )
+        results.check("registry exposes all 36 categories", len(registry.ids()) == 36)
         results.check(
             "category identifiers and prompt assets are one-to-one",
-            len({item.prompt_name for item in registry.definitions()}) == 31
+            len({item.prompt_name for item in registry.definitions()}) == 36
             and all(
                 registry.category_prompt_exists(item.prompt_name) for item in registry.definitions()
             ),
+        )
+        results.check(
+            "focused business categories are registered",
+            all(registry.is_known(category) for category in new_categories),
+        )
+        focused = registry.prompt_section(("customer_market", "distribution_sales"))
+        results.check(
+            "focused business prompts stay distinct",
+            focused.startswith("# Customer and Market")
+            and "# Distribution and Sales" in focused
+            and "# Business and Growth" not in focused,
+        )
+        prompt_files = tuple(sorted(_CATEGORY_PROMPT_DIR.glob("*.md")))
+        contract_sections = all(
+            all(
+                _word_count(_category_section(path.read_text(encoding="utf-8"), heading))
+                >= _CATEGORY_SECTION_MIN_WORDS[heading]
+                for heading in _REQUIRED_CATEGORY_SECTIONS
+            )
+            for path in prompt_files
+        )
+        results.check(
+            "all category prompts carry the expanded generation contract",
+            len(prompt_files) == 36 and contract_sections,
+        )
+        # The handoff already renders the structured candidate shape, so a category asset
+        # that restates it makes the same contract editable in two places.
+        no_removed_sections = all(
+            not _category_section(path.read_text(encoding="utf-8"), heading)
+            for path in prompt_files
+            for heading in _REMOVED_CATEGORY_SECTIONS
+        )
+        # The alignment check explains what alignment means for the category, so it stays
+        # prose; a bullet list there collapses back into the reroute table it replaced.
+        alignment_is_prose = all(
+            not re.search(
+                r"(?m)^\s*-\s",
+                _category_section(path.read_text(encoding="utf-8"), "Alignment check"),
+            )
+            for path in prompt_files
+        )
+        results.check(
+            "category prompts keep category guidance and drop output-shape sections",
+            no_removed_sections and alignment_is_prose,
+        )
+        focused_anchors = all(
+            all(term in (path.read_text(encoding="utf-8")).lower() for term in terms)
+            for name, terms in _FOCUSED_CATEGORY_ANCHORS.items()
+            if (path := _CATEGORY_PROMPT_DIR / f"{name}.md").exists()
+        )
+        distinct_sections = {
+            _category_section(path.read_text(encoding="utf-8"), "Generation requirements")[:240]
+            for path in prompt_files
+        }
+        results.check(
+            "category generation guidance stays category-specific",
+            focused_anchors and len(distinct_sections) >= 30,
         )
         selected = registry.prompt_section(("verification", "experiment"))
         results.check(
@@ -515,7 +615,7 @@ class SuggestionSuite:
             visible = []
         results.check(
             "category listing works without credentials",
-            categories.returncode == 0 and len(visible) == 31,
+            categories.returncode == 0 and len(visible) == 36,
         )
         detail = _run_cli(["--json", "agents", "suggest", "categories", "--view", "feedback"])
         try:

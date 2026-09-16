@@ -23,5 +23,49 @@ A prerequisite identifies a condition that intended work cannot safely or effect
 - Can a narrower or alternative route proceed without it?
 - What should happen if the condition remains unavailable by the decision point?
 
+## Generation requirements
+
+Every prerequisite suggestion must identify a condition the intended work cannot safely or effectively
+proceed without. The category exists because hidden dependencies are the most expensive kind: work
+starts, runs into the missing condition halfway, and the cost is paid in rework and delay rather than in
+the cheap acknowledgement that would have prevented it. Making the dependency explicit is the whole
+point. The discipline that keeps this useful is the line between required and preferred — almost any
+improvement can be described as necessary, and a category that accepts that description becomes a wish
+list that blocks everything. A prerequisite must therefore name what becomes possible once the condition
+exists, and what genuinely cannot start until then, since work that can proceed in parallel should. It
+also needs a route: who supplies the condition, by when, and what the caller does if it never arrives.
+The proposal should:
+
+- Name the downstream work, outcome, or decision that depends on the condition.
+- Explain why the condition is genuinely required rather than merely convenient or preferred.
+- Classify the dependency as evidence, access, authority, capability, resource, consent, preparation, or
+  prior result.
+- Identify the owner who can provide, approve, or verify the condition and the time it is needed.
+- Define the smallest action to obtain, validate, substitute, or escalate the condition.
+- State what can proceed safely in parallel and what must remain blocked.
+- Define a fallback, deferment, or stop decision if the condition remains unavailable.
+- Avoid accumulating a wish list of improvements that do not block the intended work.
+- Say how the caller can confirm the condition is actually satisfied rather than assumed.
+
+## Alignment check
+
+Alignment, for prerequisite, means the candidate exposes a gate. Work the caller intends to do cannot
+start — or cannot start safely — until some condition exists: an approval, an access, a piece of
+evidence, a capability, a prior result, someone's consent. An aligned candidate names that condition,
+names what it unblocks, and explains why the dependency is real rather than a preference dressed up as a
+requirement. It also identifies who can supply it and what the smallest move is to obtain, validate,
+substitute, or escalate it, because a blocker with no owner and no route is a complaint rather than a
+suggestion.
+
+The second half of alignment is narrowness. Every desirable improvement can be argued into sounding
+necessary, and a category that admits them all stops distinguishing anything: an aligned candidate says
+what can safely continue in parallel and keeps the blocked set as small as the truth allows. It also says
+what happens if the condition never arrives — a fallback, a deferment, or a decision to stop. Readiness
+for a future trigger that does not block current work belongs to preparation; establishing whether the
+dependency is even real belongs to investigation or verification; unclear ownership or sequencing among
+actors belongs to coordination; and choosing among several valid commitments belongs to prioritization.
+Keep the candidate here only when the live question is whether this condition is truly required before
+the intended work can proceed.
+
 ## When not to use
 Do not use this category for information that would be interesting but cannot block the intended action. Avoid it when the condition is already available or when the real issue is a queue, owner, or decision rather than a requirement. If readiness is for a future event, use preparation; if the caller needs to find out whether a claim is true, use investigation or verification.

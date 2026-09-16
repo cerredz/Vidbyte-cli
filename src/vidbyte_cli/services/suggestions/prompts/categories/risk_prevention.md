@@ -23,5 +23,52 @@ A risk-prevention suggestion reduces the likelihood or impact of a plausible fai
 - What recovery or fallback preserves the core outcome?
 - Who owns the control, monitors it, and revises it when conditions change?
 
+## Generation requirements
+
+Every risk-prevention suggestion must reduce the likelihood or impact of a plausible consequential
+failure with a proportionate control. The category exists because some costs are only avoidable in
+advance, and the moment to pay for them is before the exposure begins rather than after it is realized.
+The requirement that keeps this useful is selectivity: anything can fail, so a proposal must name a
+specific exposure whose occurrence would change the caller's outcome, along with the trigger and the
+causal path to it. Proportion is the second requirement. A control is itself a cost — burden, friction,
+new failure modes, reduced accessibility — and a guard that costs more than the exposure it removes is a
+net loss, however prudent it sounds. Where prevention is impossible or too expensive, detection and
+recovery are legitimate answers. And because controls decay quietly, the proposal has to say who owns it,
+how it is tested, and what signal would show it is no longer working. The proposal should:
+
+- Name the exposure, trigger, affected outcome, and the time when prevention matters.
+- Explain likelihood, impact, detectability, or reversibility without inventing unsupported
+  probabilities.
+- Prefer prevention before exposure, while retaining detection, response, and recovery where prevention
+  cannot be complete.
+- Choose a control, owner, signal, or boundary that addresses the causal path rather than adding generic
+  caution.
+- Account for control burden, usability, accessibility, privacy, safety, and risks introduced by the
+  control itself.
+- Define how the control will be monitored, tested, maintained, and revised as conditions change.
+- Preserve necessary work while making the decision to accept, reduce, transfer, avoid, or monitor
+  exposure explicit.
+- State what signal would show the risk is reduced or the control is failing.
+- Show that the guard costs less than the exposure it is meant to remove.
+
+## Alignment check
+
+Alignment, for risk prevention, means the candidate protects an outcome the caller cares about from a
+failure that could plausibly happen. There is an exposure — a way the work can go wrong, with a trigger
+and a causal path — and the candidate intervenes on that path before the cost is realized. An aligned
+candidate names the exposure specifically, says what it would damage and when prevention has to be in
+place, and proposes a control with an owner and a signal. Listing every imaginable concern is the
+opposite of this: a guard earns its place by attaching to one plausible, consequential failure rather
+than to general caution.
+
+The second half of alignment is proportion. Controls have their own cost — friction, maintenance, lost
+accessibility, sometimes new failure modes — so an aligned candidate weighs the guard against the
+exposure, prefers prevention where it is achievable and falls back to detection and recovery where it is
+not, and says how the control stays alive as conditions change. Establishing whether a claim is even
+true belongs to verification; a repeated flow constraint rather than a failure exposure belongs to
+bottleneck; and concluding that the exposure cannot be justified at all belongs to stop or defer. A
+warning that changes no likelihood, impact, detection, or recovery belongs nowhere. Keep the candidate
+here only when the live question is which safeguard changes the risk path enough to justify its burden.
+
 ## When not to use
 Do not use this category for every hypothetical concern, a goal that is merely unclear, or a claim that needs verification rather than protection. Avoid it when the control burden exceeds the plausible consequence or when no owner can maintain it. If the right answer is to abandon an exposure entirely, use stop or defer; if the risk comes from one limiting constraint, use bottleneck.

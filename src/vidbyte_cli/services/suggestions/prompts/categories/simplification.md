@@ -23,5 +23,49 @@ A simplification removes avoidable scope, components, coordination, or cognitive
 - How will the simpler result be verified against the original acceptance condition?
 - What expansion seam should remain possible without building it now?
 
+## Generation requirements
+
+Every simplification suggestion must remove avoidable scope, components, coordination, or cognitive load
+while protecting the essential result. The category exists because complexity accumulates by default:
+every addition was justified at the time, nothing removes itself, and the total cost is paid by everyone
+who has to understand, maintain, or work around the result afterwards. A simplification is therefore
+specific about what goes — naming the machinery being removed, not praising simplicity as a value — and
+equally specific about what must survive, since the line between optional and load-bearing is exactly
+what the proposal is asserting. Removal is not free either. It creates new limitations, closes options,
+and sometimes moves work onto a different owner, and a proposal that does not name that tradeoff is
+hiding half the decision. Because the line can be drawn wrongly, the safer shape is reversible or staged,
+with a seam where complexity could return if it turns out to have been needed. The proposal should:
+
+- Name what is essential, what is optional, and what complexity is being removed.
+- Explain whose effort, confusion, maintenance, or coordination is reduced and how the benefit appears.
+- Preserve safety, accessibility, quality, compliance, and downstream contracts that users or owners
+  rely on.
+- Identify the new limitation, edge case, or burden the reduction may create.
+- Prefer a reversible deletion, smaller boundary, or staged reduction before removing a true dependency.
+- Define how the simplified result will be tested and who must accept the tradeoff.
+- Avoid hiding an unresolved decision, shifting work to another owner, or calling missing capability
+  simplicity.
+- State the expansion seam or condition that would justify restoring complexity later.
+- Confirm that the removed part has no consumer who quietly depends on it.
+
+## Alignment check
+
+Alignment, for simplification, means the candidate takes something away and the result is still worth
+having. Scope, components, steps, coordination, or things a person has to hold in mind have accumulated
+around an outcome, and the candidate identifies which of them are not carrying their weight. An aligned
+candidate names the specific thing being removed, says whose effort or confusion drops as a result, and
+asserts clearly which part is essential and must survive. Advocating simplicity in general is not a
+suggestion; the substance is the cut.
+
+The second half of alignment is honesty about the cost of cutting. Removal closes options, creates edge
+cases, and can push work onto someone else, so an aligned candidate states the limitation it accepts and
+who has to agree to it, and prefers a reversible or staged reduction where the essential line is
+uncertain. Calling something unfinished or unsafe "simple" is a misdescription rather than a
+simplification. Removing a required condition or a safety control belongs to prerequisite or risk
+prevention; ending work because its value no longer justifies its cost belongs to stop or defer; choosing
+among competing commitments belongs to prioritization; and adding a capability while claiming to reduce
+scope belongs nowhere. Keep the candidate here only when the live question is what can be removed while
+keeping the result worth having.
+
 ## When not to use
 Do not use this category when the missing complexity is a true prerequisite, safety control, or user need. Avoid it when the proposed reduction only hides an unresolved decision or shifts burden to another owner. If the main issue is a broad set of competing commitments, use prioritization; if the work no longer earns its cost, use stop or defer.

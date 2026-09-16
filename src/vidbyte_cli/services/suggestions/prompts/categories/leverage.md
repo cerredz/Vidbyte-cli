@@ -23,5 +23,46 @@ A leverage suggestion creates one asset or improvement that benefits several cre
 - What adoption or migration effort could erase the expected benefit?
 - How will reuse and payback be observed over time?
 
+## Generation requirements
+
+Every leverage suggestion must create one bounded asset, improvement, relationship, or decision that
+benefits several credible future efforts. The category exists because repeated cost is invisible when
+paid one instance at a time: the same lookup, the same setup, the same negotiation, absorbed again and
+again until someone notices the pattern. Leverage pays that cost once. The requirement that keeps it
+honest is real consumers — at least two identifiable future uses, not a hypothetical audience — because
+an abstraction built for imagined reuse is pure overhead. Timing matters just as much: generalizing
+before the shared pattern is visible produces the wrong abstraction, and the wrong abstraction is harder
+to remove than the duplication it replaced. Reuse is also not free. Ownership, maintenance, adoption,
+and the cost of changing the asset later are part of the investment, and a proposal that omits them is
+understating the price. The proposal should:
+
+- Name at least two realistic downstream consumers or uses rather than relying on hypothetical scale.
+- Explain the shared mechanism that makes reuse valuable and why one investment serves those consumers.
+- Delay abstraction until a repeated pattern, common interface, or durable need is visible.
+- Include ownership, maintenance, adoption, and update cost rather than treating reuse as free.
+- Preserve the current outcome while making future work faster, clearer, safer, or less coordinated.
+- Define the smallest reusable asset that can test whether the pattern is actually shared.
+- Avoid generalizing unstable details or creating a platform before use cases justify it.
+- Measure adoption, reuse, avoided effort, quality, or coordination rather than counting artifacts.
+- Say when to stop generalizing if adoption or the shared pattern fails to appear.
+
+## Alignment check
+
+Alignment, for leverage, means the candidate spends once to make several later efforts cheaper. The
+caller is paying a repeated cost — rebuilding the same setup, re-answering the same question,
+re-negotiating the same agreement — and one bounded investment could remove it from all of them. An
+aligned candidate names the consumers who would actually benefit, explains the shared mechanism that
+makes one asset serve them, and keeps the asset small enough to test whether the pattern is real.
+Generality with no adopter is not leverage; it is an abstraction the caller now has to maintain.
+
+The second half of alignment is total cost. An asset has an owner, a maintenance burden, an adoption
+curve, and a future in which it must change, so an aligned candidate counts those against the benefit
+and says when to stop generalizing if the shared pattern never materializes. Removing complexity from
+one current result belongs to simplification, because its value is local. A broad capability or market
+to develop over years belongs to long-term directions. Finishing a one-off obligation belongs to
+completion, and building an abstraction before any shared pattern or consumer exists belongs nowhere at
+all. Keep the candidate here only when the live question is whether a reusable asset earns its cost
+across real future work.
+
 ## When not to use
 Do not use this category for a one-off task, a hypothetical audience, or an abstraction whose consumers cannot be named. Avoid it when generalization would slow the current work or lock in an unstable pattern. If the goal is to remove complexity from the current result, use simplification; if the asset supports a broader future capability rather than repeated near-term use, use long-term directions.

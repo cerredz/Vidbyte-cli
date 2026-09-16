@@ -23,5 +23,49 @@ A technical-possibilities suggestion explores what technology could make materia
 - What smallest prototype or measurement can test feasibility?
 - What result would make the technical possibility less valuable than a simpler route?
 
+## Generation requirements
+
+Every technical-possibilities suggestion must explore a capability technology could make materially
+better or newly possible, tied to a user, system, or business outcome. The category exists because
+feasibility moves: things that were impossible, too slow, too expensive, or too unreliable become
+ordinary, and the caller's mental model of what is achievable is usually older than the tools available.
+The requirement that keeps this grounded is the outcome anchor — the proposal has to name what behavior,
+scale, speed, reliability, cost, or access changes, because a capability with no consequence is trivia.
+It also has to stay at the level of capability rather than descending into implementation, since
+committing to a specific technology before the value is established locks in a choice that has not been
+earned. New capability brings new cost: maintenance, observability, privacy, security, accessibility, and
+someone to operate it. And because attractive capabilities are often worse than the boring alternative,
+the proposal needs a bounded check and a comparison against the simpler route. The proposal should:
+
+- Name the real constraint or opportunity and the behavior or result a technical capability would enable.
+- Stay at capability and value level before prescribing implementation details or specific technology.
+- Explain why technology changes feasibility, quality, speed, scale, cost, or access in this context.
+- Identify affected users, operators, systems, dependencies, and new complexity or failure modes.
+- Propose a bounded feasibility, usability, safety, or integration check before broad investment.
+- Account for maintenance, observability, privacy, security, accessibility, and operational ownership.
+- Define what evidence would make the possibility more or less valuable than a simpler route.
+- Avoid novelty as a substitute for outcome and avoid implementation detail unsupported by the problem.
+- Compare the capability against the simplest approach that would produce the same outcome.
+
+## Alignment check
+
+Alignment, for technical possibilities, means technology is the thing that changes what is achievable.
+Some constraint the caller has been designing around — a limit on speed, scale, cost, reliability, or
+access — may no longer hold, and the candidate asks what becomes possible if it does not. An aligned
+candidate names that constraint, states the capability, and says what new behavior or result follows for
+a user, a system, or the business. The outcome anchor is what separates this from enthusiasm: a
+capability with no consequence for anyone is interesting rather than useful, and architecture or
+implementation detail with no outcome behind it is not a possibility, it is a preference.
+
+The second half of alignment is keeping feasibility honest. A promising capability can still be the
+wrong answer once maintenance, security, privacy, accessibility, and operational ownership are counted,
+so an aligned candidate proposes a bounded feasibility or integration check and says what evidence would
+make the simpler route preferable. Improving a known interaction with no distinct capability question
+belongs to product and experience; confirming that an existing capability works as claimed belongs to
+verification; choosing a broad organizational direction belongs to strategy; and starting implementation
+with no user, system, or business outcome belongs nowhere. Keep the candidate here only when the live
+question is whether this technical possibility changes what can be done enough to justify its cost and
+risk.
+
 ## When not to use
 Do not use this category for implementation details that are not tied to a meaningful outcome or for technology chosen because it is novel. Avoid it when the user or system need is unclear, or when a known capability merely needs execution. If the main concern is how people experience the result, use product and experience; if the question is whether the capability is already working as claimed, use verification.

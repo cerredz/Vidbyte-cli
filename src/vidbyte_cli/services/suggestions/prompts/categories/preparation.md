@@ -23,5 +23,48 @@ A preparation suggestion creates readiness for an anticipated event, transition,
 - What contingency is proportionate to the likely disruption?
 - When should preparation stop so it does not become rehearsal without purpose?
 
+## Generation requirements
+
+Every preparation suggestion must make the caller ready for a credible future event, transition, or
+demand before the cost of surprise arrives. The category exists because some costs are only avoidable
+before a trigger and become unavoidable after it: the access not granted, the decision not made, the
+material not written, the practice not done. A preparation is therefore defined by its trigger — a date,
+a condition, an audience, a transition — and by the response that trigger will demand. Without both, the
+work has nothing to be ready for. Timing is a hard constraint rather than a preference: preparation that
+finishes after the trigger has no value, and preparation that finishes too early may decay before it is
+used. The proposal has to stay bounded, because readiness invites rehearsal and stockpiling that cost
+more than the event they guard against. Readiness also has to be inspectable, since confidence that one
+is prepared is exactly the thing the trigger tests. The proposal should:
+
+- Name the trigger, date, condition, audience, or transition that makes readiness relevant.
+- Identify the response that must be possible when the trigger occurs and what would make it fail.
+- Prepare information, decisions, relationships, materials, capability, access, or practice that will
+  remain usable.
+- Finish before the trigger and account for decay, ownership, dependencies, and last responsible timing.
+- Distinguish readiness work from a prerequisite that blocks current work or a broad long-term direction.
+- Define a readiness signal another person can inspect without relying on confidence or intent.
+- Avoid endless rehearsal, speculative stockpiling, or preparation costing more than the event warrants.
+- Include a review or refresh condition when information, access, or capacity may expire.
+- Name who checks readiness as the trigger approaches.
+
+## Alignment check
+
+Alignment, for preparation, means the candidate buys readiness ahead of a specific trigger. Something is
+coming — a launch, a deadline, a conversation, a handover, a seasonal demand — and certain work is far
+cheaper before it than during it. An aligned candidate names that trigger, describes the response it will
+demand, and prepares the information, decisions, access, materials, or practice that response needs. The
+trigger is doing as much work in the suggestion as the artifact is: preparation for an unspecified future
+cannot be timed, sized, or judged complete, which is what separates it from general improvement.
+
+The second half of alignment is timing and boundary. Preparation has a deadline built in, so an aligned
+candidate finishes before the trigger, accounts for what decays in the meantime, and defines a readiness
+signal someone can actually check rather than a feeling of being ready. It also stays proportionate,
+because rehearsal and stockpiling expand freely and can cost more than the surprise they prevent. A
+condition required before current work can proceed belongs to prerequisite; advancing an accepted plan
+belongs to continuation; a broad future direction with no specific trigger belongs to long-term
+directions; and gathering facts without preparing a response belongs to investigation. Keep the
+candidate here only when the live question is what readiness is worth completing before which credible
+trigger.
+
 ## When not to use
 Do not use this category for a missing condition required by work that cannot proceed now; use prerequisite instead. Avoid it when the event is too speculative to justify preparation or when no readiness signal can be defined. If the work is already underway and simply needs its next step, use continuation; if the concern is a broad future direction, use long-term directions.

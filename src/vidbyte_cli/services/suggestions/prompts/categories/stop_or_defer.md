@@ -23,5 +23,51 @@ A stop-or-defer suggestion protects attention from work whose present value does
 - What trigger, date, or evidence would make reconsideration worthwhile?
 - Who needs to know the decision and what ambiguity must be removed?
 
+## Generation requirements
+
+Every stop-or-defer suggestion must protect attention from work whose present value does not justify its
+cost, while preserving a responsible path to restart when appropriate. The category exists because
+committed work defends itself: effort already spent, expectations already set, and the discomfort of
+admitting a direction is not paying make continuation the default even after the case for it has gone.
+Naming that explicitly is the contribution. The proposal has to say what continuing consumes and what
+would receive that attention instead, because stopping without a beneficiary is not an allocation
+decision. It also has to separate the two outcomes cleanly: a stop closes the option and accepts the
+loss, while a deferral keeps it alive and therefore owes a specific condition, date, or owner that would
+bring it back. The most important discipline is distinguishing this from avoidance, since difficulty,
+discomfort, and temporary blockage all feel like evidence and are not. People and obligations are
+affected by stopping, so communication is part of the recommendation. The proposal should:
+
+- Name the direction, commitment, or activity being stopped or postponed and the value it currently
+  consumes.
+- Explain the evidence that opportunity cost, exposure, or uncertainty outweighs continuation now.
+- Distinguish stopping permanently from deferring until a named condition, date, owner, or evidence
+  appears.
+- Preserve enough state, rationale, and artifact for a responsible restart when deferral is chosen.
+- Make affected people, obligations, trust, safety, and communication visible.
+- Avoid using difficulty, discomfort, or temporary blockage as a substitute for an evidence-based
+  allocation choice.
+- Define what more valuable work receives the protected attention and how the decision is communicated.
+- State the revisit condition and what would make the work worth resuming.
+- Account for what is genuinely lost by stopping, rather than only what is saved.
+
+## Alignment check
+
+Alignment, for stop or defer, means the candidate takes attention back from something that is no longer
+earning it. The work exists and has consumed effort, but its present value does not justify what
+continuing would cost — and the sunk effort is not an argument for spending more. An aligned candidate
+names the commitment, states the evidence that the case for it has weakened, and identifies what more
+valuable work receives the freed attention. It also chooses deliberately between the two outcomes: a
+stop closes the option and accepts the loss, while a deferral keeps it open and therefore owes a
+specific condition, date, or owner that would bring it back.
+
+The second half of alignment is separating allocation from avoidance. Difficult, uncomfortable, and
+temporarily blocked work all generate the urge to abandon it, and none of them is evidence about value,
+so an aligned candidate makes the value or risk case rather than the feeling. Choosing which of several
+valuable commitments comes first belongs to prioritization; work that is still valuable and blocked by
+an obtainable condition belongs to prerequisite; the last small obligation needed to finish belongs to
+completion; and halting everything because uncertainty exists, when a bounded test could resolve it,
+belongs to experiment. Keep the candidate here only when the live question is whether continuing earns
+more value than the attention and opportunity cost it consumes.
+
 ## When not to use
 Do not use this category merely because the work is difficult, uncertain, or temporarily blocked when its value and direction remain sound. Avoid it when the next step is small and required for completion or when a prerequisite can be obtained promptly. If competing commitments need to be ranked, use prioritization; if the work needs a safer smaller test, use experiment.
