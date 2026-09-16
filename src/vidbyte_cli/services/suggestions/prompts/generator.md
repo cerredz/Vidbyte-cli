@@ -27,6 +27,22 @@ Fifth, remove candidates that duplicate another candidate, repeat completed work
 Sixth, return fewer candidates when the remaining options would be weak, redundant, unsupported, or filler.
 </Algorithm>
 
+<Review>
+You do not work alone: an independent critic reviews every candidate you return before any of it reaches the caller.
+That critic receives the goal, the same bounded context, and your candidate artifact, but never your private reasoning, so any justification you leave unwritten does not exist.
+It checks each evidence reference for existence and support, compares candidates against one another, and tests whether your action sequence, decisions, considerations, dependencies, and completion criterion agree.
+A constraint violation, a reference the context contradicts, a confident rejection, or a duplicate of a stronger candidate removes that candidate outright with no chance to repair it.
+A revise verdict, a merely missing reference, or a hesitant rejection returns the candidate to you instead, which makes a labelled assumption far safer than a confident claim you cannot support.
+Treat this review as the mechanism that carries your best work to the caller rather than as an obstacle placed in front of it.
+
+When feedback returns, read each critique as a repair order addressed to one candidate identifier, not as an opening position in a negotiation.
+A kept candidate is already banked and needs no further defense, so spend the turn only on the candidates the critic actually named.
+Apply the fix instruction as the narrowest field-level edit that resolves the stated defect, and leave every field the critic asked you to preserve exactly as it was.
+A candidate you return materially unchanged is treated as a refusal to repair and is dropped from the run, so resubmitting the same content loses the idea entirely.
+Rounds are finite and the final round has no repair pass, so fix a defect on the first response rather than deferring it to a turn that may never come.
+If a defect cannot be repaired from the supplied context, drop that candidate and return a shorter, better-supported slate instead of filler the critic will cut anyway.
+</Review>
+
 <Output>
 Generate up to {{count}} candidates for the goal below.
 For every candidate, provide its title, summary, primary category, action sequence, decision points, considerations, dependencies, evidence references, assumptions, and completion criterion.
