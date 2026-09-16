@@ -26,6 +26,9 @@ from vidbyte_cli.commands.agents.suggestion.request_builder import (  # noqa: E4
 )
 from vidbyte_cli.services.suggestions.categories import SuggestionCategories  # noqa: E402
 from vidbyte_cli.services.suggestions.context import SuggestionContextBuilder  # noqa: E402
+from vidbyte_cli.services.suggestions.context_bridge import (  # noqa: E402
+    SuggestionContextBridge,
+)
 from vidbyte_cli.services.suggestions.handoff import SuggestionHandoffBuilder  # noqa: E402
 from vidbyte_cli.services.suggestions.prompts.library import SuggestionPrompts  # noqa: E402
 from vidbyte_cli.services.suggestions.sdk import (  # noqa: E402
@@ -190,7 +193,9 @@ class FakeSdk:
     def _candidate_ids(self, handoffs: str) -> tuple[str, ...]:
         if not handoffs:
             return ()
-        return tuple(item["id"] for item in json.loads(handoffs))
+        packet = json.loads(handoffs)
+        candidates = packet["candidates"] if isinstance(packet, dict) else packet
+        return tuple(item["id"] for item in candidates)
 
 
 def _categories_from_context(text: str) -> tuple[str, ...]:
@@ -534,13 +539,39 @@ class SuggestionSuite:
             and revised.title == "verification action 0",
         )
         results.check(
-            "critic context carries candidate handoffs and selected categories",
+            "critic context carries compact candidates and selected categories",
             any(
                 settings.role == "critic"
                 and "<Candidate Handoffs>" in settings.context.to_context_text()
                 and "<Selected Categories>" in settings.context.to_context_text()
                 for settings, _ in fake.turns
             ),
+        )
+        critic_context = next(
+            settings.context for settings, _ in fake.turns if settings.role == "critic"
+        )
+        packet = json.loads(critic_context.candidate_handoffs)
+        results.check(
+            "critic context omits handoffs and workflow metadata",
+            "execution_prompt" not in critic_context.candidate_handoffs
+            and "rank" not in critic_context.candidate_handoffs
+            and "revision" not in critic_context.candidate_handoffs
+            and set(packet) == {"candidates"},
+        )
+        revision_context = next(
+            settings.context
+            for settings, _ in fake.turns
+            if settings.role == "generator" and "Suggestion revision" in settings.system_prompt
+        )
+        revision_prompt = next(
+            prompt
+            for settings, prompt in fake.turns
+            if settings.role == "generator" and "Suggestion revision" in settings.system_prompt
+        )
+        results.check(
+            "revision prompt carries packet once through context",
+            "Candidates:\n" not in revision_prompt
+            and set(json.loads(revision_context.candidate_handoffs)) == {"candidates", "critiques"},
         )
         dry_request = _request().model_copy(
             update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}
@@ -581,6 +612,21 @@ class SuggestionSuite:
             len(snapshot.items[0].content) == MAX_CONTEXT_CHARS
             and snapshot.manifest[0].status == "truncated"
             and snapshot.manifest[0].chars == MAX_CONTEXT_CHARS,
+        )
+        source_item = _item(content="Evidence body").model_copy(
+            update={"source": "C:/private/plan.md"}
+        )
+        request = _request(items=(source_item,))
+        agent_text = (
+            SuggestionContextBridge().generator(request, ("verification",)).to_context_text()
+        )
+        results.check(
+            "agent context keeps evidence but prunes caller metadata",
+            "Evidence body" in agent_text
+            and "C:/private/plan.md" not in agent_text
+            and "Caller-supplied context value" not in agent_text
+            and "Goal:" not in agent_text
+            and "sha256" not in agent_text,
         )
         builder = SuggestionHandoffBuilder()
         result = SuggestionService(sdk=FakeSdk()).run(_request(items=(_item(),)))

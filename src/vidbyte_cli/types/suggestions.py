@@ -152,14 +152,14 @@ class SuggestionContextPrimitive:
             raise TypeError("Suggestion context metadata must be a mapping.")
 
     def to_context_text(self) -> str:
-        sections = [f"Goal: {self.goal}", "", "<Selected Categories>"]
+        # Goal is already carried by each stage prompt; keep this primitive to task data only.
+        sections = ["<Selected Categories>"]
         sections.append(self.selected_categories or "No category was selected.")
         sections.extend(("</Selected Categories>", ""))
         for item in self.items:
             sections.extend(
                 (
-                    f"## [{item.ref}] {item.label} ({item.kind})",
-                    f"Source: {item.source}",
+                    f"## [{item.ref}] {item.kind}",
                     item.content,
                     "",
                 )

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import math
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
 from typing import Literal
 
 from ...types.suggestions import (
@@ -15,6 +14,7 @@ from ...types.suggestions import (
     SuggestionRequest,
 )
 from .categories import SuggestionCategories
+from .context_bridge import SuggestionContextBridge
 from .prompts.library import SuggestionPrompts
 
 AgentCall = Callable[
@@ -26,9 +26,15 @@ AgentCall = Callable[
 class ExtraComputeService:
     """Fans out focused category windows and combines their typed drafts stably."""
 
-    def __init__(self, categories: SuggestionCategories, prompts: SuggestionPrompts) -> None:
+    def __init__(
+        self,
+        categories: SuggestionCategories,
+        prompts: SuggestionPrompts,
+        context_bridge: SuggestionContextBridge | None = None,
+    ) -> None:
         self._categories = categories
         self._prompts = prompts
+        self._context_bridge = context_bridge or SuggestionContextBridge(categories)
 
     async def generate(
         self,
@@ -40,10 +46,7 @@ class ExtraComputeService:
         per_category = max(1, math.ceil(pool_size / len(category_ids)))
 
         async def run_one(category_id: str) -> SuggestionCandidateBatch:
-            context = replace(
-                request.context,
-                selected_categories=self._categories.prompt_section((category_id,)),
-            )
+            context = self._context_bridge.generator(request, (category_id,))
             prompt = self._prompts.generator_turn(request.goal, per_category)
             return await call("generator", prompt, context, None)
 
