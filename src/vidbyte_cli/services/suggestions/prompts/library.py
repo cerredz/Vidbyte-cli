@@ -34,11 +34,9 @@ class SuggestionPrompts:
         # The critic receives candidate handoffs through its own context manager.
         return self._render("critic", goal=goal, candidate_ids=candidate_ids)
 
-    def revision_turn(self, goal: str, candidates: str, critiques: str, count: int) -> str:
-        # Revision instructions name exact IDs and preserve fields rather than rewriting a slate.
-        return self._render(
-            "revision", goal=goal, candidates=candidates, critiques=critiques, count=str(count)
-        )
+    def revision_turn(self, goal: str, count: int) -> str:
+        # Revision instructions read the single compact candidate/critique packet from context.
+        return self._render("revision", goal=goal, count=str(count))
 
     def category_prompt(self, name: str) -> str:
         # Category files are model-facing guidance, never command implementation details.
