@@ -101,6 +101,11 @@ def main() -> int:
     seed = SuggestionService(sdk=object())._ideas_from_drafts((_draft("Initial action"),), request)
     store = SuggestionStore(request, ("verification", "experiment"))
     store.seed(seed)
+    results.check(
+        "model-facing tools use the declared contract names",
+        tuple(tool.__name__ for tool in store.tools())
+        == ("AddSuggestionType", "RemoveSuggestion", "MoreSuggestions"),
+    )
 
     # [Edge Case] A valid add receives a host-owned stable identity.
     results.check(
