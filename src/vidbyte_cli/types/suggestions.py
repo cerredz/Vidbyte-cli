@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .attachments import AttachmentBundle
+
 SCHEMA_VERSION = 1
 MAX_CONTEXT_CHARS = 5_000_000
 
@@ -218,6 +220,7 @@ class SuggestionRequest(BaseModel):
     context_manifest: tuple[ContextManifestEntry, ...] = ()
     context_warnings: tuple[str, ...] = ()
     settings: SuggestionSettings
+    attachments: AttachmentBundle = Field(default_factory=AttachmentBundle)
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
 
     @model_validator(mode="after")

@@ -24,6 +24,7 @@ from ....types.suggestions import (
     SuggestionRequest,
     SuggestionSettings,
 )
+from ...agent_options import AgentAttachmentOptions
 
 _CONTEXT_FIELD_NAMES = (
     "context",
@@ -71,6 +72,7 @@ class SuggestionRunInput:
     capability: tuple[str, ...] = ()
     success: tuple[str, ...] = ()
     files: tuple[Path, ...] = ()
+    attachments: tuple[Path, ...] = ()
     count: int = 5
     categories: tuple[str, ...] = ()
     all_categories: bool = False
@@ -88,6 +90,7 @@ class SuggestionRunInput:
         self._validate_goal()
         self._validate_context_values()
         self._validate_files()
+        self._validate_attachments()
         self._validate_selection()
         self._validate_execution_settings()
         self._validate_limits()
@@ -109,6 +112,13 @@ class SuggestionRunInput:
             not isinstance(path, Path) for path in self.files
         ):
             raise TypeError("files must contain only pathlib.Path values")
+
+    def _validate_attachments(self) -> None:
+        # Keeps the shared resolver's input contract explicit at the request boundary.
+        if not isinstance(self.attachments, tuple) or any(
+            not isinstance(path, Path) for path in self.attachments
+        ):
+            raise TypeError("attachments must contain only pathlib.Path values")
 
     def _validate_selection(self) -> None:
         if type(self.count) is not int or not 2 <= self.count <= 15:
@@ -170,6 +180,7 @@ class SuggestionRequestBuilder:
             snapshot = SuggestionContextBuilder().build(fields, values.files)
         except ValueError as error:
             raise SuggestionContextUnreadable(str(error)) from error
+        attachments = AgentAttachmentOptions().resolve({"attachments": values.attachments})
         try:
             settings = SuggestionSettings(
                 requested_count=values.count,
@@ -196,6 +207,7 @@ class SuggestionRequestBuilder:
                 context_manifest=snapshot.manifest,
                 context_warnings=snapshot.warnings,
                 settings=settings,
+                attachments=attachments,
             )
         except (ValidationError, ValueError) as error:
             raise SuggestionInputInvalid() from error

@@ -316,10 +316,14 @@ class SuggestionService:
         remaining = self._remaining_seconds(request, started)
         try:
             if remaining is None:
-                reply = await agent.arun(sdk.run_input(SuggestionTextInput(prompt)))
+                reply = await agent.arun(
+                    sdk.run_input(SuggestionTextInput(prompt, request.attachments))
+                )
             else:
                 async with asyncio.timeout(remaining):
-                    reply = await agent.arun(sdk.run_input(SuggestionTextInput(prompt)))
+                    reply = await agent.arun(
+                        sdk.run_input(SuggestionTextInput(prompt, request.attachments))
+                    )
         except TimeoutError as error:
             raise _WorkflowLimit(StopReason.TIME_LIMIT) from error
         self._record_usage(reply, usage, phase)
