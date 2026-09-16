@@ -628,6 +628,14 @@ class SuggestionSuite:
             and "Goal:" not in agent_text
             and "sha256" not in agent_text,
         )
+        bridged = SuggestionContextBridge().generator(request, ("verification",))
+        results.check(
+            "agent context object drops caller metadata",
+            bridged.metadata == {}
+            and bridged.description == "Stage context contains only evidence and category guidance."
+            and bridged.items[0].source == "context"
+            and bridged.items[0].caller_supplied,
+        )
         builder = SuggestionHandoffBuilder()
         result = SuggestionService(sdk=FakeSdk()).run(_request(items=(_item(),)))
         packet = builder.build(result.ideas[0], _request(items=(_item(),)))
