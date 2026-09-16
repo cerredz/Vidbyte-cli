@@ -34,7 +34,7 @@ from .handoff import SuggestionHandoffBuilder
 from .prompts.library import SuggestionPrompts
 from .sdk import SuggestionAgentSettingsInput, SuggestionSdk, SuggestionTextInput
 from .selection import SuggestionSelection
-from .store import SuggestionStore
+from .store import SuggestionStore, ToolCallLimitReached
 
 _POOL_MULTIPLE = 2
 _POOL_CAP = 40
@@ -134,29 +134,11 @@ class SuggestionService:
                 working = store.working_copy()
                 before = working.mutation_count
                 self._check_limit(request, started, usage)
-                try:
-                    completion = await self._curate(
-                        request, sdk, categories, current, artifact, working, started, usage
-                    )
-                except _WorkflowLimit:
-                    raise
-                except Exception:
-                    warnings.append(
-                        "Curation did not complete; returning the last committed suggestions."
-                    )
-                    finalized = self._finalize(store.snapshot(), request)
-                    return _WorkflowOutcome(
-                        finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings)
-                    )
-                if not completion.completed:
-                    warnings.append(
-                        "Curation returned an incomplete receipt; returning the last "
-                        "committed suggestions."
-                    )
-                    finalized = self._finalize(store.snapshot(), request)
-                    return _WorkflowOutcome(
-                        finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings)
-                    )
+                curation = await self._run_curation(
+                    request, sdk, categories, current, artifact, working, started, usage, warnings
+                )
+                if isinstance(curation, _WorkflowOutcome):
+                    return curation
                 if working.mutation_count == before:
                     finalized = self._finalize(store.snapshot(), request)
                     reason = (
@@ -204,6 +186,43 @@ class SuggestionService:
                 "generation",
             ),
         )
+
+    async def _run_curation(
+        self,
+        request: SuggestionRequest,
+        sdk: Any,
+        categories: tuple[str, ...],
+        current: tuple[SuggestionIdea, ...],
+        artifact: SuggestionCritiqueArtifact,
+        store: SuggestionStore,
+        started: float,
+        usage: dict[str, int],
+        warnings: list[str],
+    ) -> SuggestionCompletion | _WorkflowOutcome:
+        """Run one isolated curation pass or return its safe partial outcome."""
+        try:
+            completion = await self._curate(
+                request, sdk, categories, current, artifact, store, started, usage
+            )
+        except _WorkflowLimit:
+            raise
+        except ToolCallLimitReached:
+            warnings.append(
+                "Curation reached its tool-call limit; returning the last committed suggestions."
+            )
+            finalized = self._finalize(current, request)
+            return _WorkflowOutcome(finalized, usage, StopReason.TOOL_CALL_LIMIT, tuple(warnings))
+        except Exception:
+            warnings.append("Curation did not complete; returning the last committed suggestions.")
+            finalized = self._finalize(current, request)
+            return _WorkflowOutcome(finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings))
+        if not completion.completed:
+            warnings.append(
+                "Curation returned an incomplete receipt; returning the last committed suggestions."
+            )
+            finalized = self._finalize(current, request)
+            return _WorkflowOutcome(finalized, usage, StopReason.PROVIDER_FAILED, tuple(warnings))
+        return completion
 
     async def _critique(
         self,
@@ -289,6 +308,7 @@ class SuggestionService:
         tools: tuple[Any, ...] = (),
     ) -> Any:
         self._check_limit(request, started, usage)
+        usage["agent_calls"] += 1
         prompt = self._with_output_budget(prompt, request)
         settings = sdk.agent_settings(
             SuggestionAgentSettingsInput(
@@ -404,6 +424,8 @@ class SuggestionService:
     def _check_limit(
         self, request: SuggestionRequest, started: float, usage: dict[str, int]
     ) -> None:
+        if usage["agent_calls"] >= request.settings.max_agent_calls:
+            raise _WorkflowLimit(StopReason.AGENT_CALL_LIMIT)
         if (
             request.settings.max_total_tokens is not None
             and usage["tokens"] >= request.settings.max_total_tokens
@@ -427,7 +449,6 @@ class SuggestionService:
         return max(remaining, 0.0)
 
     def _record_usage(self, reply: Any, usage: dict[str, int], phase: str) -> None:
-        usage["agent_calls"] += 1
         usage[f"{phase}_calls"] = usage.get(f"{phase}_calls", 0) + 1
         codex = getattr(reply, "codex", None)
         snapshot = getattr(codex, "last_usage", None) or getattr(codex, "usage", None)
