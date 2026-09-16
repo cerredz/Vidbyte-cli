@@ -42,11 +42,15 @@ class SuggestionRenderer:
     def _human_result(self, result: SuggestionResult) -> str:
         # One block per idea so a person can scan ranks without parsing JSON.
         if not result.ideas:
+            if not result.attachment_manifest:
+                return f"No suggestions for: {result.goal}"
             return f"No suggestions for: {result.goal}\n{self._human_attachments(result)}"
         blocks: list[str] = []
         for idea in result.ideas:
             blocks.append(self._human_idea(idea))
         header = self._human_header(result)
+        if not result.attachment_manifest:
+            return header + "\n\n" + "\n\n".join(blocks)
         return header + "\n" + self._human_attachments(result) + "\n\n" + "\n\n".join(blocks)
 
     def _human_idea(self, idea: SuggestionIdea) -> str:

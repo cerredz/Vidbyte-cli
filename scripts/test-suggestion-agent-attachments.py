@@ -248,6 +248,12 @@ class AttachmentIntegrationSuite:
             "human output names attachments without printing bodies",
             "notes.md" in human and "attachment snapshot" not in human,
         )
+        text_only = SuggestionService(sdk=FakeSdk()).run(_request())
+        text_only_human = SuggestionRenderer()._human_result(text_only)
+        self.results.check(
+            "text-only human output keeps its existing shape",
+            "Attachments:" not in text_only_human,
+        )
 
     def check_existing_files_semantics(self) -> None:
         # [Hidden Assumption] Existing --files remains semantic context, not generic input.
