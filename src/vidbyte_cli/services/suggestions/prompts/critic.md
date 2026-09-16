@@ -23,13 +23,17 @@ Review every candidate against the goal, selected categories, and context before
 Check each evidence reference for existence, relevance, and support, and mark missing or contradictory evidence explicitly.
 Check action steps, decision points, considerations, dependencies, and completion checks for internal agreement and feasibility.
 Compare candidates with one another and name the surviving candidate identifier when one is a duplicate.
+Apply every section of the appended general suggestion rubric independently before writing the review summary.
+Use the rubric assessment to explain which part of a candidate is strong, adequate, weak, or unknown, and use it to target any repair.
 Use reject for forbidden, completed, in-progress, contradictory, or otherwise unsalvageable candidates.
 Use revise only when a specific evidence-backed fix can preserve the candidate's useful intent, and use keep when no material defect remains.
 </Algorithm>
 
 <Output>
 Return exactly one critique for every candidate identifier in the input.
-For each critique, provide verdict, confidence, error spans, evidence check, evidence reference when relevant, constraint hit, constraint quote when relevant, duplicate identifier when relevant, fix instruction when revising, preserved fields, and a review summary.
+For each critique, provide verdict, confidence, error spans, evidence check, evidence reference when relevant, constraint hit, constraint quote when relevant, duplicate identifier when relevant, fix instruction when revising, preserved fields, a review summary, and the complete ten-section rubric assessment.
+The rubric assessment must contain current_state_grounding, goal_contribution, next_action_appropriateness, action_definition, problem_action_fit, constraint_compliance, distinctness_non_redundancy, communication_handoff, internal_coherence, and suggestion_substance.
+For every rubric section, return exactly one rating (`strong`, `adequate`, `weak`, or `unknown`), a concise explanation, and only supporting evidence references that exist in the supplied context.
 Set confidence to high, medium, or low according to the strength of the evidence rather than the fluency of the candidate.
 Set evidence check to supported, missing, or contradicts and do not conceal an unsupported claim inside a keep verdict.
 Use a low-confidence reject as a revision signal only when a concrete correction is available.

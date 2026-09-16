@@ -109,6 +109,15 @@ class CritiqueConstraint(StrEnum):
     NONE = "none"
 
 
+class CritiqueRubricRating(StrEnum):
+    """The bounded rating vocabulary for one general rubric section."""
+
+    STRONG = "strong"
+    ADEQUATE = "adequate"
+    WEAK = "weak"
+    UNKNOWN = "unknown"
+
+
 class SuggestionContextItem(BaseModel):
     """One labeled piece of caller-supplied context with a stable run-local ref."""
 
@@ -218,7 +227,7 @@ class SuggestionRequest(BaseModel):
     context_manifest: tuple[ContextManifestEntry, ...] = ()
     context_warnings: tuple[str, ...] = ()
     settings: SuggestionSettings
-    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v3")
 
     @model_validator(mode="after")
     def _context_goal_matches(self) -> SuggestionRequest:
@@ -264,6 +273,31 @@ class SuggestionCandidateBatch(BaseModel):
     ideas: tuple[SuggestionDraft, ...] = Field(max_length=30)
 
 
+class SuggestionCritiqueRubricItem(BaseModel):
+    """One section-level rating and explanation in a critic rubric assessment."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    rating: CritiqueRubricRating
+    explanation: str = Field(min_length=1, max_length=1024)
+    evidence_refs: tuple[str, ...] = Field(default=(), max_length=12)
+
+
+class SuggestionCritiqueRubric(BaseModel):
+    """The ten category-neutral sections the critic applies to every candidate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    current_state_grounding: SuggestionCritiqueRubricItem
+    goal_contribution: SuggestionCritiqueRubricItem
+    next_action_appropriateness: SuggestionCritiqueRubricItem
+    action_definition: SuggestionCritiqueRubricItem
+    problem_action_fit: SuggestionCritiqueRubricItem
+    constraint_compliance: SuggestionCritiqueRubricItem
+    distinctness_non_redundancy: SuggestionCritiqueRubricItem
+    communication_handoff: SuggestionCritiqueRubricItem
+    internal_coherence: SuggestionCritiqueRubricItem
+    suggestion_substance: SuggestionCritiqueRubricItem
+
+
 class SuggestionCritique(BaseModel):
     """The critic artifact for exactly one candidate ID."""
 
@@ -280,6 +314,7 @@ class SuggestionCritique(BaseModel):
     fix_instruction: str = Field(default="", max_length=2048)
     preserve: tuple[str, ...] = Field(default=(), max_length=24)
     review_summary: str = Field(min_length=1, max_length=2048)
+    rubric: SuggestionCritiqueRubric
 
     @model_validator(mode="after")
     def _validate_review_contract(self) -> SuggestionCritique:
@@ -380,7 +415,7 @@ class SuggestionResult(BaseModel):
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
-    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v3")
 
 
 __all__ = [
@@ -388,6 +423,7 @@ __all__ = [
     "CritiqueConfidence",
     "CritiqueConstraint",
     "CritiqueEvidenceCheck",
+    "CritiqueRubricRating",
     "CritiqueVerdict",
     "IdeaHorizon",
     "IdeaReadiness",
@@ -403,6 +439,8 @@ __all__ = [
     "SuggestionContextPrimitive",
     "SuggestionCritique",
     "SuggestionCritiqueArtifact",
+    "SuggestionCritiqueRubric",
+    "SuggestionCritiqueRubricItem",
     "SuggestionDraft",
     "SuggestionHandoff",
     "SuggestionHandoffEvidence",

@@ -35,6 +35,7 @@ _WHEEL_RUNTIME_PROMPTS = (
     "vidbyte_cli/services/persistence/prompts/persistence_turn.md",
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
     "vidbyte_cli/services/suggestions/prompts/critic.md",
+    "vidbyte_cli/services/suggestions/prompts/critic_rubric.md",
     "vidbyte_cli/services/suggestions/prompts/generator.md",
     "vidbyte_cli/services/suggestions/prompts/revision.md",
     *(

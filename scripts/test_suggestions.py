@@ -40,12 +40,15 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     ContextManifestEntry,
     CritiqueConfidence,
     CritiqueEvidenceCheck,
+    CritiqueRubricRating,
     CritiqueVerdict,
     SuggestionCandidateBatch,
     SuggestionContextItem,
     SuggestionContextPrimitive,
     SuggestionCritique,
     SuggestionCritiqueArtifact,
+    SuggestionCritiqueRubric,
+    SuggestionCritiqueRubricItem,
     SuggestionDraft,
     SuggestionRequest,
     SuggestionSettings,
@@ -192,7 +195,29 @@ def _critique(
         fix_instruction=fix,
         preserve=preserve,
         review_summary=f"Reviewed {idea_id} with no unsupported claim.",
+        rubric=_rubric(idea_id),
     )
+
+
+def _rubric(idea_id: str) -> SuggestionCritiqueRubric:
+    # Supplies the complete general rubric artifact used by the offline SDK fake.
+    names = (
+        "current_state_grounding",
+        "goal_contribution",
+        "next_action_appropriateness",
+        "action_definition",
+        "problem_action_fit",
+        "constraint_compliance",
+        "distinctness_non_redundancy",
+        "communication_handoff",
+        "internal_coherence",
+        "suggestion_substance",
+    )
+    item = SuggestionCritiqueRubricItem(
+        rating=CritiqueRubricRating.ADEQUATE,
+        explanation=f"The {idea_id} fake supplies an adequate general review section.",
+    )
+    return SuggestionCritiqueRubric(**{name: item for name in names})
 
 
 def _draft(

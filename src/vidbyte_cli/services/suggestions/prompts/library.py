@@ -19,8 +19,8 @@ class SuggestionPrompts:
         return self._read("generator")
 
     def critic_system(self) -> str:
-        # System prompt for independent review turns.
-        return self._read("critic")
+        # Append the reusable general rubric to every independent review turn.
+        return f"{self._read('critic')}\n\n{self._read('critic_rubric')}"
 
     def revision_system(self) -> str:
         # Revision remains on the generator history but uses a narrower algorithm.

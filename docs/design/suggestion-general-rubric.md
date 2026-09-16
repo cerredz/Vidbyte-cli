@@ -189,10 +189,12 @@ revision packet into an unbounded transcript.
 ```python
 class CritiqueRubricRating(StrEnum): ...
 
+
 class SuggestionCritiqueRubricItem(BaseModel):
     rating: CritiqueRubricRating
     explanation: str
     evidence_refs: tuple[str, ...]
+
 
 class SuggestionCritiqueRubric(BaseModel):
     current_state_grounding: SuggestionCritiqueRubricItem
