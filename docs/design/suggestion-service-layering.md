@@ -50,3 +50,20 @@ collaborators and no longer contains duplicate stage implementations.
   stateless per run and exchange frozen Pydantic values.
 - A future stage may bypass the context boundary: require every model call to
   arrive through the callback with a bridge-produced primitive.
+
+## Future direction: the critic stops mapping to individual ideas
+
+`SuggestionCritiqueAgent.review` currently maps one critique onto one candidate
+and derives keep, revise, and drop decisions from it. A later PR replaces that
+with a single general critic handoff appended to the generator's context window
+through the `vidbyte-sdk` context window manager. The critic then influences the
+next generator turn as additional context rather than as a control signal, and
+this module loses its per-idea mapping along with the hard-reject and duplicate
+branches.
+
+That change is deliberately out of scope here. This PR is a structural split
+that must preserve the current loop's branches, and the review policy is the
+part of the loop with the most behavior riding on it. Moving the boundary and
+rewriting the policy in one diff would make it impossible to tell a refactor
+regression from an intended policy change, so the policy is moved intact and
+replaced separately.
