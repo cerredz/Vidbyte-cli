@@ -480,9 +480,16 @@ class SuggestRunCommand:
         ):
             if key in context_doc and not merged.get(key):
                 value = context_doc[key]
-                if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                if key == "future_intended_work" and (
+                    not isinstance(value, list) or not all(isinstance(item, str) for item in value)
+                ):
                     raise SuggestionInputInvalid()
-                merged[key] = tuple(value)
+                if isinstance(value, list):
+                    merged[key] = (
+                        tuple(value)
+                        if key == "future_intended_work"
+                        else tuple(str(item) for item in value)
+                    )
         return merged
 
     def _section(self, document: dict[str, object], name: str) -> dict[str, object]:

@@ -404,6 +404,19 @@ class SuggestionSuite:
             "[Hidden Failure] malformed future intent fails before generation",
             malformed_planned.returncode != 0 and malformed_planned.stdout.strip() == "",
         )
+        legacy_context = _run_cli(
+            ["--json", "--no-input", "agents", "suggest", "run", "--input", "-"],
+            stdin_text=json.dumps({"goal": "Legacy context", "context": {"completed": [7]}}),
+        )
+        try:
+            legacy_data = json.loads(legacy_context.stdout).get("data", {})
+            legacy_handoff = legacy_data.get("ideas", [])[0].get("handoff", {})
+        except (IndexError, json.JSONDecodeError):
+            legacy_handoff = {}
+        results.check(
+            "[Hidden Assumption] legacy context coercion remains compatible",
+            legacy_context.returncode == 0 and legacy_handoff.get("completed_work") == ["7"],
+        )
         dry = _run_cli(
             ["--json", "--no-input", "agents", "suggest", "run", "--goal", "Dry goal", "--dry-run"]
         )

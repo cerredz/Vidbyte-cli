@@ -54,7 +54,7 @@ Add `future_intended_work` as a distinct caller-supplied context field for the l
 2. A structured input document may contain `"context": {"future_intended_work": ["...", "..."]}`; the field is optional and may be omitted.
 3. Each nonblank value becomes one `SuggestionContextItem` with kind `future-intended-work`, source `flag:future-intended-work`, `caller_supplied=true`, and a deterministic per-run `ctx-NNN` reference.
 4. A present `future_intended_work` value must be a JSON list of strings. A scalar, object, null, or list containing a non-string fails before a model call with the existing typed input error.
-5. Future intended work must be rendered to the generator and critic as planned state, explicitly separated from completed and in-progress state.
+5. Prompt assets must define future intended work as planned state, explicitly separated from completed and in-progress state; the current offline template path must preserve that context for handoff and selection, while a provider-backed path can render it into model turns.
 6. Suggestions may build on future intended work by proposing prerequisites, sequencing, validation, risk reduction, or a material refinement; they must not claim the planned work is completed.
 7. Exact duplicate planned-work statements are not returned as new suggestions unless the suggestion is a clearly labeled prerequisite, validation, or refinement; semantic overlap remains a critic decision, not a substring-only exclusion.
 8. Every final `SuggestionHandoff` includes `future_intended_work` in input order and includes it in the current-state rendering.
@@ -78,7 +78,7 @@ Add `future_intended_work` as a distinct caller-supplied context field for the l
 
 The command layer adds one repeatable option and one structured-input key. Both paths feed the existing field-to-kind mapping, so the context builder does not need a second storage model. The new kind is `future-intended-work`, which keeps it distinguishable from the existing `completed` and `in-progress` kinds while retaining stable references and manifest behavior.
 
-The service will include the new kind in the context text supplied to generator and critic stages. The prompt contract will define it as planned, uncompleted work. Deterministic selection will suppress only exact duplicate planned statements; the critic remains responsible for deciding whether an overlapping proposal is a useful prerequisite, validation, or refinement.
+The prompt contract will define the new kind as planned, uncompleted work. The current service deliberately uses a deterministic offline template path, so it does not make a model turn; it preserves the planned context in selection and handoffs, and the packaged generator/critic prompts are ready for the provider-backed path. Deterministic selection will suppress only exact duplicate planned statements; the critic remains responsible for deciding whether an overlapping proposal is a useful prerequisite, validation, or refinement when that path is active.
 
 The handoff model and renderer will carry the planned statements in a dedicated `future_intended_work` tuple. Its state summary will say that the entries are intended rather than completed, which prevents a downstream executor from treating an intention as a fact. No execution authority is inferred from the field.
 
@@ -211,8 +211,8 @@ SuggestionPrompts.critic_turn(goal, candidates) -> str
 
 #### Logic / Algorithm
 
-1. Label each planned statement as `Future intended work` in the context rendering.
-2. Tell the generator to use those statements for sequencing, prerequisites, validation, and material refinements.
+1. Label each planned statement as `Future intended work` in the packaged prompt contract.
+2. Tell the generator to use those statements for sequencing, prerequisites, validation, and material refinements when a provider-backed turn is enabled.
 3. Tell the generator not to report planned work as completed or simply echo it as a new idea.
 4. Tell the critic to distinguish a useful prerequisite/refinement from a duplicate.
 5. Preserve separate generator and critic histories and existing output schemas.
@@ -381,6 +381,7 @@ No files are deleted. No migration, dependency, or package-data change is expect
 - `[Edge Case]` Omitted option and omitted JSON key produce no planned-work item and no false “none” statement.
 - `[Edge Case]` An empty list is treated as no supplied planned work.
 - `[Hidden Failure]` A JSON scalar, object, null, or mixed-type list fails before service/model execution.
+- `[Hidden Assumption]` Existing context fields retain their prior string-coercion behavior when a legacy document contains scalar list items.
 - `[Hidden Failure]` A planned statement is not accidentally assigned the `completed` or `in-progress` kind.
 - `[Hidden Failure]` Existing completed/in-progress contradiction warnings still appear when future intent is also supplied.
 - `[Silent Failure]` `SuggestionHandoff.future_intended_work` contains the original values rather than an empty tuple or a reordered set.
