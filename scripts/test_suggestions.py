@@ -57,6 +57,8 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     SuggestionCritique,
     SuggestionCritiqueArtifact,
     SuggestionCritiqueIssue,
+    SuggestionCritiqueRubric,
+    SuggestionCritiqueRubricItem,
     SuggestionCritiqueSignals,
     SuggestionDraft,
     SuggestionRequest,
@@ -227,7 +229,29 @@ def _critique(
         review_summary=f"Reviewed {idea_id} with no unsupported claim.",
         signals=signals or SuggestionCritiqueSignals(),
         issues=issues,
+        rubric=_rubric(idea_id),
     )
+
+
+def _rubric(idea_id: str) -> SuggestionCritiqueRubric:
+    # Supplies the complete general rubric artifact used by the offline SDK fake.
+    names = (
+        "current_state_grounding",
+        "goal_contribution",
+        "next_action_appropriateness",
+        "action_definition",
+        "problem_action_fit",
+        "constraint_compliance",
+        "distinctness_non_redundancy",
+        "communication_handoff",
+        "internal_coherence",
+        "suggestion_substance",
+    )
+    item = SuggestionCritiqueRubricItem(
+        score=75,
+        explanation=f"The {idea_id} fake supplies an adequate general review section.",
+    )
+    return SuggestionCritiqueRubric(**{name: item for name in names})
 
 
 def _draft(
@@ -650,6 +674,12 @@ class SuggestionSuite:
             "Candidates:\n" not in revision_prompt
             and len(revision_context.candidates) == len(revision_context.critiques) == 1
             and revision_context.candidates[0].idea_id == revision_context.critiques[0].idea_id,
+        )
+        results.check(
+            "revision window carries the complete rubric assessment",
+            '"rubric"' in revision_context.to_context_text()
+            and "current_state_grounding" in revision_context.to_context_text()
+            and "suggestion_substance" in revision_context.to_context_text(),
         )
         dry_request = _request().model_copy(
             update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}

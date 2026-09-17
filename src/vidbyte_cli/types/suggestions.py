@@ -248,7 +248,7 @@ class SuggestionRequest(BaseModel):
     context_warnings: tuple[str, ...] = ()
     settings: SuggestionSettings
     attachments: AttachmentBundle = Field(default_factory=AttachmentBundle)
-    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v3")
 
     @model_validator(mode="after")
     def _context_goal_matches(self) -> SuggestionRequest:
@@ -502,6 +502,129 @@ class SuggestionCritiqueIssue(BaseModel):
     )
 
 
+class SuggestionCritiqueRubricItem(BaseModel):
+    """One scored section of the general suggestion rubric for one candidate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    score: int = Field(
+        ge=0,
+        le=100,
+        description=(
+            "Score from 0 to 100 for this rubric section, taken from the rating "
+            "guidelines the critic prompt states for that section. The bands are "
+            "deliberately coarse, so place the candidate in the band it belongs to "
+            "rather than defending a precise number. Score the lowest band when the "
+            "supplied context cannot answer the section, and say so in the explanation."
+        ),
+    )
+    explanation: str = Field(
+        min_length=1,
+        max_length=1024,
+        description=(
+            "Why this section earned its band, stated in the candidate's own terms. "
+            "Name the fields that carried or lost the score so the revision turn can "
+            "target a repair instead of rewriting the candidate. Say plainly when the "
+            "supplied context was silent rather than inventing support for a higher band."
+        ),
+    )
+    evidence_refs: tuple[str, ...] = Field(
+        default=(),
+        max_length=12,
+        description=(
+            "Stable context references backing this section's score, such as ctx-001. "
+            "Include only references that exist in the supplied context, because an "
+            "invented reference is worse than an empty list. Leave empty when the "
+            "section is judged from the candidate's own fields alone."
+        ),
+    )
+
+
+class SuggestionCritiqueRubric(BaseModel):
+    """The ten category-neutral sections the critic scores for every candidate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    current_state_grounding: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate starts from the caller's actual situation rather "
+            "than a generic one. A high band means the candidate reads the supplied "
+            "state correctly and avoids work already done; a low band means it "
+            "assumes facts the caller never supplied."
+        ),
+    )
+    goal_contribution: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate moves the caller's stated goal rather than merely "
+            "sharing its topic. A high band means success would visibly change the "
+            "goal; a low band means the action could succeed while the goal stands "
+            "exactly where it was."
+        ),
+    )
+    next_action_appropriateness: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate can be started from the current state instead of "
+            "waiting on an earlier step. A high band means it sits on the caller's "
+            "real bottleneck; a low band means a prerequisite or open decision has "
+            "to land first."
+        ),
+    )
+    action_definition: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate names one concrete, bounded action an executor "
+            "could begin. A high band means the first action, target, and result are "
+            "unambiguous; a low band means the executor would have to invent the "
+            "missing plan."
+        ),
+    )
+    problem_action_fit: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the proposed action plausibly changes the problem it names. A "
+            "high band means the mechanism from action to result is stated and holds; "
+            "a low band means the candidate jumps from a real problem to an unrelated "
+            "response."
+        ),
+    )
+    constraint_compliance: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate stays inside the caller's explicit boundaries and "
+            "authority. A high band means it steers visibly clear of forbidden, "
+            "completed, and decided ground; a low band means it reopens a closed "
+            "decision or assumes permission never granted."
+        ),
+    )
+    distinctness_non_redundancy: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate adds something the rest of the slate and prior "
+            "work do not already cover. A high band means removing it would shrink "
+            "the caller's real options; a low band means it restates a sibling under "
+            "new wording."
+        ),
+    )
+    communication_handoff: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether another person or agent could use the suggestion without "
+            "reconstructing missing logic. A high band means title, summary, and "
+            "handoff carry one clear proposal; a low band means the reader has to "
+            "guess what is being asked."
+        ),
+    )
+    internal_coherence: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether every field of the candidate describes the same underlying "
+            "suggestion. A high band means actions, benefit, dependencies, and "
+            "completion criteria tell one story; a low band means plausible fields "
+            "contradict one another."
+        ),
+    )
+    suggestion_substance: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate recommends something rather than observing, "
+            "aspiring, or restating the goal. A high band means it narrows the space "
+            "of next moves for this caller; a low band means the same wording would "
+            "fit almost any caller."
+        ),
+    )
+
+
 class SuggestionCritique(BaseModel):
     """The critic artifact for exactly one candidate ID."""
 
@@ -535,6 +658,15 @@ class SuggestionCritique(BaseModel):
             "Each issue carries a stable code, a severity, and the evidence behind "
             "it so result consumers can inspect findings without reading provider "
             "logs. Empty when the critique needs no visible issue beyond the verdict."
+        ),
+    )
+    rubric: SuggestionCritiqueRubric = Field(
+        description=(
+            "The ten-section general rubric assessment for this candidate. Each "
+            "section carries one coarse score, its explanation, and the evidence "
+            "behind it, so the revision turn can repair the weakest section instead "
+            "of rewriting the candidate. The rubric describes quality and never "
+            "overrides the verdict, which remains the only loop control signal."
         ),
     )
 
@@ -734,7 +866,7 @@ class SuggestionResult(BaseModel):
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
-    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v3")
 
 
 __all__ = [
@@ -762,6 +894,8 @@ __all__ = [
     "SuggestionCritique",
     "SuggestionCritiqueArtifact",
     "SuggestionCritiqueIssue",
+    "SuggestionCritiqueRubric",
+    "SuggestionCritiqueRubricItem",
     "SuggestionCritiqueSignals",
     "SuggestionDraft",
     "SuggestionEvidence",
