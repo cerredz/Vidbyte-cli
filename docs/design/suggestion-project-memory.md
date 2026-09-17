@@ -115,20 +115,13 @@ Owns the local JSON documents and keeps commands independent from filesystem det
 
 ```python
 class SuggestionProjectStore:
-    def create(self, key: str, title: str, description: str) -> SuggestionProject:
-        ...
-
-    def list(self) -> tuple[SuggestionProject, ...]:
-        ...
-
-    def get(self, key: str) -> SuggestionProject:
-        ...
-
-    def load_memory(self, key: str) -> SuggestionProjectMemory:
-        ...
-
-    def append_feedback(self, key: str, feedback_type: FeedbackType, suggestion: str, reason: str | None) -> SuggestionFeedback:
-        ...
+    def create(self, key: str, title: str, description: str) -> SuggestionProject: ...
+    def list(self) -> tuple[SuggestionProject, ...]: ...
+    def get(self, key: str) -> SuggestionProject: ...
+    def load_memory(self, key: str) -> SuggestionProjectMemory: ...
+    def append_feedback(
+        self, key: str, feedback_type: FeedbackType, suggestion: str, reason: str | None
+    ) -> SuggestionFeedback: ...
 ```
 
 #### Logic / Algorithm
@@ -164,17 +157,20 @@ class FeedbackType(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
 
+
 class SuggestionProject(BaseModel):
     key: str
     title: str
     description: str
     memory_file: str
 
+
 class SuggestionFeedback(BaseModel):
     type: FeedbackType
     suggestion: str
     reason: str | None = None
     created_at: str
+
 
 class SuggestionProjectMemory(BaseModel):
     schema_version: Literal[1] = 1
@@ -393,6 +389,7 @@ N/A - this change adds no backend route, MongoDB integration, network call, pric
 | MODIFY | `README.md` | Document public commands, JSON layout, and examples. |
 | MODIFY | `scripts/run_ci.py` | Run the feature verification script in the canonical gate. |
 | MODIFY | `scripts/smoke.py` | Verify command registration and credential-free help paths. |
+| MODIFY | `scripts/test_research_only_surface.py` | Authorize the expanded agents suggest command tree. |
 
 ---
 
