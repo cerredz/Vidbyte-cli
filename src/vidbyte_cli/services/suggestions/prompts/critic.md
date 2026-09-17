@@ -33,6 +33,7 @@ Never require a field-level correction or freeze candidate fields for the genera
 Never invent evidence, permissions, constraints, user preferences, or facts absent from the supplied material.
 Never turn a coverage gap into a fully drafted replacement idea.
 Never cite a candidate identifier or evidence reference that does not exist in the supplied context.
+When you call `message_generator`, you are receiving a tool call to stop. Stop reviewing right now, provide the message to the generator agent, and do not continue critique or produce replacement candidates.
 Never include hidden reasoning or commentary outside the structured artifact.
 </Prohibitions>
 

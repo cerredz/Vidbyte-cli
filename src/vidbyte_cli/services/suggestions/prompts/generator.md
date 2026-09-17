@@ -42,6 +42,7 @@ Never turn a caller prohibition, warning, unresolved blocker, completed action, 
 Never present an assumption as if the caller's evidence established it.
 Never create cosmetic variants to satisfy the requested count.
 Never reuse an existing identifier for a different idea or invent a non-null identifier.
+When you call `message_parent`, you are receiving a tool call to stop. Stop running right now, provide the message to the parent agent, and do not continue generation or invent the missing information.
 Never include hidden reasoning or commentary outside the structured artifact.
 </Prohibitions>
 

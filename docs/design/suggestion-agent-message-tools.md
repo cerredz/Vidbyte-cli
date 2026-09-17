@@ -38,7 +38,7 @@ Add two narrowly-scoped tools to the suggestion workflow. A generator can call m
 ## 3. Background & Context
 
 - The suggestion service now keeps one persistent generator session and places independent critic context into that session between refinement turns.
-- vidbyte-sdk already accepts callable tools through CodexHarnessAgentSettings.tools and runs them through the Codex dynamic-tool bridge.
+- The CLI's previous pinned SDK revision predates callable tools; the dependency pin moves to the current tool-capable SDK revision, which accepts callable tools through CodexHarnessAgentSettings.tools and runs them through the Codex dynamic-tool bridge.
 - The generator and critic currently have separate SDK settings paths, but the suggestion adapter does not yet pass role-specific tools.
 - A tool callback cannot synchronously run the external parent agent that launched the CLI. The CLI therefore records a parent request and returns it as structured output; an embedded caller can inspect the same run-local state through the service boundary in a future extension.
 - Repository instructions require lazy SDK imports in services/suggestions/sdk.py, typed local boundaries, prompt assets in Markdown, final-only stdout, and the canonical scripts/run_ci.py gate.
@@ -63,7 +63,7 @@ Add two narrowly-scoped tools to the suggestion workflow. A generator can call m
 
 ### Non-Functional Requirements
 
-- No new SDK dependency or provider protocol is introduced.
+- No new SDK provider protocol is introduced; the CLI updates its existing pinned SDK revision to the tool-capable release.
 - Message calls must be safe-only tools and must not broaden the existing read-only agent sandbox.
 - Message bodies and counts are bounded to prevent prompt or result amplification.
 - The message path must preserve final-only stdout and existing machine-readable result envelopes.
@@ -220,8 +220,10 @@ Creates the run-local message collaborator, gives each role only its permitted t
 class RunStatus(StrEnum):
     NEEDS_INPUT = "needs_input"
 
+
 class StopReason(StrEnum):
     PARENT_MESSAGE = "parent_message"
+
 
 class SuggestionResult(BaseModel):
     agent_messages: tuple[str, ...] = ()
@@ -364,6 +366,7 @@ Complete list of every file that will be created, modified, or deleted:
 | MODIFY | src/vidbyte_cli/types/suggestions.py | Add critic message context and parent-message result state |
 | MODIFY | src/vidbyte_cli/services/suggestions/prompts/generator.md | Describe message_parent stop semantics |
 | MODIFY | src/vidbyte_cli/services/suggestions/prompts/critic.md | Describe message_generator stop semantics |
+| MODIFY | pyproject.toml | Pin the existing SDK dependency to the tool-capable revision |
 | CREATE | scripts/test-suggestion-agent-message-tools.py | Executable offline verification for all feature behavior |
 | MODIFY | scripts/run_ci.py | Register the executable verification script as a source gate |
 | CREATE | docs/design/suggestion-agent-message-tools.md | Source-of-truth architecture and test plan |
@@ -412,7 +415,7 @@ Complete list of every file that will be created, modified, or deleted:
 
 | Dependency | Version / Endpoint | Purpose | Risk |
 |------------|--------------------|---------|------|
-| vidbyte-sdk | Existing pinned optional SDK | Registers and executes callable dynamic tools | Provider/tool bridge shape could change; existing adapter boundary tests catch this |
+| vidbyte-sdk | `d8483257717d6e1f99e594462b8926e9b5de525a` | Registers and executes callable dynamic tools | Provider/tool bridge shape could change; existing adapter boundary tests catch this |
 | pydantic | Existing CLI dependency | Validates additive result and context contracts | Schema validation could reject a malformed fake; tests cover both typed and mapping paths |
 | OpenAI Codex provider | Existing configured provider | Runs generator and critic model turns | No new provider call; messages remain local to the run |
 

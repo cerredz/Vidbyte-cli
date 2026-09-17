@@ -19,6 +19,7 @@ from .attachments import AttachmentBundle
 
 SCHEMA_VERSION = 1
 MAX_CONTEXT_CHARS = 5_000_000
+MAX_AGENT_MESSAGE_CHARS = 2_000
 
 SUGGESTIONS_RESULT_KIND = "suggestions.result"
 SUGGESTIONS_HANDOFF_KIND = "suggestions.handoff"
@@ -65,6 +66,7 @@ class RunStatus(StrEnum):
     COMPLETE = "complete"
     PARTIAL = "partial"
     NO_SUGGESTIONS = "no_suggestions"
+    NEEDS_INPUT = "needs_input"
 
 
 class StopReason(StrEnum):
@@ -77,6 +79,7 @@ class StopReason(StrEnum):
     TIME_LIMIT = "time_limit"
     PROVIDER_FAILED = "provider_failed"
     DRY_RUN = "dry_run"
+    PARENT_MESSAGE = "parent_message"
 
 
 class CriticObservationKind(StrEnum):
@@ -433,6 +436,7 @@ class SuggestionCriticContextPrimitive:
     """One replaceable whole-slate review placed after the generator's turn input."""
 
     context: SuggestionCriticContext
+    messages: tuple[str, ...] = ()
     kind: str = field(default="suggestion-critic-context", init=False)
     title: str = field(default="Independent Critic Signal Context", init=False)
     metadata: Mapping[str, object] = field(default_factory=dict, init=False)
@@ -443,6 +447,17 @@ class SuggestionCriticContextPrimitive:
         # Rejects loose mappings so only the validated critic artifact enters context.
         if not isinstance(self.context, SuggestionCriticContext):
             raise TypeError("Critic context primitive requires SuggestionCriticContext.")
+        if (
+            not isinstance(self.messages, tuple)
+            or len(self.messages) > 4
+            or any(
+                not isinstance(message, str)
+                or not message.strip()
+                or len(message.strip()) > MAX_AGENT_MESSAGE_CHARS
+                for message in self.messages
+            )
+        ):
+            raise TypeError("Critic context messages must be bounded non-empty strings.")
 
     def to_context_text(self) -> str:
         # Renders one readable block while preserving typed references and review order.
@@ -462,6 +477,9 @@ class SuggestionCriticContextPrimitive:
             "",
             "## Uncertainties",
             *self._lines(self.context.uncertainties),
+            "",
+            "## Messages from critic",
+            *self._lines(self.messages),
             "</Critic Signal Context>",
         ]
         return "\n".join(sections)
@@ -568,6 +586,7 @@ class SuggestionResult(BaseModel):
     context_manifest: tuple[ContextManifestEntry, ...] = ()
     ideas: tuple[SuggestionIdea, ...] = ()
     critic_contexts: tuple[SuggestionCriticContext, ...] = ()
+    agent_messages: tuple[str, ...] = Field(default=(), max_length=4)
     category_coverage: dict[str, int] = Field(default_factory=dict)
     missing_context: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
@@ -583,6 +602,7 @@ __all__ = [
     "IdeaReadiness",
     "IdeaRelationship",
     "MAX_CONTEXT_CHARS",
+    "MAX_AGENT_MESSAGE_CHARS",
     "RunStatus",
     "SCHEMA_VERSION",
     "SUGGESTIONS_HANDOFF_KIND",
