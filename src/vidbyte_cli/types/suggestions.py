@@ -11,7 +11,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -79,72 +79,18 @@ class StopReason(StrEnum):
     DRY_RUN = "dry_run"
 
 
-class CritiqueVerdict(StrEnum):
-    """The critic's control signal for one candidate."""
+class CriticObservationKind(StrEnum):
+    """The kind of useful signal one whole-slate observation carries."""
 
-    KEEP = "keep"
-    REVISE = "revise"
-    REJECT = "reject"
-
-
-class CritiqueConfidence(StrEnum):
-    """How certain the critic is about its verdict."""
-
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-
-
-class CritiqueEvidenceCheck(StrEnum):
-    """Whether candidate claims are grounded in the supplied context."""
-
-    SUPPORTED = "supported"
-    MISSING = "missing"
-    CONTRADICTS = "contradicts"
-
-
-class CritiqueConstraint(StrEnum):
-    """The hard context boundary, if any, that a candidate hits."""
-
-    FORBIDDEN = "forbidden"
-    COMPLETED = "completed"
-    IN_PROGRESS = "in-progress"
-    NONE = "none"
-
-
-class CritiqueSignalLevel(StrEnum):
-    """Ordinal quality signal without pretending to be a precise score."""
-
-    EXCEPTIONAL = "exceptional"
-    STRONG = "strong"
-    ADEQUATE = "adequate"
-    MARGINAL = "marginal"
-    WEAK = "weak"
-    ABSENT = "absent"
-    UNKNOWN = "unknown"
-
-
-class CritiqueRiskLevel(StrEnum):
-    """Estimated downside signal kept separate from quality dimensions."""
-
-    NEGLIGIBLE = "negligible"
-    LOW = "low"
-    MODERATE = "moderate"
-    HIGH = "high"
-    CRITICAL = "critical"
-    UNKNOWN = "unknown"
-
-
-class CritiqueIssueSeverity(StrEnum):
-    """How urgently one traceable issue should affect a decision."""
-
-    BLOCKER = "blocker"
-    CRITICAL = "critical"
-    MAJOR = "major"
-    MODERATE = "moderate"
-    MINOR = "minor"
-    NOTE = "note"
-    INFO = "info"
+    STRENGTH = "strength"
+    EVIDENCE = "evidence"
+    CONSTRAINT = "constraint"
+    REDUNDANCY = "redundancy"
+    COVERAGE = "coverage"
+    FEASIBILITY = "feasibility"
+    ACTIONABILITY = "actionability"
+    TRADEOFF = "tradeoff"
+    RISK = "risk"
 
 
 class SuggestionContextItem(BaseModel):
@@ -248,7 +194,7 @@ class SuggestionRequest(BaseModel):
     context_warnings: tuple[str, ...] = ()
     settings: SuggestionSettings
     attachments: AttachmentBundle = Field(default_factory=AttachmentBundle)
-    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v3")
 
     @model_validator(mode="after")
     def _context_goal_matches(self) -> SuggestionRequest:
@@ -294,266 +240,119 @@ class SuggestionCandidateBatch(BaseModel):
     ideas: tuple[SuggestionDraft, ...] = Field(max_length=30)
 
 
-class SuggestionCritiqueSignals(BaseModel):
-    """Multidimensional observations returned alongside one critic verdict."""
+class SuggestionCriticObservation(BaseModel):
+    """One evidence-linked observation about any part of the candidate slate."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    goal_alignment: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
+    kind: CriticObservationKind = Field(
         description=(
-            "How directly the candidate advances the caller's stated goal. "
-            "Use exceptional when the candidate is the obvious next move, adequate when "
-            "it helps without being central, and weak or absent when the link is thin "
-            "or missing. Use unknown when the supplied context says too little to judge."
-        ),
+            "The observation's decision-relevant subject. Use strength for something worth "
+            "preserving, evidence or constraint for supplied-context findings, redundancy or "
+            "coverage for relationships across the slate, feasibility or actionability for "
+            "execution concerns, and tradeoff or risk for costs and downside."
+        )
     )
-    category_fit: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How well the candidate matches its claimed primary category. "
-            "Use exceptional when the category definition describes the candidate "
-            "exactly, adequate when it fits with minor stretching, and weak when the "
-            "label feels borrowed. Use unknown when no category taxonomy was supplied."
-        ),
-    )
-    evidence_grounding: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How firmly the candidate's claims rest on the supplied evidence. "
-            "Use exceptional when every material claim cites a supporting reference, "
-            "adequate when the core claims hold with minor gaps, and weak when key "
-            "claims float free. Use unknown when no evidence was supplied to check."
-        ),
-    )
-    actionability: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How concretely another agent could start executing the candidate. "
-            "Use exceptional when the first action names an unambiguous move, adequate "
-            "when the path is clear but needs routine clarification, and weak when the "
-            "candidate reads as an aspiration. Use unknown when executability cannot "
-            "be judged from the supplied context."
-        ),
-    )
-    feasibility: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "Whether the candidate can realistically be done with available means. "
-            "Use exceptional when dependencies exist and effort fits the horizon, "
-            "adequate when it is plausible with stated assumptions, and weak when it "
-            "needs resources the context never shows. Use unknown when feasibility "
-            "depends on facts outside the supplied context."
-        ),
-    )
-    internal_coherence: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "Whether the candidate's own parts agree with one another. "
-            "Use exceptional when actions, decision points, considerations, "
-            "dependencies, and completion criteria tell one story, adequate when they "
-            "mostly align, and weak when steps contradict the stated outcome. Use "
-            "unknown when the candidate is too thin to check for agreement."
-        ),
-    )
-    distinctness: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How much the candidate adds beyond the other candidates in the batch. "
-            "Use exceptional when it opens a direction nothing else covers, adequate "
-            "when it overlaps but keeps its own angle, and weak when it restates a "
-            "sibling. Use unknown when the rest of the batch is not visible."
-        ),
-    )
-    constraint_compliance: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How cleanly the candidate respects forbidden, completed, and in-progress "
-            "boundaries. Use exceptional when it steers visibly clear, adequate when "
-            "no boundary is touched, and weak when it brushes against one without a "
-            "direct hit. Use unknown when no constraint boundaries were supplied."
-        ),
-    )
-    expected_impact: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How much progress the candidate promises if it succeeds. "
-            "Use exceptional when success would move the goal materially, adequate "
-            "when it earns a solid incremental gain, and weak when the payoff is "
-            "marginal even on success. Use unknown when the payoff cannot be sized "
-            "from the supplied context."
-        ),
-    )
-    effort_proportionality: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "Whether the candidate's cost fits its promised payoff. "
-            "Use exceptional when the gain clearly outweighs the effort, adequate "
-            "when cost and payoff balance, and weak when the effort dwarfs the "
-            "return. Use unknown when effort or payoff cannot be sized from the "
-            "supplied context."
-        ),
-    )
-    time_to_value: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How quickly the candidate pays off relative to its horizon. "
-            "Use exceptional when value lands promptly, adequate when the wait "
-            "matches the horizon, and weak when the payoff arrives far later than "
-            "the framing implies. Use unknown when timing cannot be judged from the "
-            "supplied context."
-        ),
-    )
-    reversibility: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How easily the candidate's effects can be undone if it disappoints. "
-            "Use exceptional when every step is cheaply reversible, adequate when "
-            "the commitment is bounded, and weak when it burns bridges or spends "
-            "irreversible budget. Use unknown when reversibility cannot be judged "
-            "from the supplied context."
-        ),
-    )
-    information_gain: CritiqueSignalLevel = Field(
-        default=CritiqueSignalLevel.UNKNOWN,
-        description=(
-            "How much the candidate teaches even if it does not fully succeed. "
-            "Use exceptional when the attempt resolves a key uncertainty, adequate "
-            "when it yields useful partial evidence, and weak when failure leaves "
-            "nothing behind. Use unknown when the learning value cannot be judged "
-            "from the supplied context."
-        ),
-    )
-    risk: CritiqueRiskLevel = Field(
-        default=CritiqueRiskLevel.UNKNOWN,
-        description=(
-            "The estimated downside of attempting the candidate, kept separate from "
-            "its quality signals. Use negligible when failure costs almost nothing, "
-            "moderate when failure wastes real effort, and critical when failure "
-            "harms the goal itself. Use unknown when the downside cannot be sized "
-            "from the supplied context."
-        ),
-    )
-
-
-class SuggestionCritiqueIssue(BaseModel):
-    """One evidence-linked defect or useful observation in a critic packet."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    code: str = Field(
-        min_length=1,
-        max_length=64,
-        pattern=r"^[a-z][a-z0-9_]*$",
-        description=(
-            "Stable snake-case identifier for the kind of issue, such as "
-            "unsupported_claim or duplicate_candidate. The code lets callers group "
-            "repeat observations across candidates and runs without parsing prose. "
-            "It must start lowercase and use only lowercase letters, digits, and "
-            "underscores."
-        ),
-    )
-    severity: CritiqueIssueSeverity = Field(
-        description=(
-            "How urgently this single issue should affect the caller's decision. "
-            "Use blocker when the candidate cannot proceed as written, major when it "
-            "needs repair before trust, and minor or note when it is worth knowing "
-            "but not decisive. Use info for observations that aid judgment without "
-            "asking for any change."
-        ),
-    )
-    fields: tuple[str, ...] = Field(
+    candidate_ids: tuple[str, ...] = Field(
         default=(),
-        max_length=12,
+        max_length=30,
         description=(
-            "Candidate field names this issue touches, such as expected_benefit or "
-            "first_action. Naming fields lets the revision turn target its fix "
-            "instead of rewriting the whole candidate. Leave empty when the issue "
-            "concerns the candidate as a whole rather than specific fields."
+            "Zero to thirty candidate identifiers affected by this observation. Use several IDs "
+            "when the signal concerns overlap or balance across candidates, one for a local point, "
+            "and none when the observation concerns the slate as a whole. Every supplied ID must "
+            "come from the reviewed candidate packet."
         ),
     )
     evidence_refs: tuple[str, ...] = Field(
         default=(),
         max_length=12,
         description=(
-            "Stable context references backing this observation, such as ctx-001. "
-            "Every defect or tradeoff claim must point at the evidence that shows "
-            "it, so callers can verify without rereading provider logs. Leave empty "
-            "only when the issue needs no evidence, such as an internal incoherence."
+            "Zero to twelve stable context references that support the observation. Cite every "
+            "relevant supplied record when the point depends on caller evidence, and leave this "
+            "empty only for relationships visible directly in the candidates or for an explicit "
+            "uncertainty."
         ),
     )
-    explanation: str = Field(
+    signal: str = Field(
         min_length=1,
         max_length=2048,
         description=(
-            "What the issue is and why it matters for this candidate. "
-            "State the defect or tradeoff plainly and connect it to the cited "
-            "fields and evidence. Keep it to the facts a caller needs to decide, "
-            "not a restatement of the whole review."
+            "The concrete pattern, strength, defect, conflict, gap, or tradeoff the critic found. "
+            "State what is visible in the supplied candidates and context without issuing a keep, "
+            "revise, or reject command."
         ),
     )
-    repair: str = Field(
+    implication: str = Field(
+        min_length=1,
+        max_length=2048,
+        description=(
+            "Why the signal matters to the quality or usefulness of the complete slate. Connect "
+            "the observation to the caller's goal and name the likely consequence without "
+            "pretending uncertainty has been resolved."
+        ),
+    )
+    possible_response: str = Field(
         default="",
         max_length=2048,
         description=(
-            "Concrete correction the revision turn can apply, left empty when none "
-            "exists. A repair must be specific enough to execute, such as restating "
-            "a benefit as an assumption or citing the missing reference. Do not "
-            "offer a repair that the supplied evidence cannot support."
+            "One evidence-supported way the generator could respond, left empty when the useful "
+            "signal needs no change or the supplied material does not establish a correction. "
+            "This is an option for the generator to weigh, never a field-level repair order."
         ),
     )
 
 
-class SuggestionCritique(BaseModel):
-    """The critic artifact for exactly one candidate ID."""
+class SuggestionCriticContext(BaseModel):
+    """One bounded whole-slate review returned by an independent critic."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-    idea_id: str = Field(pattern=r"^idea-\d{3}$")
-    verdict: CritiqueVerdict
-    confidence: CritiqueConfidence
-    error_spans: tuple[str, ...] = Field(default=(), max_length=12)
-    evidence_check: CritiqueEvidenceCheck
-    evidence_ref: str | None = None
-    constraint_hit: CritiqueConstraint = CritiqueConstraint.NONE
-    constraint_quote: str = Field(default="", max_length=2048)
-    duplicate_of: str | None = None
-    fix_instruction: str = Field(default="", max_length=2048)
-    preserve: tuple[str, ...] = Field(default=(), max_length=24)
-    review_summary: str = Field(min_length=1, max_length=2048)
-    signals: SuggestionCritiqueSignals = Field(
-        default_factory=SuggestionCritiqueSignals,
+    overall_assessment: str = Field(
+        min_length=1,
+        max_length=4096,
         description=(
-            "Multidimensional quality and decision observations for this candidate. "
-            "These signals describe tradeoffs for the caller and never override the "
-            "explicit verdict, which remains the sole loop control signal alongside "
-            "the hard-reject rules. Defaults are unknown so older providers stay valid."
+            "A concise account of how well the candidate slate serves the stated goal as a whole. "
+            "Describe its strongest direction, its most consequential weakness, and the balance of "
+            "evidence, feasibility, distinctness, and risk without deciding which candidates the "
+            "generator must keep or remove."
         ),
     )
-    issues: tuple[SuggestionCritiqueIssue, ...] = Field(
+    strengths_to_preserve: tuple[str, ...] = Field(
         default=(),
         max_length=12,
         description=(
-            "Traceable defects or tradeoffs the caller should see, at most twelve. "
-            "Each issue carries a stable code, a severity, and the evidence behind "
-            "it so result consumers can inspect findings without reading provider "
-            "logs. Empty when the critique needs no visible issue beyond the verdict."
+            "Up to twelve useful properties, mechanisms, distinctions, or evidence connections "
+            "that should not be lost casually during refinement. These are slate-level signals, "
+            "not frozen fields, and the generator remains free to preserve their value in a "
+            "different candidate shape."
         ),
     )
-
-    @model_validator(mode="after")
-    def _validate_review_contract(self) -> SuggestionCritique:
-        if self.verdict is CritiqueVerdict.REVISE and not self.fix_instruction.strip():
-            raise ValueError("a revise verdict must include a fix instruction")
-        if self.constraint_hit is not CritiqueConstraint.NONE and not self.constraint_quote.strip():
-            raise ValueError("a constraint hit must include a supporting quote")
-        if self.duplicate_of == self.idea_id:
-            raise ValueError("a candidate cannot be a duplicate of itself")
-        return self
-
-
-class SuggestionCritiqueArtifact(BaseModel):
-    """Complete per-candidate review returned by the independent critic."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    critiques: tuple[SuggestionCritique, ...] = Field(max_length=30)
+    observations: tuple[SuggestionCriticObservation, ...] = Field(
+        default=(),
+        max_length=20,
+        description=(
+            "Up to twenty high-signal observations spanning individual candidates or the whole "
+            "slate. Prefer fewer consequential observations over a checklist entry for every "
+            "candidate, combine related evidence once, and use candidate identifiers only as "
+            "anchors for the generator's judgment."
+        ),
+    )
+    coverage_gaps: tuple[str, ...] = Field(
+        default=(),
+        max_length=12,
+        description=(
+            "Up to twelve missing perspectives, mechanisms, horizons, or decision needs that make "
+            "the slate less useful. Name only gaps supported by the selected categories and caller "
+            "context, and do not turn this collection into a list of new candidate drafts."
+        ),
+    )
+    uncertainties: tuple[str, ...] = Field(
+        default=(),
+        max_length=12,
+        description=(
+            "Up to twelve questions the supplied material cannot settle but the generator should "
+            "keep visible. Distinguish missing evidence from contradiction and avoid filling an "
+            "unknown with a confident recommendation."
+        ),
+    )
 
 
 def _packet(models: tuple[BaseModel, ...]) -> str:
@@ -574,6 +373,9 @@ class SuggestionEvidence:
     content: str
 
 
+Drafts = tuple[SuggestionDraft, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class SuggestionAgentContext:
     """SDK context primitive holding exactly what one workflow stage may read.
@@ -581,15 +383,14 @@ class SuggestionAgentContext:
     Caller-only data has no field here at all, so a stage cannot place a source
     path, a label, a manifest entry, a setting, or workflow state such as rank,
     revision, or handoff into a model window. Candidates travel as the same
-    `SuggestionDraft` contract the generator returns, and critiques as the same
-    `SuggestionCritique` the critic returns, so no parallel projection can drift.
+    `SuggestionDraft` contract the generator returns, so no parallel projection
+    can drift.
     """
 
     description: str
     evidence: tuple[SuggestionEvidence, ...] = ()
     selected_categories: str = ""
-    candidates: tuple[SuggestionDraft, ...] = ()
-    critiques: tuple[SuggestionCritique, ...] = ()
+    candidates: Drafts = ()
     kind: str = field(default="suggestion-context", init=False)
     title: str = field(default="Suggestion Agent Context", init=False)
     metadata: Mapping[str, object] = field(default_factory=dict, init=False)
@@ -601,22 +402,15 @@ class SuggestionAgentContext:
             raise ValueError("Suggestion agent context description must be a non-empty string.")
 
     @classmethod
-    def for_stage(
-        cls,
-        context: SuggestionContextPrimitive,
-        selected_categories: str,
-        candidates: tuple[SuggestionDraft, ...] = (),
-        critiques: tuple[SuggestionCritique, ...] = (),
-    ) -> SuggestionAgentContext:
-        """Build one stage window from the caller snapshot without mutating it."""
+    def for_stage(cls, src: SuggestionContextPrimitive, cats: str, drafts: Drafts = ()) -> Self:
+        # Builds one stage window from the caller snapshot without mutating it.
         return cls(
             description="Stage context holds only evidence, category guidance, and candidates.",
             evidence=tuple(
-                SuggestionEvidence(item.ref, item.kind, item.content) for item in context.items
+                SuggestionEvidence(item.ref, item.kind, item.content) for item in src.items
             ),
-            selected_categories=selected_categories,
-            candidates=candidates,
-            critiques=critiques,
+            selected_categories=cats,
+            candidates=drafts,
         )
 
     def to_context_text(self) -> str:
@@ -631,9 +425,66 @@ class SuggestionAgentContext:
             sections.extend((f"## [{item.ref}] {item.kind}", item.content, ""))
         if self.candidates:
             sections.extend(("<Candidates>", _packet(self.candidates), "</Candidates>"))
-        if self.critiques:
-            sections.extend(("<Critiques>", _packet(self.critiques), "</Critiques>"))
         return "\n".join(sections).rstrip()
+
+
+@dataclass(frozen=True, slots=True)
+class SuggestionCriticContextPrimitive:
+    """One replaceable whole-slate review placed after the generator's turn input."""
+
+    context: SuggestionCriticContext
+    kind: str = field(default="suggestion-critic-context", init=False)
+    title: str = field(default="Independent Critic Signal Context", init=False)
+    metadata: Mapping[str, object] = field(default_factory=dict, init=False)
+    primitive_id: str = field(default="suggestion-critic:latest", init=False)
+    primitive_frozen: bool = field(default=False, init=False)
+
+    def __post_init__(self) -> None:
+        # Rejects loose mappings so only the validated critic artifact enters context.
+        if not isinstance(self.context, SuggestionCriticContext):
+            raise TypeError("Critic context primitive requires SuggestionCriticContext.")
+
+    def to_context_text(self) -> str:
+        # Renders one readable block while preserving typed references and review order.
+        sections = [
+            "<Critic Signal Context>",
+            "## Overall assessment",
+            self.context.overall_assessment,
+            "",
+            "## Strengths to preserve",
+            *self._lines(self.context.strengths_to_preserve),
+            "",
+            "## Observations",
+            *self._observations(),
+            "",
+            "## Coverage gaps",
+            *self._lines(self.context.coverage_gaps),
+            "",
+            "## Uncertainties",
+            *self._lines(self.context.uncertainties),
+            "</Critic Signal Context>",
+        ]
+        return "\n".join(sections)
+
+    def _observations(self) -> list[str]:
+        # Keeps each observation together so its anchors and implication read as one signal.
+        if not self.context.observations:
+            return ["- none supplied"]
+        rendered: list[str] = []
+        for item in self.context.observations:
+            candidates = ", ".join(item.candidate_ids) or "whole slate"
+            evidence = ", ".join(item.evidence_refs) or "candidate artifact"
+            rendered.append(
+                f"- [{item.kind.value}] {item.signal} Candidates: {candidates}. "
+                f"Evidence: {evidence}. Implication: {item.implication}"
+            )
+            if item.possible_response:
+                rendered.append(f"  Possible response: {item.possible_response}")
+        return rendered
+
+    def _lines(self, values: tuple[str, ...]) -> list[str]:
+        # Makes absent optional sections explicit without manufacturing review content.
+        return [f"- {value}" for value in values] or ["- none supplied"]
 
 
 class SuggestionHandoffEvidence(BaseModel):
@@ -671,7 +522,7 @@ class SuggestionHandoff(BaseModel):
 
 
 class SuggestionIdea(BaseModel):
-    """One ranked suggestion with its review trail and deterministic handoff."""
+    """One generator-owned ranked suggestion with its deterministic handoff."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str = Field(pattern=r"^idea-\d{3}$")
@@ -696,24 +547,11 @@ class SuggestionIdea(BaseModel):
     considerations: tuple[str, ...] = Field(default=(), min_length=8, max_length=10)
     completion_criteria: str = Field(min_length=1, max_length=1024)
     effort_estimate: str = Field(min_length=1, max_length=256)
-    review_summary: str = Field(min_length=1, max_length=2048)
-    critique: SuggestionCritique | None = Field(
-        default=None,
-        description=(
-            "Accepted critique for this idea, carrying the verdict, signals, and "
-            "issues behind the review summary. Present only on ideas that survived "
-            "independent critique, so result consumers can inspect the reasoning "
-            "without reading provider logs. None on unreviewed drafts."
-        ),
-    )
     handoff: SuggestionHandoff
 
     def to_draft(self) -> SuggestionDraft:
-        """Project this reviewed idea back to the candidate contract agents reason over."""
-        # Identity stays as idea_id; CLI-owned review fields stay behind.
-        values = self.model_dump(
-            exclude={"id", "revision", "rank", "review_summary", "critique", "handoff"}
-        )
+        # Projects one idea back to the candidate contract while retaining its stable ID.
+        values = self.model_dump(exclude={"id", "revision", "rank", "handoff"})
         return SuggestionDraft.model_validate({**values, "idea_id": self.id})
 
 
@@ -729,23 +567,18 @@ class SuggestionResult(BaseModel):
     settings: SuggestionSettings
     context_manifest: tuple[ContextManifestEntry, ...] = ()
     ideas: tuple[SuggestionIdea, ...] = ()
+    critic_contexts: tuple[SuggestionCriticContext, ...] = ()
     category_coverage: dict[str, int] = Field(default_factory=dict)
     missing_context: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
-    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v2")
+    prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v3")
 
 
 __all__ = [
     "ContextManifestEntry",
-    "CritiqueConfidence",
-    "CritiqueConstraint",
-    "CritiqueEvidenceCheck",
-    "CritiqueIssueSeverity",
-    "CritiqueRiskLevel",
-    "CritiqueSignalLevel",
-    "CritiqueVerdict",
+    "CriticObservationKind",
     "IdeaHorizon",
     "IdeaReadiness",
     "IdeaRelationship",
@@ -759,10 +592,9 @@ __all__ = [
     "SuggestionCandidateBatch",
     "SuggestionContextItem",
     "SuggestionContextPrimitive",
-    "SuggestionCritique",
-    "SuggestionCritiqueArtifact",
-    "SuggestionCritiqueIssue",
-    "SuggestionCritiqueSignals",
+    "SuggestionCriticContext",
+    "SuggestionCriticContextPrimitive",
+    "SuggestionCriticObservation",
     "SuggestionDraft",
     "SuggestionEvidence",
     "SuggestionHandoff",

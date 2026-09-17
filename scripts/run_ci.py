@@ -36,7 +36,7 @@ _WHEEL_RUNTIME_PROMPTS = (
     "vidbyte_cli/lib/runtime_primitives/task_board_system.md",
     "vidbyte_cli/services/suggestions/prompts/critic.md",
     "vidbyte_cli/services/suggestions/prompts/generator.md",
-    "vidbyte_cli/services/suggestions/prompts/revision.md",
+    "vidbyte_cli/services/suggestions/prompts/refinement.md",
     *(
         f"vidbyte_cli/commands/agents/suggestion/prompts/{name}.md"
         for name in (

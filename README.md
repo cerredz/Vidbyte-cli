@@ -63,7 +63,7 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli runtime persistence <task> [--strength 1-6]` | Run one Codex session with 6–100 additional improvement turns |
 | `vidbyte-cli config get\|set` | Manage CLI configuration |
 | `vidbyte-cli doctor` | Diagnose CLI setup |
-| `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate and independently critique ranked next-action ideas with handoffs |
+| `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate and refine ranked next-action ideas with whole-slate critic context and handoffs |
 | `vidbyte-cli agents suggest categories [--view-all|--view ID]` | Inspect the 31 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
 
@@ -73,8 +73,10 @@ let an agent calling this CLI diagnose and correct its own invocation.
 values. It does not accept a run-level JSON input file: callers pass argv values into one strict
 request dataclass, which keeps defaults and validation in one place. The generator always uses
 the configured provider default, while `--critic-model` is the only model override and applies
-only to independent review. `--count` accepts 2–15, `--rounds` accepts 1–8, and
-`--extra-compute` runs one focused generator context per selected category before critique.
+only to independent review. `--count` accepts 2–15, and `--rounds` accepts 1–8 complete
+critic-to-generator cycles. Each critic returns one block of signal about the whole slate, which
+the persistent generator may use to preserve, revise, merge, remove, reorder, or add ideas.
+`--extra-compute` runs one focused generator context per selected category before refinement.
 The default run uses the configured provider through `vidbyte-sdk`; `--dry-run`, `categories`,
 and `handoff` are credential-free.
 

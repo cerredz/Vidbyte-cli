@@ -2,4 +2,4 @@ The per-response token limit bounds the intended size of each individual model r
 
 This threshold is not a billing guarantee because an in-flight request may finish beyond it. Smaller values favor concise artifacts, while larger values accommodate richer context and candidate detail.
 
-The limit must be positive whenever it is specified. It applies consistently to generation, critique, and revision responses.
+The limit must be positive whenever it is specified. It applies consistently to generation, critique, and refinement responses.

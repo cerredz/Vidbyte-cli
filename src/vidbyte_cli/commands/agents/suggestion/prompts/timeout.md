@@ -1,4 +1,4 @@
-The workflow deadline bounds elapsed time across generation, critique, and revision. It protects callers from an open-ended suggestion cycle when model responses are slow.
+The workflow deadline bounds elapsed time across generation, critique, and refinement. It protects callers from an open-ended suggestion cycle when model responses are slow.
 
 The deadline prevents new work after expiration but does not promise cancellation within an in-flight provider request. The last fully reviewed batch remains the safe fallback.
 

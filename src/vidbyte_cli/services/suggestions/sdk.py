@@ -15,7 +15,7 @@ from typing import Any, Literal, Protocol, cast
 from ...lib.errors.failures import SuggestionSdkUnavailable
 from ...lib.io.codex_attachments import CodexAttachmentInputBuilder
 from ...types.attachments import AttachmentBundle
-from ...types.suggestions import SuggestionAgentContext
+from ...types.suggestions import SuggestionAgentContext, SuggestionCriticContextPrimitive
 
 _CODEX_MODULE = "vidbyte.agents.codex"
 _CONTEXT_MODULE = "vidbyte.context"
@@ -42,7 +42,7 @@ class SuggestionSdkBindings:
     schema_error_type: type[Exception]
 
     def __post_init__(self) -> None:
-        expected = frozenset((*_REQUIRED, "ContextManager"))
+        expected = frozenset((*_REQUIRED, "ContextManager", "ContextWindowPlacement"))
         if frozenset(self.symbols) != expected:
             raise ValueError("Suggestion SDK bindings do not match the required surface.")
         if any(not callable(symbol) for symbol in self.symbols.values()):
@@ -101,6 +101,24 @@ class SuggestionAgent(Protocol):
     async def arun(self, request: Any) -> Any: ...
 
 
+@dataclass(slots=True)
+class SuggestionAgentSession:
+    """One persistent generator agent and its replaceable context window."""
+
+    agent: SuggestionAgent
+    context_manager: Any
+    thread_id: str = ""
+
+    def verify_thread(self) -> None:
+        # Pins the first real SDK thread identity and rejects silent conversation replacement.
+        current = str(self.agent.thread_id).strip()
+        if not current:
+            raise ValueError("Suggestion generator returned an empty thread id.")
+        if self.thread_id and current != self.thread_id:
+            raise ValueError("Suggestion generator thread changed during refinement.")
+        self.thread_id = current
+
+
 class SuggestionSdk:
     """Translates strict local values into fresh, read-only Codex agents."""
 
@@ -112,10 +130,13 @@ class SuggestionSdk:
         """Resolve the pinned SDK only when a model-backed operation needs it."""
         try:
             codex = __import__(_CODEX_MODULE, fromlist=["*"])
-            context = __import__(_CONTEXT_MODULE, fromlist=["ContextManager"])
+            context = __import__(
+                _CONTEXT_MODULE, fromlist=["ContextManager", "ContextWindowPlacement"]
+            )
             errors = __import__(_ERRORS_MODULE, fromlist=["*"])
             symbols = {name: getattr(codex, name) for name in _REQUIRED}
             symbols["ContextManager"] = context.ContextManager
+            symbols["ContextWindowPlacement"] = context.ContextWindowPlacement
             bindings = SuggestionSdkBindings(
                 symbols=symbols,
                 agent_type=codex.CodexHarnessAgent,
@@ -129,6 +150,33 @@ class SuggestionSdk:
     def agent(self, settings: Any) -> SuggestionAgent:
         """Construct one new SDK agent from already validated settings."""
         return cast(SuggestionAgent, self._bindings.agent_type(settings))
+
+    def agent_session(self, request: SuggestionAgentSettingsInput) -> SuggestionAgentSession:
+        # Keeps the generator agent and context manager together across refinement turns.
+        settings = self.agent_settings(request)
+        return SuggestionAgentSession(self.agent(settings), settings.context_manager)
+
+    def place_critic_context(
+        self, session: SuggestionAgentSession, context: SuggestionCriticContextPrimitive
+    ) -> None:
+        # Replaces the latest critic block at the end of the persistent generator conversation.
+        if not isinstance(session, SuggestionAgentSession):
+            raise TypeError("place_critic_context requires SuggestionAgentSession.")
+        if not isinstance(context, SuggestionCriticContextPrimitive):
+            raise TypeError("place_critic_context requires SuggestionCriticContextPrimitive.")
+        placement = self._bindings.symbols["ContextWindowPlacement"].END_OF_CONVERSATION
+        session.context_manager.upsert(context, placement=placement)
+
+    def replace_stage_context(
+        self, session: SuggestionAgentSession, context: SuggestionAgentContext
+    ) -> None:
+        # Removes an initial candidate seed after it has entered the generator's own history.
+        if not isinstance(session, SuggestionAgentSession):
+            raise TypeError("replace_stage_context requires SuggestionAgentSession.")
+        if not isinstance(context, SuggestionAgentContext):
+            raise TypeError("replace_stage_context requires SuggestionAgentContext.")
+        session.context_manager.remove_by_id("suggestion-context:stage")
+        session.context_manager.place_after_system_prompt(context)
 
     def run_input(self, request: SuggestionTextInput) -> Any:
         """Translate one local text request into the SDK's typed input."""
@@ -180,6 +228,7 @@ class SuggestionSdk:
 
 __all__ = [
     "SuggestionAgent",
+    "SuggestionAgentSession",
     "SuggestionAgentSettingsInput",
     "SuggestionSdk",
     "SuggestionSdkBindings",

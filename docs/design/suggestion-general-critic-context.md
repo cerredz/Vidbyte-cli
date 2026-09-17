@@ -187,6 +187,7 @@ candidate fields that represented controller-owned review state.
 ```python
 class CriticObservationKind(StrEnum): ...
 
+
 class SuggestionCriticObservation(BaseModel):
     kind: CriticObservationKind
     candidate_ids: tuple[str, ...]
@@ -195,6 +196,7 @@ class SuggestionCriticObservation(BaseModel):
     implication: str
     possible_response: str
 
+
 class SuggestionCriticContext(BaseModel):
     overall_assessment: str
     strengths_to_preserve: tuple[str, ...]
@@ -202,11 +204,13 @@ class SuggestionCriticContext(BaseModel):
     coverage_gaps: tuple[str, ...]
     uncertainties: tuple[str, ...]
 
+
 @dataclass(frozen=True, slots=True)
 class SuggestionCriticContextPrimitive:
     context: SuggestionCriticContext
     primitive_id: str = "suggestion-critic:latest"
     primitive_frozen: bool = False
+
     def to_context_text(self) -> str: ...
 ```
 
@@ -251,11 +255,15 @@ class SuggestionAgentSession:
     agent: SuggestionAgent
     context_manager: Any
     thread_id: str = ""
+
     def verify_thread(self) -> None: ...
+
 
 class SuggestionSdk:
     def agent_session(self, request: SuggestionAgentSettingsInput) -> SuggestionAgentSession: ...
-    def place_critic_context(self, session: SuggestionAgentSession, context: SuggestionCriticContextPrimitive) -> None: ...
+    def place_critic_context(
+        self, session: SuggestionAgentSession, context: SuggestionCriticContextPrimitive
+    ) -> None: ...
 ```
 
 #### Logic / Algorithm
@@ -288,8 +296,10 @@ whole-slate critic context.
 ```python
 class SuggestionService:
     async def _run(self, request: SuggestionRequest, sdk: Any) -> _WorkflowOutcome: ...
-    async def _critique(self, request: SuggestionRequest, sdk: Any, categories: tuple[str, ...], ideas: tuple[SuggestionIdea, ...], started: float, usage: dict[str, int]) -> SuggestionCriticContext: ...
-    async def _refine(self, request: SuggestionRequest, sdk: Any, session: Any, current: tuple[SuggestionIdea, ...], started: float, usage: dict[str, int]) -> tuple[SuggestionIdea, ...]: ...
+    async def _critique(self, state: _RunState, ideas: Ideas) -> SuggestionCriticContext: ...
+    async def _call_session(
+        self, state: _RunState, session: SuggestionAgentSession, prompt: str, phase: str
+    ) -> SuggestionCandidateBatch: ...
 ```
 
 #### Logic / Algorithm
@@ -494,7 +504,10 @@ class CriticObservationKind(StrEnum):
     TRADEOFF = "tradeoff"
     RISK = "risk"
 
+
 class SuggestionCriticObservation(BaseModel): ...
+
+
 class SuggestionCriticContext(BaseModel): ...
 ```
 
@@ -556,6 +569,12 @@ and `critique`, adds run-level `critic_contexts`, and advances `prompt_version` 
 | MODIFY | `scripts/run_ci.py` | Verify the new packaged prompt asset |
 | MODIFY | `scripts/test_suggestions.py` | Update existing offline contract verification |
 | MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/rounds.md` | Explain complete feedback cycles |
+| MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/count.md` | Describe whole-slate pool selection |
+| MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/extra_compute.md` | Describe refinement after fan-out |
+| MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/max_total_tokens.md` | Describe refinement token accounting |
+| MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/max_output_tokens.md` | Describe refinement output limits |
+| MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/run.md` | Describe critic signal use |
+| MODIFY | `src/vidbyte_cli/commands/agents/suggestion/prompts/timeout.md` | Describe refinement timeout accounting |
 | MODIFY | `src/vidbyte_cli/services/suggestions/README.md` | Update service topology summary |
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/critic.md` | Produce one whole-slate signal context |
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/generator.md` | Give the persistent generator slate ownership |
