@@ -12,17 +12,29 @@ import sys
 from pathlib import Path
 
 import click
+from pydantic import ValidationError
 
+from ...lib.config import VidbytePaths
 from ...lib.errors.failures import (
     SuggestionCategoryUnknown,
     SuggestionContextUnreadable,
     SuggestionInputInvalid,
+    SuggestionProjectNotFound,
+    SuggestionProjectStateUnreadable,
 )
 from ...lib.runtime.context import ApplicationContext as Context
 from ...services.suggestions.categories import SuggestionCategories
 from ...services.suggestions.context import FUTURE_INTENDED_WORK_KIND, SuggestionContextBuilder
+from ...services.suggestions.project_store import ProjectNotFoundError, SuggestionProjectStore
 from ...services.suggestions.service import SuggestionService
-from ...types.suggestions import SuggestionHorizon, SuggestionRequest, SuggestionSettings
+from ...types.suggestions import (
+    SuggestionFeedback,
+    SuggestionHorizon,
+    SuggestionProject,
+    SuggestionProjectMemory,
+    SuggestionRequest,
+    SuggestionSettings,
+)
 from .render import SuggestionRenderer
 
 _COMMAND_HELP = (
@@ -49,6 +61,14 @@ _INPUT_HELP = (
     "mutually exclusive with individual goal and context flags, while --count and "
     "similar generation controls may still override the document values. Malformed "
     "JSON, missing files, and unsupported schema versions fail before any model call."
+)
+
+_PROJECT_HELP = (
+    "Load one previously created local project as durable suggestion context. The project "
+    "title, description, and explicit accepted or rejected feedback are added to this run "
+    "before the existing context limits and service workflow apply. Omit this option for a "
+    "stateless run that does not read project files. The key must exist in the local project "
+    "catalog and cannot be combined with --input."
 )
 
 _CONTEXT_HELP = (
@@ -265,6 +285,7 @@ class SuggestRunCommand:
         @parent.command(name="run", help=_COMMAND_HELP)
         @click.option("--goal", default=None, help=_GOAL_HELP)
         @click.option("--input", "input_path", default=None, help=_INPUT_HELP)
+        @click.option("--project", default=None, help=_PROJECT_HELP)
         @click.option("--context", "contexts", multiple=True, help=_CONTEXT_HELP)
         @click.option(
             "--context-file",
@@ -349,18 +370,18 @@ class SuggestRunCommand:
 
     def execute(self, context: Context, raw: dict[str, object]) -> None:
         # Everything invalid fails here, before files are read or models run.
-        request = self._request(raw)
+        request = self._request(raw, context.paths())
         result = SuggestionService().run(request)
         SuggestionRenderer().render_result(context, result)
 
-    def _request(self, raw: dict[str, object]) -> SuggestionRequest:
+    def _request(self, raw: dict[str, object], paths: VidbytePaths) -> SuggestionRequest:
         # Merges --input documents with CLI overrides into one validated request.
         input_path = raw.get("input_path")
         if isinstance(input_path, str) and input_path:
-            return self._from_input(input_path, raw)
-        return self._from_flags(raw)
+            return self._from_input(input_path, raw, paths)
+        return self._from_flags(raw, paths)
 
-    def _from_flags(self, raw: dict[str, object]) -> SuggestionRequest:
+    def _from_flags(self, raw: dict[str, object], paths: VidbytePaths) -> SuggestionRequest:
         # Builds context and settings purely from individual flags.
         goal = raw.get("goal")
         if not isinstance(goal, str) or not goal.strip():
@@ -374,6 +395,9 @@ class SuggestRunCommand:
         except ValueError as error:
             raise SuggestionCategoryUnknown(str(error)) from error
         fields = self._fields(raw)
+        project_key = self._optional_str(raw.get("project"))
+        if project_key is not None:
+            fields = self._with_project_fields(fields, project_key, paths)
         files = self._files(raw)
         try:
             snapshot = SuggestionContextBuilder().build(fields, files)
@@ -406,19 +430,27 @@ class SuggestRunCommand:
             timeout_seconds=self._optional_int(raw.get("timeout_seconds")),
             dry_run=bool(raw.get("dry_run")),
         )
-        return SuggestionRequest(goal=goal.strip(), context_items=items, settings=settings)
+        return SuggestionRequest(
+            goal=goal.strip(),
+            context_items=items,
+            settings=settings,
+            project_key=project_key,
+        )
 
-    def _from_input(self, input_path: str, raw: dict[str, object]) -> SuggestionRequest:
+    def _from_input(
+        self, input_path: str, raw: dict[str, object], paths: VidbytePaths
+    ) -> SuggestionRequest:
         # Rejects mixed sources, reads the document, then merges overrides.
         self._reject_mixed_input(raw)
         document = self._read_input_document(input_path)
         merged = self._merge_input(document, raw)
-        return self._from_flags(merged)
+        return self._from_flags(merged, paths)
 
     def _reject_mixed_input(self, raw: dict[str, object]) -> None:
         # Input documents stay mutually exclusive with goal/context flags.
         keys = (
             "goal",
+            "project",
             "contexts",
             "context_files",
             "handoff_file",
@@ -517,6 +549,52 @@ class SuggestRunCommand:
             if isinstance(values, (tuple, list)) and values:
                 fields[kind] = tuple(str(item) for item in values)
         return fields
+
+    def _with_project_fields(
+        self, fields: dict[str, tuple[str, ...]], project_key: str, paths: VidbytePaths
+    ) -> dict[str, tuple[str, ...]]:
+        # Loads project metadata and feedback before the regular context builder assigns refs.
+        try:
+            store = SuggestionProjectStore(paths)
+            project = store.get(project_key)
+            memory = store.load_memory(project_key)
+        except ProjectNotFoundError as error:
+            raise SuggestionProjectNotFound(project_key) from error
+        except (OSError, UnicodeError, ValueError, ValidationError) as error:
+            raise SuggestionProjectStateUnreadable(
+                "the selected project memory is invalid"
+            ) from error
+        merged = dict(fields)
+        merged["project"] = self._project_description(project)
+        accepted, rejected = self._project_feedback(memory)
+        if accepted:
+            merged["accepted-feedback"] = accepted
+        if rejected:
+            merged["rejected-feedback"] = rejected
+        return merged
+
+    def _project_description(self, project: SuggestionProject) -> tuple[str, ...]:
+        # Keeps project identity and scope visible to the generator as ordinary data.
+        return (f"Project title: {project.title}", f"Project description: {project.description}")
+
+    def _project_feedback(
+        self, memory: SuggestionProjectMemory
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        # Renders each explicit reaction without interpreting or summarizing the user's words.
+        accepted: list[str] = []
+        rejected: list[str] = []
+        for record in memory.feedback:
+            rendered = self._render_feedback(record)
+            if record.type.value == "accepted":
+                accepted.append(rendered)
+            else:
+                rejected.append(rendered)
+        return tuple(accepted), tuple(rejected)
+
+    def _render_feedback(self, record: SuggestionFeedback) -> str:
+        # Preserves optional reasons distinctly so an absent explanation stays absent.
+        reason = f" Reason: {record.reason}" if record.reason else ""
+        return f"{record.type.value.title()} suggestion: {record.suggestion}.{reason}"
 
     def _files(self, raw: dict[str, object]) -> dict[str, tuple[Path, ...]]:
         # Groups file flags by kind, expanding single paths to tuples.

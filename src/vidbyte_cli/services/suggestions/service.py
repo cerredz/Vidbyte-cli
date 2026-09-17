@@ -20,6 +20,7 @@ from ...types.suggestions import (
     IdeaRelationship,
     RunStatus,
     StopReason,
+    SuggestionFeedbackCapture,
     SuggestionHandoff,
     SuggestionIdea,
     SuggestionRequest,
@@ -73,6 +74,7 @@ class SuggestionService:
             run_id=f"sug-{uuid4().hex[:12]}",
             status=status,
             goal=request.goal,
+            project_key=request.project_key,
             requested_count=settings.requested_count,
             returned_count=len(ranked),
             settings=settings,
@@ -83,6 +85,7 @@ class SuggestionService:
             warnings=warnings,
             usage={"rounds": min(settings.rounds, 2), "candidates": len(candidates)},
             stop_reason=stop,
+            feedback_capture=self._feedback_capture(request),
             prompt_version=request.prompt_version,
         )
 
@@ -93,6 +96,7 @@ class SuggestionService:
             run_id=f"sug-{uuid4().hex[:12]}",
             status=RunStatus.NO_SUGGESTIONS,
             goal=request.goal,
+            project_key=request.project_key,
             requested_count=settings.requested_count,
             returned_count=0,
             settings=settings,
@@ -103,6 +107,7 @@ class SuggestionService:
             warnings=("Dry run: no ideas generated.",),
             usage={},
             stop_reason=StopReason.DRY_RUN,
+            feedback_capture=self._feedback_capture(request),
             prompt_version=request.prompt_version,
         )
 
@@ -225,12 +230,22 @@ class SuggestionService:
 
     def _rejected_terms(self, request: SuggestionRequest) -> tuple[str, ...]:
         # Completed, active, avoided, and prior ideas all suppress repeats.
-        avoid = [
-            item.content
-            for item in request.context_items
-            if item.kind in ("avoid", "previous-suggestions", "completed", "in-progress")
-        ]
+        avoid: list[str] = []
+        for item in request.context_items:
+            if item.kind == "rejected-feedback":
+                term = self._rejected_feedback_term(item.content)
+                if term:
+                    avoid.append(term)
+            elif item.kind in ("avoid", "previous-suggestions", "completed", "in-progress"):
+                avoid.append(item.content)
         return tuple(avoid)
+
+    def _rejected_feedback_term(self, content: str) -> str:
+        # Removes the display label and optional reason before deterministic suppression.
+        prefix = "Rejected suggestion: "
+        term = content.removeprefix(prefix)
+        term = term.split(". Reason: ", 1)[0].rstrip(".")
+        return term.strip()
 
     def _context_fields(self, request: SuggestionRequest) -> dict[str, tuple[str, ...]]:
         # Groups item bodies by kind for handoff slots.
@@ -315,3 +330,24 @@ class SuggestionService:
         if value == "later":
             return IdeaHorizon.LATER
         return IdeaHorizon.NEXT
+
+    def _feedback_capture(self, request: SuggestionRequest) -> SuggestionFeedbackCapture | None:
+        # Gives parent agents deterministic local commands only for project-backed runs.
+        if request.project_key is None:
+            return None
+        prefix = "vidbyte-cli agents suggest feedback"
+        return SuggestionFeedbackCapture(
+            project_key=request.project_key,
+            instruction=(
+                "Call one command only after the user explicitly accepts or rejects a "
+                "suggestion; do not infer feedback from silence or ambiguity."
+            ),
+            accept_command=(
+                f"{prefix} accept --project {request.project_key} "
+                "--suggestion '<text>' [--reason '<reason>']"
+            ),
+            reject_command=(
+                f"{prefix} reject --project {request.project_key} "
+                "--suggestion '<text>' [--reason '<reason>']"
+            ),
+        )

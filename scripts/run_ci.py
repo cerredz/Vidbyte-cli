@@ -76,6 +76,11 @@ class CiRunner:
             ("task board", (python, "scripts/test-task-board.py")),
             # Offline: deterministic suggestion agent with fakes only at the SDK turn.
             ("suggestions", (python, "scripts/test_suggestions.py")),
+            # Offline: local project catalog, feedback, and project-context bridge.
+            (
+                "suggestion project memory",
+                (python, "scripts/test_suggestion_project_memory.py"),
+            ),
         )
         for label, arguments in source_gates:
             if status := self._run(label, arguments):

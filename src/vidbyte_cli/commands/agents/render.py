@@ -42,12 +42,16 @@ class SuggestionRenderer:
     def _human_result(self, result: SuggestionResult) -> str:
         # One block per idea so a person can scan ranks without parsing JSON.
         if not result.ideas:
-            return f"No suggestions for: {result.goal}"
-        blocks: list[str] = []
-        for idea in result.ideas:
-            blocks.append(self._human_idea(idea))
-        header = self._human_header(result)
-        return header + "\n\n" + "\n\n".join(blocks)
+            rendered = f"No suggestions for: {result.goal}"
+        else:
+            blocks: list[str] = []
+            for idea in result.ideas:
+                blocks.append(self._human_idea(idea))
+            header = self._human_header(result)
+            rendered = header + "\n\n" + "\n\n".join(blocks)
+        if result.feedback_capture is not None:
+            rendered += "\n\n" + self._human_feedback(result)
+        return rendered
 
     def _human_idea(self, idea: SuggestionIdea) -> str:
         # One ranked line plus its first action on a second line.
@@ -58,3 +62,15 @@ class SuggestionRenderer:
         # Counts plus goal plus status so shortfalls read plainly.
         counts = f"{result.returned_count}/{result.requested_count}"
         return f"{counts} ideas for: {result.goal} [{result.status.value}]"
+
+    def _human_feedback(self, result: SuggestionResult) -> str:
+        # Adds the static parent-agent reminder without implying that feedback exists.
+        capture = result.feedback_capture
+        if capture is None:
+            return ""
+        return (
+            "Feedback capture: call accept or reject only after explicit user feedback; "
+            f"use project '{capture.project_key}'.\n"
+            f"  Accept: {capture.accept_command}\n"
+            f"  Reject: {capture.reject_command}"
+        )

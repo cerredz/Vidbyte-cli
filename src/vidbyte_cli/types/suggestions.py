@@ -85,6 +85,60 @@ class SuggestionContextItem(BaseModel):
     caller_supplied: bool = True
 
 
+class FeedbackType(StrEnum):
+    """The explicit user reaction stored in project memory."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class SuggestionProject(BaseModel):
+    """One catalog entry linking a project key to its memory file."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=4000)
+    memory_file: str = Field(min_length=1, max_length=256)
+
+
+class SuggestionProjectCatalog(BaseModel):
+    """Versioned catalog document containing all project summaries."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    projects: tuple[SuggestionProject, ...] = ()
+
+
+class SuggestionFeedback(BaseModel):
+    """One accepted or rejected suggestion recorded by an explicit user reaction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    type: FeedbackType
+    suggestion: str = Field(min_length=1, max_length=8192)
+    reason: str | None = Field(default=None, max_length=8192)
+    created_at: str = Field(min_length=1, max_length=64)
+
+
+class SuggestionProjectMemory(BaseModel):
+    """Versioned per-project feedback document."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    project_key: str = Field(min_length=1, max_length=64)
+    feedback: tuple[SuggestionFeedback, ...] = ()
+
+
+class SuggestionFeedbackCapture(BaseModel):
+    """Deterministic instructions a parent agent can use after explicit feedback."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    project_key: str = Field(min_length=1, max_length=64)
+    instruction: str = Field(min_length=1, max_length=1024)
+    accept_command: str = Field(min_length=1, max_length=1024)
+    reject_command: str = Field(min_length=1, max_length=1024)
+
+
 class ContextManifestEntry(BaseModel):
     """What the manifest records about one context item without its body."""
 
@@ -122,6 +176,7 @@ class SuggestionRequest(BaseModel):
     goal: str = Field(min_length=1, max_length=4096)
     context_items: tuple[SuggestionContextItem, ...] = ()
     settings: SuggestionSettings
+    project_key: str | None = Field(default=None, max_length=64)
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v1")
 
 
@@ -188,6 +243,7 @@ class SuggestionResult(BaseModel):
     run_id: str = Field(min_length=1, max_length=64)
     status: RunStatus = RunStatus.COMPLETE
     goal: str = Field(min_length=1, max_length=4096)
+    project_key: str | None = Field(default=None, max_length=64)
     requested_count: int = Field(ge=1, le=20)
     returned_count: int = Field(ge=0, le=20)
     settings: SuggestionSettings
@@ -198,4 +254,5 @@ class SuggestionResult(BaseModel):
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
+    feedback_capture: SuggestionFeedbackCapture | None = None
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v1")

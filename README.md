@@ -66,6 +66,9 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate ranked next-action ideas with handoffs locally (free, no admission) |
 | `vidbyte-cli agents suggest categories` | List the 17 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
+| `vidbyte-cli agents suggest project create --key KEY --title TITLE --description DESCRIPTION` | Create a local suggestion-memory project |
+| `vidbyte-cli agents suggest project list` | List local suggestion-memory projects |
+| `vidbyte-cli agents suggest feedback accept\|reject --project KEY --suggestion TEXT [--reason TEXT]` | Record explicit user feedback for a project |
 
 Suggestion context can separate completed work from planned work. Repeat
 `--future-intended-work "..."` for work the caller intends to do but has not completed; the
@@ -85,6 +88,25 @@ claiming that plan is already done. Structured callers can send the same values 
     ]
   }
 }
+```
+
+Suggestion projects are local JSON memory. The catalog is stored in the platform-native Vidbyte
+data directory as `suggestions/projects.json`, and each project links to one file under
+`suggestions/projects/` containing its ordered accepted and rejected feedback. Create a project
+before recording feedback, then pass `--project KEY` to a suggestion run when that memory should
+be included. The feedback commands are for explicit user reactions only: silence, ambiguity, and
+unrelated implementation are not acceptance or rejection.
+
+```bash
+vidbyte-cli agents suggest project create \
+  --key vidbyte-cli \
+  --title "Vidbyte CLI" \
+  --description "The local CLI and agent runtime."
+vidbyte-cli agents suggest feedback reject \
+  --project vidbyte-cli \
+  --suggestion "Use MongoDB for project memory" \
+  --reason "It adds unnecessary backend infrastructure."
+vidbyte-cli agents suggest run --project vidbyte-cli --goal "Choose the next CLI improvement."
 ```
 
 ### Research threads

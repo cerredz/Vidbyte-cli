@@ -96,6 +96,12 @@ CASES = [
     Case(["agents", "suggest", "run", "--help"]),
     Case(["agents", "suggest", "categories", "--help"]),
     Case(["agents", "suggest", "handoff", "--help"]),
+    Case(["agents", "suggest", "project", "--help"]),
+    Case(["agents", "suggest", "project", "create", "--help"]),
+    Case(["agents", "suggest", "project", "list", "--help"]),
+    Case(["agents", "suggest", "feedback", "--help"]),
+    Case(["agents", "suggest", "feedback", "accept", "--help"]),
+    Case(["agents", "suggest", "feedback", "reject", "--help"]),
     Case(["agents", "suggest", "categories"]),
 ]
 

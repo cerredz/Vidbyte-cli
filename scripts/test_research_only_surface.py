@@ -414,8 +414,8 @@ class SurfaceSuite:
             suggest = agents_group.commands["suggest"]
             assert isinstance(suggest, click.Group)
             results.check(
-                "agents suggest exposes run, categories, handoff",
-                set(suggest.commands) == {"run", "categories", "handoff"},
+                "agents suggest exposes suggestion and project-memory commands",
+                set(suggest.commands) == {"run", "categories", "handoff", "project", "feedback"},
             )
 
     def _command_paths(self) -> list[list[str]]:

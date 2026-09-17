@@ -2084,3 +2084,132 @@ class SuggestionSdkUnavailable(CliError):
             hint="Install the SDK revision pinned in pyproject.toml.",
             cause=cause,
         )
+
+
+class SuggestionProjectInvalid(CliError):
+    """A project create request did not satisfy the local project contract."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Reports validation guidance without echoing descriptions or feedback bodies.
+        super().__init__(
+            f"Invalid suggestion project: {detail}.",
+            description=(
+                "Project creation requires a unique lowercase key plus nonempty title and "
+                "description values within the documented bounds. The request was rejected "
+                "before any project file was written. Existing projects and their feedback "
+                "were not changed."
+            ),
+            trace="SuggestionProjectCreateCommand validated project fields before persistence.",
+            hint="Use --key with lowercase letters, numbers, hyphens, or underscores.",
+        )
+
+
+class SuggestionProjectExists(CliError):
+    """A project create request used a key already present in local state."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, key: str) -> None:
+        # Keeps duplicate creation separate from malformed project input.
+        super().__init__(
+            f"Suggestion project already exists: {key}.",
+            description=(
+                "The project key is already registered in the local suggestion catalog. "
+                "No catalog or memory file was replaced, so the existing project remains "
+                "unchanged. Choose another key or use the existing project key for feedback "
+                "and suggestion runs."
+            ),
+            trace="SuggestionProjectStore found a duplicate key before its first write.",
+            hint="Run 'vidbyte-cli agents suggest project list' to inspect existing keys.",
+        )
+
+
+class SuggestionProjectNotFound(CliError):
+    """A project-dependent command addressed a key absent from local state."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, key: str) -> None:
+        # Names the missing selector so an agent can repair the invocation directly.
+        super().__init__(
+            f"Suggestion project was not found: {key}.",
+            description=(
+                "The requested project key is not present in the local suggestion catalog. "
+                "The command did not create a project implicitly and did not modify any "
+                "memory file. Create the project first or choose a key from the project list."
+            ),
+            trace="SuggestionProjectStore looked up an exact project key in projects.json.",
+            hint="Run 'vidbyte-cli agents suggest project list' or create the project first.",
+        )
+
+
+class SuggestionProjectStateUnreadable(CliError):
+    """The local project catalog or linked memory file is malformed or inaccessible."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, detail: str, cause: Exception | None = None) -> None:
+        # Withholds file contents and absolute paths from normal agent-facing output.
+        super().__init__(
+            "Suggestion project state could not be read.",
+            description=(
+                "An existing project catalog or memory file was missing, malformed, "
+                "unsupported, or inaccessible. No model call was made and no valid project "
+                "memory was silently replaced. Repair or remove only the invalid suggestion "
+                "state, then retry the command."
+            ),
+            trace=f"SuggestionProjectStore rejected local JSON state: {detail}.",
+            hint="Inspect projects.json and the linked project memory file for schema version 1.",
+            cause=cause,
+        )
+
+
+class SuggestionProjectWriteFailed(CliError):
+    """The operating system refused to persist a project or feedback document."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # States that were already valid remain on disk because writes are atomic.
+        super().__init__(
+            "Suggestion project state could not be written.",
+            description=(
+                "The local filesystem refused an atomic project or feedback replacement. "
+                "The prior valid document was preserved, and the command did not report a "
+                "successful mutation. Check the data directory permissions and available "
+                "space before retrying."
+            ),
+            trace="SuggestionProjectStore failed while replacing a local JSON document.",
+            hint="Check the Vidbyte data directory and retry the command.",
+            cause=cause,
+        )
+
+
+class SuggestionFeedbackInvalid(CliError):
+    """An accepted or rejected feedback request was incomplete or malformed."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, detail: str) -> None:
+        # Keeps feedback validation separate from project lookup and file errors.
+        super().__init__(
+            f"Invalid suggestion feedback: {detail}.",
+            description=(
+                "Feedback requires an existing project and nonempty suggestion text, with an "
+                "optional reason supplied by the caller. The request was rejected before the "
+                "memory file changed. The CLI never infers acceptance or rejection from an "
+                "ambiguous user response."
+            ),
+            trace="SuggestionFeedbackCommand validated explicit feedback before persistence.",
+            hint=(
+                "Pass --project and --suggestion, and call the command only for explicit feedback."
+            ),
+        )

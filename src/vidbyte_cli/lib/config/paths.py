@@ -60,3 +60,15 @@ class VidbytePaths:
     def provider_credentials_file(self) -> Path:
         # Data, not config: provider fallback keys must not be synced as settings.
         return self.data_root / "provider-credentials.json"
+
+    def suggestions_dir(self) -> Path:
+        # Durable suggestion memory belongs beside other local user data, not cache state.
+        return self.data_root / "suggestions"
+
+    def suggestion_projects_file(self) -> Path:
+        # The catalog is the one-file index used by project listing and lookup.
+        return self.suggestions_dir() / "projects.json"
+
+    def suggestion_project_memory_dir(self) -> Path:
+        # Each project's feedback document lives below the catalog's linked directory.
+        return self.suggestions_dir() / "projects"
