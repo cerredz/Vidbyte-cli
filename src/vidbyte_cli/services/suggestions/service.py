@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 from uuid import uuid4
@@ -30,6 +30,7 @@ from ...types.suggestions import (
 from .categories import SuggestionCategories
 from .extra_compute import ExtraComputeService
 from .handoff import SuggestionHandoffBuilder
+from .message_tools import SuggestionMessageTools
 from .prompts.library import SuggestionPrompts
 from .sdk import (
     SuggestionAgentSession,
@@ -53,6 +54,14 @@ class _WorkflowLimit(Exception):
         self.reason = reason
 
 
+class _ParentMessage(Exception):
+    """Internal control flow for a generator request that needs parent input."""
+
+    def __init__(self, messages: tuple[str, ...]) -> None:
+        # Carries bounded parent messages to the workflow's partial-result boundary.
+        self.messages = messages
+
+
 @dataclass(frozen=True, slots=True)
 class _WorkflowOutcome:
     """Final ideas, critic history, accounting, and the reason the loop stopped."""
@@ -62,6 +71,7 @@ class _WorkflowOutcome:
     usage: Usage
     stop_reason: StopReason
     warnings: tuple[str, ...] = ()
+    agent_messages: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -73,6 +83,7 @@ class _RunState:
     categories: tuple[str, ...]
     started: float
     usage: Usage
+    message_tools: SuggestionMessageTools
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +97,7 @@ class _AgentTurn:
     model: str | None
     schema: type[Any]
     phase: str
+    tools: tuple[Callable[..., Any], ...] = ()
 
 
 class SuggestionService:
@@ -116,6 +128,7 @@ class SuggestionService:
 
     async def _run(self, request: SuggestionRequest, sdk: Any) -> _WorkflowOutcome:
         # Runs complete critic-to-generator cycles so no critic context is left unconsumed.
+        message_tools = SuggestionMessageTools()
         state = _RunState(
             request,
             sdk,
@@ -128,6 +141,7 @@ class SuggestionService:
                 "critique_calls": 0,
                 "refinement_calls": 0,
             },
+            message_tools,
         )
         contexts: list[SuggestionCriticContext] = []
         warnings = list(request.context_warnings)
@@ -162,7 +176,10 @@ class SuggestionService:
                 contexts.append(critic_context)
                 sdk.place_critic_context(
                     session,
-                    SuggestionCriticContextPrimitive(critic_context),
+                    SuggestionCriticContextPrimitive(
+                        critic_context,
+                        message_tools.drain_generator_messages(),
+                    ),
                 )
                 self._check_limit(state)
                 batch = await self._call_session(
@@ -182,6 +199,15 @@ class SuggestionService:
                 if self._same_slate(current, refined):
                     return self._completed_outcome(refined, contexts, state, warnings)
                 current = refined
+        except _ParentMessage as parent:
+            return self._outcome(
+                current,
+                contexts,
+                state,
+                StopReason.PARENT_MESSAGE,
+                warnings,
+                parent.messages,
+            )
         except _WorkflowLimit as limit:
             return self._outcome(current, contexts, state, limit.reason, warnings)
         reason = StopReason.ROUND_LIMIT if current else StopReason.COUNT_SHORTFALL
@@ -219,6 +245,7 @@ class SuggestionService:
             context=context,
             output_schema=SuggestionCandidateBatch,
             provider=state.request.settings.provider,
+            tools=state.message_tools.generator_tools(),
         )
         return cast(SuggestionAgentSession, state.sdk.agent_session(settings))
 
@@ -236,6 +263,7 @@ class SuggestionService:
                 state.request.settings.critic_model,
                 SuggestionCriticContext,
                 "critique",
+                state.message_tools.critic_tools(),
             ),
         )
         return cast(SuggestionCriticContext, result)
@@ -251,6 +279,7 @@ class SuggestionService:
                 output_schema=turn.schema,
                 provider=state.request.settings.provider,
                 model=turn.model,
+                tools=turn.tools,
             )
         )
         agent = state.sdk.agent(settings)
@@ -262,9 +291,16 @@ class SuggestionService:
         self, state: _RunState, session: SuggestionAgentSession, prompt: str, phase: str
     ) -> SuggestionCandidateBatch:
         # Advances the same generator thread and verifies that its identity stays stable.
-        reply = await self._run_turn(state, session.agent, prompt)
+        try:
+            reply = await self._run_turn(state, session.agent, prompt)
+        except Exception as error:
+            if state.message_tools.parent_messages():
+                raise _ParentMessage(state.message_tools.parent_messages()) from error
+            raise
         session.verify_thread()
         self._record_usage(reply, state.usage, phase)
+        if state.message_tools.parent_messages():
+            raise _ParentMessage(state.message_tools.parent_messages())
         return cast(
             SuggestionCandidateBatch,
             self._structured(reply, SuggestionCandidateBatch, phase),
@@ -465,6 +501,7 @@ class SuggestionService:
         state: _RunState,
         reason: StopReason,
         warnings: list[str],
+        agent_messages: tuple[str, ...] = (),
     ) -> _WorkflowOutcome:
         # Finalizes the latest complete generator slate for every terminal path.
         finalized = self._finalize(ideas, state.request) if ideas else ()
@@ -473,7 +510,14 @@ class SuggestionService:
             and len(finalized) < state.request.settings.requested_count
         ):
             reason = StopReason.COUNT_SHORTFALL
-        return _WorkflowOutcome(finalized, tuple(contexts), state.usage, reason, tuple(warnings))
+        return _WorkflowOutcome(
+            finalized,
+            tuple(contexts),
+            state.usage,
+            reason,
+            tuple(warnings),
+            agent_messages,
+        )
 
     def _result(self, request: SuggestionRequest, outcome: _WorkflowOutcome) -> SuggestionResult:
         # Converts internal accounting into the stable public result envelope.
@@ -484,7 +528,9 @@ class SuggestionService:
                 f"Only {len(ideas)} worthwhile suggestions survived review; no filler was added."
             )
         status = (
-            RunStatus.NO_SUGGESTIONS
+            RunStatus.NEEDS_INPUT
+            if outcome.stop_reason is StopReason.PARENT_MESSAGE
+            else RunStatus.NO_SUGGESTIONS
             if not ideas
             else RunStatus.COMPLETE
             if outcome.stop_reason is StopReason.COMPLETED
@@ -513,6 +559,7 @@ class SuggestionService:
             context_manifest=request.context_manifest,
             ideas=ideas,
             critic_contexts=outcome.critic_contexts,
+            agent_messages=outcome.agent_messages,
             category_coverage=self._selection.coverage(ideas),
             missing_context=missing,
             warnings=tuple(dict.fromkeys(warnings)),

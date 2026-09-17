@@ -7,7 +7,7 @@ each fresh context manager.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Protocol, cast
@@ -66,6 +66,7 @@ class SuggestionAgentSettingsInput:
     output_schema: type | Mapping[str, Any]
     provider: str | None = None
     model: str | None = None
+    tools: tuple[Callable[..., Any], ...] = ()
 
     def __post_init__(self) -> None:
         if self.role not in ("generator", "critic"):
@@ -76,6 +77,8 @@ class SuggestionAgentSettingsInput:
             raise TypeError("Suggestion agent context must be SuggestionAgentContext.")
         if not isinstance(self.output_schema, (type, Mapping)):
             raise TypeError("Suggestion agent output_schema must be a class or mapping.")
+        if not isinstance(self.tools, tuple) or any(not callable(tool) for tool in self.tools):
+            raise TypeError("Suggestion agent tools must be a tuple of callables.")
         for name, value in (("provider", self.provider), ("model", self.model)):
             if value is not None and (type(value) is not str or not value.strip()):
                 raise ValueError(f"Suggestion agent {name} must be None or non-empty.")
@@ -217,12 +220,17 @@ class SuggestionSdk:
         )
         manager = symbols["ContextManager"]()
         manager.place_after_system_prompt(request.context)
+        values: dict[str, Any] = {
+            "name": f"suggestion-{request.role}",
+            "system_prompt": request.system_prompt,
+            "codex": codex,
+            "context_manager": manager,
+            "output_schema": request.output_schema,
+        }
+        if request.tools:
+            values["tools"] = request.tools
         return symbols["CodexHarnessAgentSettings"](
-            name=f"suggestion-{request.role}",
-            system_prompt=request.system_prompt,
-            codex=codex,
-            context_manager=manager,
-            output_schema=request.output_schema,
+            **values,
         )
 
 
