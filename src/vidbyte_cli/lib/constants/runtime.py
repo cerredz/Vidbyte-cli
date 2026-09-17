@@ -71,6 +71,8 @@ class TaskBoardLimit(IntEnum):
     # 20,000-character contract every other local runtime task already uses.
     MAX_TASK_CHARS = 20_000
     MAX_WINDOW = 25
+    MIN_SUBTASKS = 2
+    MAX_SUBTASKS = 10
 
 
 class TaskBoardCodexConfig(StrEnum):
@@ -105,6 +107,9 @@ class TaskBoardProgress(StrEnum):
     TASK_FAILED = (
         "A board task did not complete after retries. "
         "Recording what happened and continuing with the remaining tasks."
+    )
+    DECOMPOSE_ISOLATED = (
+        "Decomposition is on: agents see only their own task; window context is off."
     )
     COMPLETE = "Codex has worked through the requested board tasks. Returning the summaries."
 
