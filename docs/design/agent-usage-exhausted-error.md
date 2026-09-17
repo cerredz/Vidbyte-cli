@@ -109,6 +109,8 @@ Defines strict, bounded types for the safe backend exhaustion payload and its re
 
 ```python
 class ApiUsageRemediation(BaseModel): ...
+
+
 class ApiUsageExhaustedProblem(BaseModel): ...
 ```
 
@@ -138,7 +140,9 @@ Maps the safe problem model into the existing CLI failure vocabulary and carries
 
 ```python
 class ApiCreditExhausted(CliError):
-    def __init__(self, request_id: str | None = None, remediation: ApiUsageRemediation | None = None) -> None: ...
+    def __init__(
+        self, request_id: str | None = None, remediation: ApiUsageRemediation | None = None
+    ) -> None: ...
 ```
 
 #### Logic / Algorithm
@@ -185,8 +189,8 @@ CliError(..., remediation: Mapping[str, JsonValue] | None = None)
 
 ### 6.4 Billing Top-Up Endpoint
 
-**File(s):** `src/vidbyte_cli/lib/api/endpoints/billing.py`, `src/vidbyte_cli/lib/api/client.py`, `src/vidbyte_cli/lib/api/runtime_payment.py`
-**Type:** New files / Modified
+**File(s):** `src/vidbyte_cli/lib/api/endpoints/billing.py`
+**Type:** New file
 
 #### What it does
 
@@ -196,6 +200,8 @@ Provides one explicit client operation that pays the existing $5 top-up challeng
 
 ```python
 class BillingTopUpResult(BaseModel): ...
+
+
 class BillingEndpoints:
     def top_up(self, key: str, payer: RuntimePayment) -> BillingTopUpResult: ...
 ```
@@ -211,7 +217,7 @@ class BillingEndpoints:
 
 #### Edge Cases & Error Handling
 
-- Missing signer configuration raises a typed CLI error before any request is paid.
+- Missing signer configuration raises the existing typed CLI error before any request is paid.
 - A malformed challenge is rejected by `RuntimePayment`.
 - A timeout after signing never signs again; the same idempotency key can be used for recovery.
 - A non-402 failure uses the existing API problem mapper.
@@ -247,8 +253,8 @@ vidbyte-cli billing top-up
 
 ### 6.6 CLI Tests and Verification Script
 
-**File(s):** `scripts/test-agent-usage-error.py`, `scripts/test_core_logic.py`, `scripts/test-runtime-payment-methods.py`
-**Type:** New files / Modified
+**File(s):** `scripts/test-agent-usage-error.py`, `scripts/test_research_only_surface.py`
+**Type:** New file / Modified
 
 #### What it does
 
@@ -326,15 +332,13 @@ Tests import the implementation directly and never send real money.
 | MODIFY | `src/vidbyte_cli/lib/errors/cli_error.py` | Carry safe remediation data. |
 | MODIFY | `src/vidbyte_cli/lib/errors/failures.py` | Long recovery prose and typed top-up failures. |
 | MODIFY | `src/vidbyte_cli/lib/output/models.py` | Serialize remediation for agents. |
-| MODIFY | `src/vidbyte_cli/lib/api/client.py` | Generalize bounded payment POST handling if needed. |
-| MODIFY | `src/vidbyte_cli/lib/api/runtime_payment.py` | Reuse signer for the top-up route. |
 | CREATE | `src/vidbyte_cli/lib/api/endpoints/billing.py` | Typed top-up API operation. |
 | CREATE | `src/vidbyte_cli/commands/billing/__init__.py` | Billing command group. |
 | CREATE | `src/vidbyte_cli/commands/billing/top_up.py` | Explicit top-up command. |
 | MODIFY | `src/vidbyte_cli/commands/__init__.py` | Register billing group. |
 | CREATE | `scripts/test-agent-usage-error.py` | Executable feature verification. |
-| MODIFY | `scripts/test_core_logic.py` | Mapper and exit-contract coverage. |
-| MODIFY | `scripts/test-runtime-payment-methods.py` | Payment reuse and no-resign coverage. |
+| MODIFY | `scripts/test_research_only_surface.py` | Keep the static command-surface contract in sync with billing. |
+| MODIFY | `scripts/run_ci.py` | Run the feature verification in the canonical repository gate. |
 | CREATE | `docs/design/agent-usage-exhausted-error.md` | Record the CLI design and contract. |
 
 ---

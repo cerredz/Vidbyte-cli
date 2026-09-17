@@ -19,6 +19,7 @@ from dataclasses import dataclass
 
 from ...types.provider import Provider
 from ..api.client import ApiClient
+from ..api.endpoints.billing import BillingEndpoints
 from ..api.endpoints.research import ResearchEndpoints
 from ..api.endpoints.runtime import RuntimeEndpoints
 from ..auth import (
@@ -86,6 +87,7 @@ class ApplicationContext:
         self._api_client: ApiClient | None = None
         self._research_endpoints: ResearchEndpoints | None = None
         self._runtime_endpoints: RuntimeEndpoints | None = None
+        self._billing_endpoints: BillingEndpoints | None = None
         self._runtime_hosts: RuntimeHostRegistry | None = None
         self._runtime_launch_planner: RuntimeLaunchPlanner | None = None
         self._runtime_executor: RuntimeExecutor | None = None
@@ -176,6 +178,12 @@ class ApplicationContext:
         if self._runtime_endpoints is None:
             self._runtime_endpoints = RuntimeEndpoints(self.api_client())
         return self._runtime_endpoints
+
+    def billing_endpoints(self) -> BillingEndpoints:
+        # Lazily binds billing HTTP operations to this invocation's API client.
+        if self._billing_endpoints is None:
+            self._billing_endpoints = BillingEndpoints(self.api_client())
+        return self._billing_endpoints
 
     def runtime_hosts(self) -> RuntimeHostRegistry:
         # Shares one PATH discovery policy between doctor and launch planning.

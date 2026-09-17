@@ -12,7 +12,9 @@ this surface always means the same thing about continuing a run.
 from __future__ import annotations
 
 import httpx
+from pydantic import JsonValue, ValidationError
 
+from ...types.api import ApiUsageExhaustedProblem
 from ..errors.cli_error import CliError
 from ..errors.failures import (
     ApiCredentialsRejected,
@@ -48,7 +50,7 @@ class ApiProblemMapper:
             case 403:
                 return ApiPermissionDenied(request_id)
             case 402:
-                return ApiCreditExhausted(request_id)
+                return ApiCreditExhausted(request_id, self._usage_remediation(response))
             case 404:
                 if route_not_found:
                     return ApiRouteMissing(request_id)
@@ -72,3 +74,13 @@ class ApiProblemMapper:
         # The authored rate-limit hint may repeat only a bounded numeric delta.
         value = response.headers.get("retry-after", "").strip()
         return int(value) if value.isdigit() else None
+
+    def _usage_remediation(self, response: httpx.Response) -> dict[str, JsonValue] | None:
+        # Only the bounded, allowlisted exhaustion contract may influence CLI output.
+        if len(response.content) > 32_768:
+            return None
+        try:
+            problem = ApiUsageExhaustedProblem.model_validate_json(response.content)
+        except (ValidationError, ValueError):
+            return None
+        return problem.remediation.model_dump(mode="json")

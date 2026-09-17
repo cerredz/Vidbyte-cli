@@ -16,6 +16,8 @@ from pathlib import Path
 from types import FrameType
 from typing import ClassVar
 
+from pydantic import JsonValue
+
 from .codes import CliErrorCode, ExitCode
 
 # Frames inside this package are error plumbing, never the site that actually failed.
@@ -42,6 +44,7 @@ class CliError(Exception):
         exit_code: int | None = None,
         hint: str | None = None,
         request_id: str | None = None,
+        remediation: dict[str, JsonValue] | None = None,
         cause: Exception | None = None,
     ) -> None:
         super().__init__(message)
@@ -52,6 +55,7 @@ class CliError(Exception):
         self.exit_code = int(self.exit_status if exit_code is None else exit_code)
         self.hint = hint
         self.request_id = request_id
+        self.remediation = remediation
         self.cause = cause
 
     @property

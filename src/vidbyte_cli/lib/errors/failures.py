@@ -10,6 +10,8 @@ and must stay independent of credentials, prompt bodies, and backend response co
 
 from __future__ import annotations
 
+from pydantic import JsonValue
+
 from .cli_error import CliError
 from .codes import CliErrorCode, ExitCode
 
@@ -1683,25 +1685,68 @@ class ApiCreditExhausted(CliError):
     code = CliErrorCode.CREDIT_EXHAUSTED
     exit_status = ExitCode.CREDIT_EXHAUSTED
 
-    def __init__(self, request_id: str | None = None) -> None:
+    def __init__(
+        self,
+        request_id: str | None = None,
+        remediation: dict[str, JsonValue] | None = None,
+    ) -> None:
         super().__init__(
-            "The Vidbyte account does not have enough credits for this operation.",
+            "The Vidbyte account does not have enough API balance for this operation.",
             description=(
-                "Priced operations reserve their cost before any work starts, and the reserve "
-                "could not be taken. Nothing was admitted and nothing was charged, so retrying "
-                "after topping up is safe. A run already in progress is unaffected by this "
-                "rejection. Status 5 is distinct from an ordinary failure so a caller can "
-                "branch on it."
+                "Vidbyte could not reserve admission or extend the API-balance budget for this "
+                "agent operation. If this happened before start, no agent was started and no "
+                "new Vidbyte usage was charged. If a run was already in progress, earlier work "
+                "may already have been charged, so do not duplicate it blindly. This is a "
+                "Vidbyte API-balance problem, not a shortage in the model provider account. "
+                "First stop retrying this operation or sending more turns. Then get explicit "
+                "approval from the user before spending money. Use the same authenticated "
+                "Vidbyte API key that made the failed request, create one fresh idempotency key "
+                "for the top-up, and send POST /agent/topup. Follow the returned payment "
+                "challenge and authorize only that exact challenge with x402 or MPP; do not "
+                "invent a different amount, route, or recipient. Resend the identical top-up "
+                "request with the payment authorization. Confirm that the response reports "
+                "credited_cents and available_balance_cents, and that the available balance "
+                "covers the original or remaining operation. If it does not, obtain approval "
+                "before another top-up. After the balance is confirmed, retry or resume the "
+                "original operation and reuse its original idempotency key when one was supplied. "
+                "If the agent cannot make the payment, ask the user to add API balance at "
+                "https://vidbyte.pro/settings/api. Never expose the API key or payment private "
+                "key in a prompt, log, error report, or agent task. Status 5 is distinct from "
+                "an ordinary failure so a caller can branch on this recovery path."
             ),
             trace=(
                 "ApiClient submitted a priced mutation and the backend refused admission at "
                 "the wallet rail before reserving usage."
             ),
             hint=(
-                "Fund this API key's wallet through POST /agent/topup, then retry with the "
-                "same idempotency key."
+                "Get user approval, run `vidbyte-cli billing top-up --confirm`, verify the "
+                "credited balance, then retry the original operation."
             ),
             request_id=request_id,
+            remediation=remediation,
+        )
+
+
+class BillingTopUpApprovalRequired(CliError):
+    """The explicit top-up command was not given its payment confirmation."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Confirm before purchasing Vidbyte API balance.",
+            description=(
+                "The billing top-up command creates a paid x402 authorization and credits "
+                "the authenticated Vidbyte account. It will not spend money unless the "
+                "caller explicitly supplies --confirm, so an agent must obtain user approval "
+                "before invoking it."
+            ),
+            trace=(
+                "BillingTopUpCommand stopped before resolving the payment signer or "
+                "sending a request."
+            ),
+            hint="Obtain user approval, then rerun `vidbyte-cli billing top-up --confirm`.",
         )
 
 

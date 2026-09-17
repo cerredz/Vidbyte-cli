@@ -8,7 +8,7 @@ unwraps `data` so callers only ever see the typed payload.
 
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +20,50 @@ class ApiError(BaseModel):
     code: str
     title: str
     detail: str
+
+
+class ApiUsageRemediation(BaseModel):
+    """Safe, bounded instructions for restoring a Vidbyte API balance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    action: Literal["top_up_api_balance"]
+    requires_user_approval: bool
+    topup_method: Literal["POST"]
+    topup_path: str = Field(min_length=1, max_length=128, pattern=r"^/[A-Za-z0-9_./{}-]+$")
+    cli_command: Literal["vidbyte-cli billing top-up --confirm"]
+    minimum_topup_cents: int = Field(ge=1, le=1_000_000)
+    supported_payment_methods: tuple[Literal["x402", "mpp"], ...] = Field(
+        min_length=1, max_length=4
+    )
+    browser_url: str = Field(min_length=1, max_length=512, pattern=r"^https://")
+    retry_original_operation: bool
+    steps: tuple[str, ...] = Field(min_length=1, max_length=20)
+
+
+class ApiUsageExhaustedProblem(BaseModel):
+    """The backend's allowlisted HTTP 402 account-balance problem."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    error: Literal[True]
+    title: str = Field(min_length=1, max_length=256)
+    subtitle: str = Field(min_length=1, max_length=512)
+    description: str = Field(min_length=1, max_length=8192)
+    code: Literal["api_usage_exhausted", "usage_credit_exhausted"]
+    incident_id: str = Field(min_length=1, max_length=64)
+    remediation: ApiUsageRemediation
+
+
+class BillingTopUpResult(BaseModel):
+    """The safe success fields returned after an API-balance top-up."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    credited_cents: int = Field(ge=1)
+    rail: str = Field(min_length=1, max_length=32)
+    payment_ref: str | None = Field(default=None, max_length=256)
+    available_balance_cents: int = Field(ge=0)
 
 
 class ApiPagination(BaseModel):
