@@ -1,5 +1,6 @@
-"""Public local-file contract: one store rooted at one directory, product-neutral."""
+"""Public local-file contract: stores rooted at one directory, product-neutral."""
 
+from .documents import LocalDocumentStore
 from .store import LocalFileStore
 
-__all__ = ["LocalFileStore"]
+__all__ = ["LocalDocumentStore", "LocalFileStore"]

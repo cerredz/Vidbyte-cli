@@ -1,6 +1,6 @@
 """Builds one strict suggestion request from parsed command values.
 
-The input dataclass owns argv validation and the builder owns file resolution.
+The input dataclass owns argv validation and the builder owns file and project resolution.
 Caller-facing help is kept at the CLI boundary and never copied into agent context.
 """
 
@@ -12,12 +12,15 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
+from ....lib.config import VidbytePaths
 from ....lib.errors.failures import (
     SuggestionContextUnreadable,
     SuggestionInputInvalid,
+    SuggestionProjectInvalid,
 )
 from ....services.suggestions.categories import SuggestionCategories
 from ....services.suggestions.context import SuggestionContextBuilder
+from ....services.suggestions.project import SuggestionProject, SuggestionProjectKey
 from ....types.suggestions import (
     SuggestionContextPrimitive,
     SuggestionHorizon,
@@ -54,6 +57,7 @@ class SuggestionRunInput:
     """Strict, canonical representation of one Click invocation."""
 
     goal: str = ""
+    project: str | None = None
     context: tuple[str, ...] = ()
     completed: tuple[str, ...] = ()
     in_progress: tuple[str, ...] = ()
@@ -98,6 +102,8 @@ class SuggestionRunInput:
     def _validate_goal(self) -> None:
         if not self.goal.strip() or len(self.goal) > 4096:
             raise ValueError("goal must be a non-empty string of at most 4096 characters")
+        if self.project is not None and type(self.project) is not str:
+            raise TypeError("project must be omitted or a string")
 
     def _validate_context_values(self) -> None:
         for name in _CONTEXT_FIELD_NAMES:
@@ -168,7 +174,7 @@ class SuggestionRunInput:
 class SuggestionRequestBuilder:
     """Resolves one validated invocation into a service request."""
 
-    def build(self, raw: dict[str, object]) -> SuggestionRequest:
+    def build(self, raw: dict[str, object], paths: VidbytePaths | None = None) -> SuggestionRequest:
         try:
             values = SuggestionRunInput(**cast(dict[str, Any], raw))
         except (TypeError, ValueError) as error:
@@ -176,6 +182,10 @@ class SuggestionRequestBuilder:
         fields = {
             name: getattr(values, name) for name in _CONTEXT_FIELD_NAMES if getattr(values, name)
         }
+        project_key = self._project_key(values.project)
+        if project_key is not None:
+            # Project memory joins after caller flags, so caller refs keep their numbering.
+            fields.update(SuggestionProject(paths).context_fields(project_key))
         try:
             snapshot = SuggestionContextBuilder().build(fields, values.files)
         except ValueError as error:
@@ -208,9 +218,19 @@ class SuggestionRequestBuilder:
                 context_warnings=snapshot.warnings,
                 settings=settings,
                 attachments=attachments,
+                project_key=project_key.value if project_key else None,
             )
         except (ValidationError, ValueError) as error:
             raise SuggestionInputInvalid() from error
+
+    def _project_key(self, project: str | None) -> SuggestionProjectKey | None:
+        # A malformed key is a project error, not a goal error, so its repair names --project.
+        if project is None:
+            return None
+        try:
+            return SuggestionProjectKey(project)
+        except (TypeError, ValueError) as error:
+            raise SuggestionProjectInvalid(str(error)) from error
 
 
 __all__ = ["SuggestionRequestBuilder", "SuggestionRunInput"]

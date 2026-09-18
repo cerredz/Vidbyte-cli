@@ -66,6 +66,9 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli agents suggest run --goal "..." [--count 5]` | Generate and independently critique ranked next-action ideas with handoffs |
 | `vidbyte-cli agents suggest categories [--view-all|--view ID]` | Inspect the 31 suggestion categories (no model, no credentials) |
 | `vidbyte-cli agents suggest handoff --input result.json --idea idea-003` | Extract one handoff packet (no model) |
+| `vidbyte-cli agents suggest project create --key KEY --title TITLE --description TEXT` | Create a local suggestion-memory project (no model) |
+| `vidbyte-cli agents suggest project list` | List local suggestion-memory projects (no model) |
+| `vidbyte-cli agents suggest feedback accept\|reject --project KEY --suggestion TEXT [--reason TEXT]` | Record explicit user feedback for a project (no model) |
 
 ### Suggestion agent
 
@@ -85,6 +88,20 @@ considerations, completion checks, and a deterministic handoff whose authority i
 by the handoff itself. Every dynamic text or path option has a named, long-form help asset with
 usage placeholders, boundaries, defaults, output behavior, failure recovery, and permission
 guidance; that caller-facing prose is not copied into the model context.
+
+Suggestion projects are optional local JSON memory. The catalog is stored in the platform-native
+Vidbyte data directory as `suggestions/projects.json`, and each project links to one file under
+`suggestions/projects/` holding its ordered accepted and rejected feedback. Create a project
+once, pass `--project KEY` to a run to load its title, description, and feedback as context,
+then record the user's explicit reactions with the feedback commands the run prints. Silence,
+ambiguity, and unrelated implementation are never acceptance or rejection. Without
+`--project`, a run reads no project file.
+
+```bash
+vidbyte-cli agents suggest project create \n  --key vidbyte-cli \n  --title "Vidbyte CLI" \n  --description "The local CLI and agent runtime."
+vidbyte-cli agents suggest run --project vidbyte-cli --goal "Choose the next CLI improvement."
+vidbyte-cli agents suggest feedback reject \n  --project vidbyte-cli \n  --suggestion "Use MongoDB for project memory" \n  --reason "It adds unnecessary backend infrastructure."
+```
 
 ### Research threads
 

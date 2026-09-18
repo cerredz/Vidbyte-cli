@@ -78,6 +78,19 @@ _WHEEL_RUNTIME_PROMPTS = (
             "categories",
             "view_all",
             "view",
+            "project",
+            "project_group",
+            "project_create",
+            "project_list",
+            "project_key",
+            "project_title",
+            "project_description",
+            "feedback_group",
+            "feedback_accept",
+            "feedback_reject",
+            "feedback_project",
+            "feedback_suggestion",
+            "feedback_reason",
         )
     ),
     *(
@@ -149,6 +162,11 @@ class CiRunner:
             (
                 "suggestion diversity prompts",
                 (python, "scripts/test-suggestion-diversity-prompting.py"),
+            ),
+            # Offline: local project catalog, feedback, and the project-context bridge.
+            (
+                "suggestion project memory",
+                (python, "scripts/test_suggestion_project_memory.py"),
             ),
             (
                 "runtime admission and persistence",
