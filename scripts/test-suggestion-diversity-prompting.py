@@ -192,9 +192,9 @@ class DiversityPromptVerifier:
             "rather than rejecting a sound candidate" in diversity,
         )
         self.record(
-            "critic keeps ten rubric sections with ten Rating guidelines",
-            len(re.findall(r"^## \d+\. ", self.critic.text, re.MULTILINE)) == 10
-            and self.critic.text.count("### Rating guidelines") == 10,
+            "critic keeps eleven rubric sections with eleven Rating guidelines",
+            len(re.findall(r"^## \d+\. ", self.critic.text, re.MULTILINE)) == 11
+            and self.critic.text.count("### Rating guidelines") == 11,
         )
         rendered = SuggestionPrompts().critic_turn("Ship the export", "idea-001, idea-002")
         self.record(
