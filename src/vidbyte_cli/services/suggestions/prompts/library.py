@@ -22,10 +22,6 @@ class SuggestionPrompts:
         # System prompt for independent review turns.
         return self._read("critic")
 
-    def revision_system(self) -> str:
-        # Revision remains on the generator history but uses a narrower algorithm.
-        return self._read("revision")
-
     def generator_turn(self, goal: str, count: int, revision: str = "") -> str:
         # The context manager carries the goal, categories, and caller records exactly once.
         return self._render("generator", goal=goal, count=str(count), revision=revision)
@@ -34,9 +30,9 @@ class SuggestionPrompts:
         # The critic receives candidate handoffs through its own context manager.
         return self._render("critic", goal=goal, candidate_ids=candidate_ids)
 
-    def revision_turn(self, goal: str, count: int) -> str:
-        # Revision instructions read the single compact candidate/critique packet from context.
-        return self._render("revision", goal=goal, count=str(count))
+    def revision_turn(self, goal: str, count: int, handoff: str) -> str:
+        # Revision continues the generator's own thread with one general critic handoff.
+        return self._render("revision", goal=goal, count=str(count), handoff=handoff)
 
     def category_prompt(self, name: str) -> str:
         # Category files are model-facing guidance, never command implementation details.

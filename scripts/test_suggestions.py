@@ -1,7 +1,8 @@
 """Offline verification for the SDK-backed suggestion workflow.
 
 The fake lives at the local SDK adapter boundary, so the tests exercise request
-validation, context placement, structured artifacts, critique decisions, revision,
+validation, context placement, structured artifacts, the critic handoff, revision
+on one persistent generator thread,
 extra-compute fan-out, and deterministic handoff rendering without credentials.
 """
 
@@ -44,23 +45,13 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     SUGGESTIONS_HANDOFF_KIND,
     SUGGESTIONS_RESULT_KIND,
     ContextManifestEntry,
-    CritiqueConfidence,
-    CritiqueEvidenceCheck,
-    CritiqueIssueSeverity,
-    CritiqueRiskLevel,
-    CritiqueSignalLevel,
-    CritiqueVerdict,
     SuggestionAgentContext,
     SuggestionCandidateBatch,
     SuggestionContextItem,
     SuggestionContextPrimitive,
-    SuggestionCritique,
-    SuggestionCritiqueArtifact,
-    SuggestionCritiqueIssue,
-    SuggestionCritiqueRubric,
-    SuggestionCritiqueRubricItem,
-    SuggestionCritiqueSignals,
+    SuggestionCriticHandoff,
     SuggestionDraft,
+    SuggestionIdea,
     SuggestionRequest,
     SuggestionSettings,
 )
@@ -95,13 +86,15 @@ class FakeReply:
 
 
 class FakeAgent:
-    """Returns typed artifacts while recording the context used for each turn."""
+    """Returns typed artifacts while recording every prompt its own thread received."""
 
     def __init__(self, sdk: FakeSdk, settings: SuggestionAgentSettingsInput) -> None:
         self.sdk = sdk
         self.settings = settings
+        self.prompts: list[str] = []
 
     async def arun(self, request: SuggestionTextInput) -> FakeReply:
+        self.prompts.append(request.prompt)
         self.sdk.inputs.append(request)
         self.sdk.turns.append((self.settings, request.prompt))
         structured = self.sdk.next_artifact(self.settings, request.prompt)
@@ -112,19 +105,10 @@ class FakeAgent:
 class FakeSdk:
     """A typed fake for the SuggestionSdk methods used by SuggestionService."""
 
-    def __init__(
-        self,
-        *,
-        revision: bool = False,
-        extra_compute: bool = False,
-        unchanged_revision: bool = False,
-        signals: bool = False,
-    ) -> None:
-        self.revision = revision
+    def __init__(self, *, extra_compute: bool = False) -> None:
         self.extra_compute = extra_compute
-        self.unchanged_revision = unchanged_revision
-        self.signals = signals
         self.settings: list[SuggestionAgentSettingsInput] = []
+        self.agents: list[FakeAgent] = []
         self.inputs: list[SuggestionTextInput] = []
         self.turns: list[tuple[SuggestionAgentSettingsInput, str]] = []
         self.generator_calls = 0
@@ -135,7 +119,9 @@ class FakeSdk:
         return request
 
     def agent(self, settings: SuggestionAgentSettingsInput) -> FakeAgent:
-        return FakeAgent(self, settings)
+        agent = FakeAgent(self, settings)
+        self.agents.append(agent)
+        return agent
 
     def run_input(self, request: SuggestionTextInput) -> SuggestionTextInput:
         if not isinstance(request, SuggestionTextInput):
@@ -145,55 +131,22 @@ class FakeSdk:
     def next_artifact(self, settings: SuggestionAgentSettingsInput, prompt: str) -> Any:
         if settings.role == "critic":
             self.critic_calls += 1
-            ids = tuple(candidate.idea_id for candidate in settings.context.candidates)
-            critiques = []
-            for index, idea_id in enumerate(ids):
-                signal_packet = (
-                    SuggestionCritiqueSignals(
-                        goal_alignment=CritiqueSignalLevel.STRONG,
-                        evidence_grounding=CritiqueSignalLevel.ADEQUATE,
-                        risk=CritiqueRiskLevel.MODERATE,
-                    )
-                    if self.signals
-                    else None
-                )
-                first_revision = self.revision or self.unchanged_revision
-                if first_revision and self.critic_calls == 1 and index == 0:
-                    critiques.append(
-                        _critique(
-                            idea_id,
-                            verdict=CritiqueVerdict.REVISE,
-                            fix="Clarify the first action without changing the evidence.",
-                            preserve=("title", "primary_category", "considerations"),
-                            signals=signal_packet,
-                        )
-                    )
-                else:
-                    critiques.append(_critique(idea_id, signals=signal_packet))
-            return SuggestionCritiqueArtifact(critiques=tuple(critiques))
+            ids = ", ".join(str(candidate.idea_id) for candidate in settings.context.candidates)
+            return SuggestionCriticHandoff(handoff=f"Critic review {self.critic_calls}: {ids}.")
 
         self.generator_calls += 1
-        if "Suggestion revision" in settings.system_prompt:
-            if self.unchanged_revision:
-                return SuggestionCandidateBatch(ideas=(settings.context.candidates[0],))
-            return SuggestionCandidateBatch(
-                ideas=(
-                    _draft(
-                        "verification",
-                        idea_id="idea-001",
-                        title="Revised verification action",
-                        first_action="Clarify the first action and run the smallest safe check.",
-                        evidence_refs=tuple(item.ref for item in settings.context.evidence[:1]),
-                    ),
-                )
-            )
         categories = _categories_from_context(settings.context.selected_categories)
-        count = 2 if self.extra_compute else 4
+        revision = "Suggestion revision" in prompt
+        count = 4 if revision or not self.extra_compute else 2
         return SuggestionCandidateBatch(
             ideas=tuple(
                 _draft(
                     categories[index % len(categories)],
-                    title=f"{categories[index % len(categories)]} action {index}",
+                    title=(
+                        "Revised verification action"
+                        if revision and index == 0
+                        else f"{categories[index % len(categories)]} action {index}"
+                    ),
                     evidence_refs=tuple(item.ref for item in settings.context.evidence[:1]),
                 )
                 for index in range(count)
@@ -208,50 +161,6 @@ def _categories_from_context(text: str) -> tuple[str, ...]:
         if line.startswith("# ")
     )
     return headings or ("verification",)
-
-
-def _critique(
-    idea_id: str,
-    *,
-    verdict: CritiqueVerdict = CritiqueVerdict.KEEP,
-    fix: str = "",
-    preserve: tuple[str, ...] = (),
-    signals: SuggestionCritiqueSignals | None = None,
-    issues: tuple[SuggestionCritiqueIssue, ...] = (),
-) -> SuggestionCritique:
-    return SuggestionCritique(
-        idea_id=idea_id,
-        verdict=verdict,
-        confidence=CritiqueConfidence.HIGH,
-        evidence_check=CritiqueEvidenceCheck.SUPPORTED,
-        fix_instruction=fix,
-        preserve=preserve,
-        review_summary=f"Reviewed {idea_id} with no unsupported claim.",
-        signals=signals or SuggestionCritiqueSignals(),
-        issues=issues,
-        rubric=_rubric(idea_id),
-    )
-
-
-def _rubric(idea_id: str) -> SuggestionCritiqueRubric:
-    # Supplies the complete general rubric artifact used by the offline SDK fake.
-    names = (
-        "current_state_grounding",
-        "goal_contribution",
-        "next_action_appropriateness",
-        "action_definition",
-        "problem_action_fit",
-        "constraint_compliance",
-        "distinctness_non_redundancy",
-        "communication_handoff",
-        "internal_coherence",
-        "suggestion_substance",
-    )
-    item = SuggestionCritiqueRubricItem(
-        score=75,
-        explanation=f"The {idea_id} fake supplies an adequate general review section.",
-    )
-    return SuggestionCritiqueRubric(**{name: item for name in names})
 
 
 def _draft(
@@ -377,7 +286,7 @@ class SuggestionSuite:
     def run(self) -> None:
         self.check_categories_and_prompts()
         self.check_request_boundary()
-        self.check_critic_signal_contract()
+        self.check_critic_handoff_contract()
         self.check_round_limits()
         self.check_sdk_context_boundary()
         self.check_generation_and_revision()
@@ -405,10 +314,18 @@ class SuggestionSuite:
         )
         prompts = SuggestionPrompts()
         results.check(
-            "generator critic and revision prompts are distinct and loaded",
+            "generator and critic prompts are distinct and loaded",
             len(prompts.generator_system()) > 100
             and len(prompts.critic_system()) > 100
-            and len(prompts.revision_system()) > 100,
+            and prompts.generator_system() != prompts.critic_system(),
+        )
+        revision = prompts.revision_turn("Ship it", 3, "Critic says idea-002 is ungrounded.")
+        results.check(
+            "revision turn carries the goal, count, and critic handoff verbatim",
+            "Goal: Ship it" in revision
+            and "up to 3 candidates" in revision
+            and revision.endswith("Critic says idea-002 is ungrounded.")
+            and "{{" not in revision,
         )
 
     def check_request_boundary(self) -> None:
@@ -475,73 +392,28 @@ class SuggestionSuite:
             strict_rejection = False
         results.check("request dataclass rejects invalid values at construction", strict_rejection)
 
-    def check_critic_signal_contract(self) -> None:
+    def check_critic_handoff_contract(self) -> None:
         results = self.results
-        issue = SuggestionCritiqueIssue(
-            code="unsupported_claim",
-            severity=CritiqueIssueSeverity.MAJOR,
-            fields=("expected_benefit",),
-            evidence_refs=("ctx-001",),
-            explanation="The benefit is not established by the supplied evidence.",
-            repair="State the benefit as an assumption or add supporting evidence.",
-        )
-        critique = _critique(
-            "idea-001",
-            signals=SuggestionCritiqueSignals(
-                goal_alignment=CritiqueSignalLevel.STRONG,
-                actionability=CritiqueSignalLevel.MARGINAL,
-                risk=CritiqueRiskLevel.HIGH,
-            ),
-            issues=(issue,),
-        )
+        schema = SuggestionCriticHandoff.model_json_schema()
         results.check(
-            "critic signal packet captures quality, risk, and traceable issues",
-            critique.signals.goal_alignment is CritiqueSignalLevel.STRONG
-            and critique.signals.actionability is CritiqueSignalLevel.MARGINAL
-            and critique.signals.risk is CritiqueRiskLevel.HIGH
-            and critique.issues[0].evidence_refs == ("ctx-001",),
+            "critic returns one general handoff field with a model-facing description",
+            list(schema["properties"]) == ["handoff"]
+            and len(str(schema["properties"]["handoff"].get("description", ""))) > 100,
         )
+        rejected = []
+        for payload in ({"handoff": ""}, {"handoff": "ok", "verdict": "keep"}):
+            try:
+                SuggestionCriticHandoff.model_validate(payload)
+            except ValueError:
+                rejected.append(True)
+            else:
+                rejected.append(False)
+        results.check("critic handoff rejects empty text and extra fields", all(rejected))
         results.check(
-            "critic signal defaults preserve provider compatibility",
-            SuggestionCritiqueSignals().goal_alignment is CritiqueSignalLevel.UNKNOWN
-            and SuggestionCritiqueSignals().risk is CritiqueRiskLevel.UNKNOWN,
+            "final ideas carry no per-candidate critique fields",
+            "critique" not in SuggestionIdea.model_fields
+            and "review_summary" not in SuggestionIdea.model_fields,
         )
-        results.check(
-            "critic vocabularies carry six to seven closed levels",
-            len(CritiqueSignalLevel) == 7
-            and len(CritiqueRiskLevel) == 6
-            and len(CritiqueIssueSeverity) == 7,
-        )
-        results.check(
-            "critic schema descriptions reach the model wire schema",
-            len(SuggestionCritiqueSignals.model_json_schema()["properties"]) == 14
-            and all(
-                len(str(details.get("description", ""))) > 100
-                for details in SuggestionCritiqueSignals.model_json_schema()["properties"].values()
-            )
-            and all(
-                len(str(details.get("description", ""))) > 100
-                for details in SuggestionCritiqueIssue.model_json_schema()["properties"].values()
-            ),
-        )
-        try:
-            SuggestionCritiqueIssue(
-                code="Not snake case",
-                severity=CritiqueIssueSeverity.NOTE,
-                explanation="Invalid code.",
-            )
-        except ValueError:
-            invalid_issue_rejected = True
-        else:
-            invalid_issue_rejected = False
-        results.check("critic issue codes are stable identifiers", invalid_issue_rejected)
-        try:
-            SuggestionCritiqueSignals.model_validate({"risk": "certain"})
-        except ValueError:
-            invalid_signal_rejected = True
-        else:
-            invalid_signal_rejected = False
-        results.check("critic signal values use the closed vocabulary", invalid_signal_rejected)
 
     def check_round_limits(self) -> None:
         results = self.results
@@ -563,13 +435,14 @@ class SuggestionSuite:
             "round help documents the expanded ceiling",
             help_result.returncode == 0 and "one through eight" in help_result.stdout,
         )
-        fake = FakeSdk(unchanged_revision=True)
-        result = SuggestionService(sdk=fake).run(_request(rounds=8, items=(_item(),)))
+        fake = FakeSdk()
+        result = SuggestionService(sdk=fake).run(_request(rounds=3, items=(_item(),)))
         results.check(
-            "unchanged revision stops before another critique",
-            fake.critic_calls == 1
-            and fake.generator_calls == 2
-            and "unchanged suggestion" in " ".join(result.warnings),
+            "each round is one critique followed by one generator revision",
+            fake.critic_calls == 3
+            and fake.generator_calls == 4
+            and result.usage.get("revision_calls") == 3
+            and result.stop_reason.value == "completed",
         )
 
     def check_sdk_context_boundary(self) -> None:
@@ -592,7 +465,7 @@ class SuggestionSuite:
                 role="critic",
                 system_prompt="Critic system prompt.",
                 context=context,
-                output_schema=SuggestionCritiqueArtifact,
+                output_schema=SuggestionCriticHandoff,
             )
         )
         results.check(
@@ -617,7 +490,7 @@ class SuggestionSuite:
     def check_generation_and_revision(self) -> None:
         results = self.results
         bundle = _attachment_bundle()
-        fake = FakeSdk(revision=True, signals=True)
+        fake = FakeSdk()
         result = SuggestionService(sdk=fake).run(
             _request(rounds=2, items=(_item(),), attachments=bundle)
         )
@@ -626,60 +499,51 @@ class SuggestionSuite:
             bool(fake.inputs) and all(input_.attachments is bundle for input_ in fake.inputs),
         )
         results.check(
-            "generated ideas survive independent critique with deterministic handoffs",
+            "revised ideas carry deterministic handoffs and supplied evidence",
             result.returned_count == 4
             and all(idea.handoff.idea_id == idea.id for idea in result.ideas)
             and all(idea.evidence_refs == ("ctx-001",) for idea in result.ideas),
         )
-        results.check(
-            "accepted results expose the critic signal packet",
-            all(
-                idea.critique is not None
-                and idea.critique.signals.goal_alignment is CritiqueSignalLevel.STRONG
-                for idea in result.ideas
-            ),
-        )
         revised = next((idea for idea in result.ideas if idea.id == "idea-001"), None)
         results.check(
-            "revision preserves identity and increments revision",
+            "the generator's latest slate is the result, one revision per round",
             revised is not None
-            and revised.revision == 2
-            and revised.title == "verification action 0",
+            and revised.revision == 3
+            and revised.title == "Revised verification action",
         )
-        critic_context = next(
-            settings.context for settings, _ in fake.turns if settings.role == "critic"
+        generators = [agent for agent in fake.agents if agent.settings.role == "generator"]
+        critics = [agent for agent in fake.agents if agent.settings.role == "critic"]
+        results.check(
+            "one generator agent owns the run while every critic is fresh",
+            len(generators) == 1
+            and len(critics) == 2
+            and all(len(critic.prompts) == 1 for critic in critics),
         )
-        critic_text = critic_context.to_context_text()
+        prompts = generators[0].prompts if generators else []
+        results.check(
+            "every critic handoff reaches the generator thread in round order",
+            len(prompts) == 3
+            and "Suggestion revision" not in prompts[0]
+            and "Critic review 1:" in prompts[1]
+            and "Critic review 2:" in prompts[2]
+            and "Critic review 1:" not in prompts[2],
+        )
+        critic_context = critics[0].settings.context if critics else None
+        critic_text = critic_context.to_context_text() if critic_context else ""
         results.check(
             "critic context carries candidates and selected categories",
-            "<Candidates>" in critic_text
+            critic_context is not None
+            and "<Candidates>" in critic_text
             and "<Selected Categories>" in critic_text
-            and len(critic_context.candidates) == result.returned_count,
+            and len(critic_context.candidates) == 4,
         )
         results.check(
             "critic window has no field for workflow state or a handoff",
-            not critic_context.critiques
+            critic_context is not None
             and critic_context.metadata == {}
             and "execution_prompt" not in critic_text
             and '"rank"' not in critic_text
             and '"revision"' not in critic_text,
-        )
-        revision_context, revision_prompt = next(
-            (settings.context, prompt)
-            for settings, prompt in fake.turns
-            if settings.role == "generator" and "Suggestion revision" in settings.system_prompt
-        )
-        results.check(
-            "revision window pairs each candidate with its critique, exactly once",
-            "Candidates:\n" not in revision_prompt
-            and len(revision_context.candidates) == len(revision_context.critiques) == 1
-            and revision_context.candidates[0].idea_id == revision_context.critiques[0].idea_id,
-        )
-        results.check(
-            "revision window carries the complete rubric assessment",
-            '"rubric"' in revision_context.to_context_text()
-            and "current_state_grounding" in revision_context.to_context_text()
-            and "suggestion_substance" in revision_context.to_context_text(),
         )
         dry_request = _request().model_copy(
             update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}
@@ -696,8 +560,8 @@ class SuggestionSuite:
         result = SuggestionService(sdk=fake).run(_request(extra_compute=True, count=2))
         generator_contexts = [
             settings.context.selected_categories
-            for settings, _ in fake.turns
-            if settings.role == "generator"
+            for settings, prompt in fake.turns
+            if settings.role == "generator" and "Suggestion revision" not in prompt
         ]
         results.check(
             "extra compute fans out one generator context per selected category",
@@ -708,6 +572,18 @@ class SuggestionSuite:
         )
         results.check(
             "extra compute still returns the requested bounded slate", result.returned_count == 2
+        )
+        persistent = [
+            agent
+            for agent in fake.agents
+            if agent.settings.role == "generator"
+            and any("Suggestion revision" in prompt for prompt in agent.prompts)
+        ]
+        results.check(
+            "extra compute seeds one persistent generator with the merged pool",
+            len(persistent) == 1
+            and len(persistent[0].settings.context.candidates) == 4
+            and len(persistent[0].prompts) == 1,
         )
 
     def check_context_limits_and_handoff(self) -> None:
