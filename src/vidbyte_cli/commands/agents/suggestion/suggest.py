@@ -21,6 +21,7 @@ from .request_builder import SuggestionRequestBuilder
 _HELP = SuggestionHelpLibrary()
 _COMMAND_HELP = _HELP.load("run")
 _GOAL_HELP = _HELP.load("goal")
+_PROJECT_HELP = _HELP.load("project")
 _CONTEXT_HELP = _HELP.load("context")
 _FILES_HELP = _HELP.load("files")
 _COMPLETED_HELP = _HELP.load("completed")
@@ -61,6 +62,7 @@ class SuggestRunCommand:
         # Attaches run with goal, context, generation, and budget controls.
         @parent.command(name="run", help=_COMMAND_HELP)
         @click.option("--goal", default=None, help=_GOAL_HELP)
+        @click.option("--project", default=None, help=_PROJECT_HELP)
         @click.option("--context", "context", multiple=True, help=_CONTEXT_HELP)
         @click.option(
             "--files",
@@ -138,6 +140,6 @@ class SuggestRunCommand:
 
     def execute(self, context: Context, raw: dict[str, object]) -> None:
         # Everything invalid fails here, before files are read or models run.
-        request = SuggestionRequestBuilder().build(raw)
+        request = SuggestionRequestBuilder().build(raw, context.paths())
         result = SuggestionService().run(request)
         SuggestionRenderer().render_result(context, result)

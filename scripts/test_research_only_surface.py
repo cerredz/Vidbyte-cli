@@ -43,7 +43,7 @@ EXPECTED_TOP_LEVEL = {
     "whoami",
 }
 EXPECTED_AGENTS = {"suggest"}
-EXPECTED_SUGGESTION = {"categories", "handoff", "run"}
+EXPECTED_SUGGESTION = {"categories", "feedback", "handoff", "project", "run"}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
 EXPECTED_RUNTIME = {
     "adversarial-team",
@@ -212,7 +212,7 @@ class SurfaceSuite:
         suggest = agents.commands["suggest"]
         assert isinstance(suggest, click.Group)
         results.check(
-            "suggest exposes exactly run, categories, and handoff",
+            "suggest exposes run, categories, handoff, project, and feedback",
             set(suggest.commands) == EXPECTED_SUGGESTION,
         )
         research = self._subcommands("research")

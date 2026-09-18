@@ -26,6 +26,7 @@ from ...types.suggestions import (
     SuggestionCandidateBatch,
     SuggestionCriticHandoff,
     SuggestionDraft,
+    SuggestionFeedback,
     SuggestionHorizon,
     SuggestionIdea,
     SuggestionRequest,
@@ -34,6 +35,7 @@ from ...types.suggestions import (
 from .categories import SuggestionCategories
 from .extra_compute import ExtraComputeService
 from .handoff import SuggestionHandoffBuilder
+from .project import REJECTED_FEEDBACK_KIND, SuggestionProject, SuggestionProjectKey
 from .prompts.library import SuggestionPrompts
 from .sdk import (
     SuggestionAgent,
@@ -399,12 +401,15 @@ class SuggestionService:
         usage["tokens"] += max(tokens, 0)
 
     def _rejected_terms(self, request: SuggestionRequest) -> tuple[str, ...]:
-        # Settled or forbidden work the final slate must not repeat.
-        return tuple(
-            item.content
-            for item in request.context_items
-            if item.kind in {"completed", "in_progress", "avoid", "mistakes", "forbidden"}
-        )
+        # Rejected project feedback carries a label and optional reason, so only its verbatim
+        # suggestion text is used as a suppression needle.
+        terms: list[str] = []
+        for item in request.context_items:
+            if item.kind == REJECTED_FEEDBACK_KIND:
+                terms.append(SuggestionFeedback.suggestion_from_context(item.content))
+            elif item.kind in {"completed", "in_progress", "avoid", "mistakes", "forbidden"}:
+                terms.append(item.content)
+        return tuple(terms)
 
     def _result(self, request: SuggestionRequest, outcome: _WorkflowOutcome) -> SuggestionResult:
         # Converts the loop outcome into the versioned envelope the command renders.
@@ -439,6 +444,7 @@ class SuggestionService:
             run_id=f"sug-{uuid4().hex[:12]}",
             status=status,
             goal=request.goal,
+            project_key=request.project_key,
             requested_count=request.settings.requested_count,
             returned_count=len(ideas),
             settings=request.settings,
@@ -449,6 +455,11 @@ class SuggestionService:
             warnings=tuple(dict.fromkeys(warnings)),
             usage=outcome.usage,
             stop_reason=outcome.stop_reason,
+            feedback_capture=(
+                SuggestionProject.feedback_capture(SuggestionProjectKey(request.project_key))
+                if request.project_key
+                else None
+            ),
             prompt_version=request.prompt_version,
         )
 

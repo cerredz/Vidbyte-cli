@@ -1,3 +1,3 @@
 # Suggestions service
 
-Local next-action agent: goal plus optional caller context in, ranked ideas with deterministic handoffs out. `service.py` owns the loop shape; `sdk.py` is the only SDK import; prompts live in `prompts/`.
+Local next-action agent: goal plus optional caller context in, ranked ideas with deterministic handoffs out. `service.py` owns the loop shape; `sdk.py` is the only SDK import; prompts live in `prompts/`. `project.py` owns local project memory (`SuggestionProject` plus its input dataclasses) and stores documents only through `lib/files`' `LocalDocumentStore`.

@@ -22,6 +22,7 @@ MAX_CONTEXT_CHARS = 5_000_000
 
 SUGGESTIONS_RESULT_KIND = "suggestions.result"
 SUGGESTIONS_HANDOFF_KIND = "suggestions.handoff"
+_FEEDBACK_REASON_SEPARATOR = "\nReason: "
 
 
 class SuggestionHorizon(StrEnum):
@@ -134,6 +135,72 @@ class SuggestionContextPrimitive:
         return "\n".join(sections).rstrip()
 
 
+class FeedbackType(StrEnum):
+    """The explicit user reaction stored in project memory."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class SuggestionProjectRecord(BaseModel):
+    """One catalog entry linking a project key to its memory file."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    key: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=4000)
+    memory_file: str = Field(min_length=1, max_length=256)
+
+
+class SuggestionProjectCatalog(BaseModel):
+    """Versioned catalog document containing all project summaries."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    projects: tuple[SuggestionProjectRecord, ...] = ()
+
+
+class SuggestionFeedback(BaseModel):
+    """One accepted or rejected suggestion recorded by an explicit user reaction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    type: FeedbackType
+    suggestion: str = Field(min_length=1, max_length=8192)
+    reason: str | None = Field(default=None, max_length=8192)
+    created_at: str = Field(min_length=1, max_length=64)
+
+    def context_text(self) -> str:
+        # The one rendering of a reaction as run context; suggestion_from_context inverts it,
+        # so the label and reason separator are defined together and cannot drift apart.
+        reason = f"{_FEEDBACK_REASON_SEPARATOR}{self.reason}" if self.reason else ""
+        return f"{self.type.value.title()} suggestion: {self.suggestion}{reason}"
+
+    @staticmethod
+    def suggestion_from_context(text: str) -> str:
+        # Recovers the verbatim suggestion so rejected feedback can suppress a repeated idea.
+        body = text.split(": ", 1)[1] if ": " in text else text
+        return body.split(_FEEDBACK_REASON_SEPARATOR, 1)[0].strip()
+
+
+class SuggestionProjectMemory(BaseModel):
+    """Versioned per-project feedback document."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    schema_version: Literal[1] = 1
+    project_key: str = Field(min_length=1, max_length=64)
+    feedback: tuple[SuggestionFeedback, ...] = ()
+
+
+class SuggestionFeedbackCapture(BaseModel):
+    """Deterministic instructions a parent agent can use after explicit feedback."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    project_key: str = Field(min_length=1, max_length=64)
+    instruction: str = Field(min_length=1, max_length=1024)
+    accept_command: str = Field(min_length=1, max_length=1024)
+    reject_command: str = Field(min_length=1, max_length=1024)
+
+
 class ContextManifestEntry(BaseModel):
     """What the manifest records about one context item without its body."""
 
@@ -180,6 +247,7 @@ class SuggestionRequest(BaseModel):
     context_warnings: tuple[str, ...] = ()
     settings: SuggestionSettings
     attachments: AttachmentBundle = Field(default_factory=AttachmentBundle)
+    project_key: str | None = Field(default=None, max_length=64)
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v4")
 
     @model_validator(mode="after")
@@ -395,6 +463,7 @@ class SuggestionResult(BaseModel):
     run_id: str = Field(min_length=1, max_length=64)
     status: RunStatus = RunStatus.COMPLETE
     goal: str = Field(min_length=1, max_length=4096)
+    project_key: str | None = Field(default=None, max_length=64)
     requested_count: int = Field(ge=2, le=15)
     returned_count: int = Field(ge=0, le=15)
     settings: SuggestionSettings
@@ -405,11 +474,13 @@ class SuggestionResult(BaseModel):
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
+    feedback_capture: SuggestionFeedbackCapture | None = None
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v4")
 
 
 __all__ = [
     "ContextManifestEntry",
+    "FeedbackType",
     "IdeaHorizon",
     "IdeaReadiness",
     "IdeaRelationship",
@@ -425,11 +496,16 @@ __all__ = [
     "SuggestionContextPrimitive",
     "SuggestionCriticHandoff",
     "SuggestionDraft",
+    "SuggestionFeedback",
+    "SuggestionFeedbackCapture",
     "SuggestionEvidence",
     "SuggestionHandoff",
     "SuggestionHandoffEvidence",
     "SuggestionHorizon",
     "SuggestionIdea",
+    "SuggestionProjectCatalog",
+    "SuggestionProjectMemory",
+    "SuggestionProjectRecord",
     "SuggestionRequest",
     "SuggestionResult",
     "SuggestionSettings",

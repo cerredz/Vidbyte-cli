@@ -25,8 +25,15 @@ caller tells a missing file from a broken one.
 - `store.py` — `LocalFileStore`: absolute path resolution, absent-versus-unreadable reads,
   atomic writes through a temp sibling, appends, copies, directory scans, and the fixed
   reason categories every failure carries.
+- `documents.py` — `LocalDocumentStore`: versioned JSON documents on top of `LocalFileStore`,
+  taking the pydantic model as a parameter. It bounds document size, refuses a name that
+  escapes its root, raises `LocalDocumentInvalid` for a present-but-wrong document, and writes
+  sorted, indented JSON so documents stay byte-stable.
 
 ## Log
 
 - 2026-09-10 — Lifted out of `lib/runtime_primitives/task_board_files.py` (PR #46 review) so
   every command and primitive can share it; task-list parsing stayed with the task board.
+- 2026-09-18 — `LocalDocumentStore` added (PR #84 review) so a feature keeping a catalog plus
+  linked records gets model-validated reads and contained names from one general class
+  instead of per-feature read/write/path helpers.
