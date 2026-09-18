@@ -246,6 +246,7 @@ def _rubric(idea_id: str) -> SuggestionCritiqueRubric:
         "communication_handoff",
         "internal_coherence",
         "suggestion_substance",
+        "stakeholder_perspectives",
     )
     item = SuggestionCritiqueRubricItem(
         score=75,
@@ -378,6 +379,7 @@ class SuggestionSuite:
         self.check_categories_and_prompts()
         self.check_request_boundary()
         self.check_critic_signal_contract()
+        self.check_critic_rubric_contract()
         self.check_round_limits()
         self.check_sdk_context_boundary()
         self.check_generation_and_revision()
@@ -543,6 +545,60 @@ class SuggestionSuite:
             invalid_signal_rejected = False
         results.check("critic signal values use the closed vocabulary", invalid_signal_rejected)
 
+    def check_critic_rubric_contract(self) -> None:
+        # Holds the critic rubric prose, its output contract, and the wire schema in agreement.
+        results = self.results
+        prompts = SuggestionPrompts()
+        critic = prompts.critic_system()
+        revision = prompts.revision_system()
+        sections = tuple(SuggestionCritiqueRubric.model_fields)
+        pillar_start = critic.partition("## 11. Stakeholder perspectives")[2]
+        pillar = pillar_start.partition("## Assessment")[0]
+        output_block = critic.partition("<Output>")[2].partition("</Output>")[0]
+        results.check(
+            "critic prompt carries the stakeholder perspectives pillar with its evidence boundary",
+            "concrete stakeholder lenses" in pillar
+            and "jobs, resources, incentives, or constraints" in pillar
+            and "do not substitute for customer evidence" in pillar
+            and "### Rating guidelines" in pillar,
+        )
+        results.check(
+            "rubric rating-guideline count equals schema section count",
+            len(sections) == 11 and critic.count("### Rating guidelines") == len(sections),
+        )
+        results.check(
+            "critic output contract names every rubric schema key",
+            all(name in output_block for name in sections)
+            and "eleven-section" in output_block
+            and "stakeholder lens" in output_block,
+        )
+        results.check(
+            "no stale ten-section rubric count remains in critic or revision prompts",
+            all(
+                phrase not in text
+                for text in (critic, revision)
+                for phrase in ("ten-section", "ten pillars", "all ten", "same ten")
+            ),
+        )
+        item = SuggestionCritiqueRubricItem(score=50, explanation="Adequate section.")
+        try:
+            SuggestionCritiqueRubric(
+                **{name: item for name in sections if name != "stakeholder_perspectives"}
+            )
+        except ValueError:
+            missing_pillar_rejected = True
+        else:
+            missing_pillar_rejected = False
+        results.check(
+            "rubric missing stakeholder_perspectives is rejected", missing_pillar_rejected
+        )
+        wire = SuggestionCritiqueRubric.model_json_schema()["properties"]
+        results.check(
+            "stakeholder perspectives description reaches the wire schema",
+            "stakeholder_perspectives" in wire
+            and "customer evidence" in str(wire["stakeholder_perspectives"].get("description", "")),
+        )
+
     def check_round_limits(self) -> None:
         results = self.results
         accepted = all(
@@ -679,7 +735,8 @@ class SuggestionSuite:
             "revision window carries the complete rubric assessment",
             '"rubric"' in revision_context.to_context_text()
             and "current_state_grounding" in revision_context.to_context_text()
-            and "suggestion_substance" in revision_context.to_context_text(),
+            and "suggestion_substance" in revision_context.to_context_text()
+            and "stakeholder_perspectives" in revision_context.to_context_text(),
         )
         dry_request = _request().model_copy(
             update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}
