@@ -18,6 +18,7 @@ _RULE_MODULES = (
     "lint.rules.c003_markdown_xml_section_depth",
     "lint.rules.c004_suggestion_category_prompt_structure",
     "lint.rules.c005_suggestion_help_section_depth",
+    "lint.rules.c006_suggestion_help_from_assets",
 )
 
 

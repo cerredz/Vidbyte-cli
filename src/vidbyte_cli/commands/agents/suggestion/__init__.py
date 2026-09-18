@@ -1,4 +1,4 @@
-"""Registers the suggestion agent and its three public operations.
+"""Registers the suggestion agent, its run-side operations, and its project memory.
 
 The package keeps one specialized agent's command adapters together beneath
 the broader agents namespace. Registration remains side-effect free so every
@@ -11,17 +11,21 @@ import click
 
 
 class SuggestionAgentGroup:
-    """Attaches the suggestion agent's run, categories, and handoff operations."""
+    """Attaches run, categories, handoff, and the project and feedback memory groups."""
 
     def register(self, parent: click.Group) -> None:
         from .suggest import SuggestRunCommand
         from .suggestion_categories import SuggestionCategoriesCommand
+        from .suggestion_feedback import SuggestionFeedbackGroup
         from .suggestion_handoff import SuggestionHandoffCommand
+        from .suggestion_projects import SuggestionProjectGroup
 
         suggest = click.Group(name="suggest", help=_SUGGEST_HELP)
         SuggestRunCommand().register(suggest)
         SuggestionCategoriesCommand().register(suggest)
         SuggestionHandoffCommand().register(suggest)
+        SuggestionProjectGroup().register(suggest)
+        SuggestionFeedbackGroup().register(suggest)
         parent.add_command(suggest)
 
 
