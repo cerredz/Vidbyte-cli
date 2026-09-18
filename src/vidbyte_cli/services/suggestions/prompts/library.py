@@ -34,6 +34,22 @@ class SuggestionPrompts:
         # Revision continues the generator's own thread with one general critic handoff.
         return self._render("revision", goal=goal, count=str(count), handoff=handoff)
 
+    def critic_message_turn(self, goal: str, count: int, message: str) -> str:
+        # A critic that stopped early sends its message as the generator's next turn.
+        return self._render("critic_message", goal=goal, count=str(count), message=message)
+
+    def message_tool(self, name: str) -> str:
+        # The model-facing description of one stop-and-message tool.
+        return self._read(f"{name}_tool")
+
+    def message_argument(self, name: str) -> str:
+        # The model-facing description of that tool's single message argument.
+        return self._read(f"{name}_argument")
+
+    def message_receipt(self) -> str:
+        # The tool result every message tool returns once its message is recorded.
+        return self._read("message_receipt")
+
     def category_prompt(self, name: str) -> str:
         # Category files are model-facing guidance, never command implementation details.
         return self._read(name, category=True)
