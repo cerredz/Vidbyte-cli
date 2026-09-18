@@ -42,7 +42,10 @@ class SuggestionRenderer:
 
     def _human_result(self, result: SuggestionResult) -> str:
         # One block per idea so a person can scan ranks without parsing JSON.
-        if not result.ideas:
+        # A generator that stopped to ask for input returns its question instead of ideas.
+        if result.parent_message is not None:
+            rendered = f"Input needed for: {result.goal}\n\n{result.parent_message}"
+        elif not result.ideas:
             rendered = f"No suggestions for: {result.goal}"
         else:
             blocks: list[str] = []

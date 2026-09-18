@@ -19,6 +19,7 @@ from .attachments import AttachmentBundle
 
 SCHEMA_VERSION = 1
 MAX_CONTEXT_CHARS = 5_000_000
+MAX_AGENT_MESSAGE_CHARS = 2_000
 
 SUGGESTIONS_RESULT_KIND = "suggestions.result"
 SUGGESTIONS_HANDOFF_KIND = "suggestions.handoff"
@@ -66,6 +67,7 @@ class RunStatus(StrEnum):
     COMPLETE = "complete"
     PARTIAL = "partial"
     NO_SUGGESTIONS = "no_suggestions"
+    NEEDS_INPUT = "needs_input"
 
 
 class StopReason(StrEnum):
@@ -78,6 +80,7 @@ class StopReason(StrEnum):
     TIME_LIMIT = "time_limit"
     PROVIDER_FAILED = "provider_failed"
     DRY_RUN = "dry_run"
+    PARENT_MESSAGE = "parent_message"
 
 
 class SuggestionContextItem(BaseModel):
@@ -223,6 +226,7 @@ class SuggestionSettings(BaseModel):
     extra_compute: bool = False
     horizon: SuggestionHorizon = SuggestionHorizon.ANY
     rounds: int = Field(ge=1, le=8, default=2)
+    max_messages: int = Field(ge=0, le=8, default=2)
     provider: str | None = None
     critic_model: str | None = None
     max_output_tokens: int | None = Field(default=None, gt=0, le=5_000_000)
@@ -474,6 +478,7 @@ class SuggestionResult(BaseModel):
     warnings: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     stop_reason: StopReason = StopReason.COMPLETED
+    parent_message: str | None = Field(default=None, max_length=MAX_AGENT_MESSAGE_CHARS)
     feedback_capture: SuggestionFeedbackCapture | None = None
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v4")
 
@@ -484,6 +489,7 @@ __all__ = [
     "IdeaHorizon",
     "IdeaReadiness",
     "IdeaRelationship",
+    "MAX_AGENT_MESSAGE_CHARS",
     "MAX_CONTEXT_CHARS",
     "RunStatus",
     "SCHEMA_VERSION",

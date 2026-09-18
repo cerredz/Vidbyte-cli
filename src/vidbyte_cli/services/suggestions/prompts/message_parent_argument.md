@@ -1,0 +1,1 @@
+The complete message for the parent agent, written as a direct request it can answer in one reply. Name what is missing or contradictory and the context reference that shows it, in at most 2,000 characters.
