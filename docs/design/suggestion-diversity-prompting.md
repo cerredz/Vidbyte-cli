@@ -254,6 +254,7 @@ N/A. No command, option, or HTTP surface changes.
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/generator.md` | Goal sentence, algorithm steps 4–5, output sentence |
 | MODIFY | `src/vidbyte_cli/services/suggestions/prompts/critic.md` | `<Diversity>` section, algorithm step 5 |
 | CREATE | `scripts/test-suggestion-diversity-prompting.py` | Verification script for section 10 |
+| MODIFY | `scripts/run_ci.py` | Run that script as a source gate, so the checks are enforced rather than decorative |
 
 ---
 
