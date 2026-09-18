@@ -540,7 +540,7 @@ class SuggestionCritiqueRubricItem(BaseModel):
 
 
 class SuggestionCritiqueRubric(BaseModel):
-    """The ten category-neutral sections the critic scores for every candidate."""
+    """The eleven category-neutral sections the critic scores for every candidate."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     current_state_grounding: SuggestionCritiqueRubricItem = Field(
@@ -623,6 +623,17 @@ class SuggestionCritiqueRubric(BaseModel):
             "fit almost any caller."
         ),
     )
+    stakeholder_perspectives: SuggestionCritiqueRubricItem = Field(
+        description=(
+            "Whether the candidate holds up when read through concrete stakeholder "
+            "lenses: people with different jobs, resources, incentives, or constraints "
+            "relevant to the caller's role and goal. Name each lens applied and what it "
+            "surfaced in the explanation. These simulated perspectives help search but "
+            "do not substitute for customer evidence, so a lens never supports a claim. "
+            "A high band means no relevant seat exposes an unaddressed cost or objection; "
+            "a low band means the action fails for the people it depends on."
+        ),
+    )
 
 
 class SuggestionCritique(BaseModel):
@@ -662,7 +673,7 @@ class SuggestionCritique(BaseModel):
     )
     rubric: SuggestionCritiqueRubric = Field(
         description=(
-            "The ten-section general rubric assessment for this candidate. Each "
+            "The eleven-section general rubric assessment for this candidate. Each "
             "section carries one coarse score, its explanation, and the evidence "
             "behind it, so the revision turn can repair the weakest section instead "
             "of rewriting the candidate. The rubric describes quality and never "
