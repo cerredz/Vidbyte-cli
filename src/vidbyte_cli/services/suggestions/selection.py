@@ -1,8 +1,9 @@
 """Validates eligibility, ranking, and redundancy for candidate ideas.
 
 Exact duplicates are removed in code by normalized title; semantic overlap is
-left to the critic in the service. Selection never invents evidence: every
-evidence ref must already exist in the run's context manifest.
+left to the generator's revision, guided by the critic's review. Selection
+never invents evidence: every evidence ref must already exist in the run's
+context manifest.
 """
 
 from __future__ import annotations

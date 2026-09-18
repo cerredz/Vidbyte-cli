@@ -22,15 +22,7 @@ from lint.rules.c003_markdown_xml_section_depth import (  # noqa: E402
 )
 from vidbyte_cli.services.suggestions.prompts.library import SuggestionPrompts  # noqa: E402
 from vidbyte_cli.types.suggestions import (  # noqa: E402
-    CritiqueConfidence,
-    CritiqueEvidenceCheck,
-    CritiqueIssueSeverity,
-    CritiqueVerdict,
-    SuggestionCritique,
-    SuggestionCritiqueIssue,
-    SuggestionCritiqueRubric,
-    SuggestionCritiqueRubricItem,
-    SuggestionCritiqueSignals,
+    SuggestionCriticHandoff,
     SuggestionDraft,
 )
 
@@ -51,9 +43,9 @@ _CRITIC_KEPT = {
     2: "Trace every evidence reference back to the context snapshot",
     3: "Ask whether the action sequence, decision points, considerations",
     4: "Hold the candidates against one another and against work the context records",
-    6: "Apply every section of the general suggestion rubric below independently",
-    7: "Use the section readings to locate what is actually wrong",
-    8: "Decide the verdict for yourself, then record it against the identifier",
+    6: "Apply every pillar of your rubric to every candidate independently",
+    7: "Use the pillar readings to locate what actually limits the slate",
+    8: "Write the review in order of consequence",
 }
 
 
@@ -179,17 +171,17 @@ class DiversityPromptVerifier:
             "critic settles both readings before the rubric step",
             "default answer" in steps.get(5, "")
             and "before the rubric" in steps.get(5, "")
-            and steps.get(6, "").startswith("Apply every section of the general suggestion rubric"),
+            and steps.get(6, "").startswith("Apply every pillar of your rubric"),
         )
         diversity = self.critic.section("Diversity")
         self.record(
-            "critic keeps originality from lifting and familiarity from sinking a verdict",
+            "critic keeps originality from lifting and familiarity from sinking a candidate",
             "originality never lifts a candidate" in diversity
             and "familiarity never sinks a candidate" in diversity,
         )
         self.record(
-            "critic forbids rejecting a sound candidate for crowding alone",
-            "rather than rejecting a sound candidate" in diversity,
+            "critic forbids writing off a sound candidate for crowding alone",
+            "rather than writing off a sound candidate" in diversity,
         )
         self.record(
             "critic keeps eleven rubric sections with eleven Rating guidelines",
@@ -220,54 +212,29 @@ class DiversityPromptVerifier:
         self.record("no unpaired tag-like text that C003 would misparse", stray == [])
 
     def check_schema_contracts(self) -> None:
-        # Confirms every schema name the new prose relies on exists and validates.
+        # Confirms the diversity prose names real rubric pillars and fits the handoff-only schema.
         diversity = self.critic.section("Diversity")
-        rubric_names = set(SuggestionCritiqueRubric.model_fields)
-        signal_names = set(SuggestionCritiqueSignals.model_fields)
+        headings = set(re.findall(r"^## \d+\. (.+)$", self.critic.text, re.MULTILINE))
         self.record(
-            "critic names only rubric and signal fields that exist",
-            {"suggestion_substance", "distinctness_non_redundancy"} <= rubric_names
-            and "distinctness" in signal_names
-            and "suggestion_substance" in diversity
-            and "distinctness_non_redundancy" in diversity,
-        )
-        codes = re.findall(r"log a (\S+) issue at (\S+) severity", diversity)
-        self.record(
-            "the issue code and severity the critic is told to log are schema-valid",
-            len(codes) == 1
-            and re.fullmatch(r"^[a-z][a-z0-9_]*$", codes[0][0]) is not None
-            and codes[0][1] in {level.value for level in CritiqueIssueSeverity},
+            "critic diversity readings name pillars that exist in its rubric",
+            {"Suggestion substance", "Distinctness and non-redundancy"} <= headings
+            and "suggestion substance pillar" in diversity
+            and "distinctness and non-redundancy pillar" in diversity,
         )
         self.record(
-            "a keep critique carrying a slate_crowding note validates",
-            self._crowded_critique_validates(),
+            "critic reports crowding in its review rather than as a schema issue code",
+            "slate_crowding" not in self.critic.text
+            and "naming the crowded candidates by identifier" in diversity,
+        )
+        self.record(
+            "critic handoff schema stays a single review field",
+            list(SuggestionCriticHandoff.model_fields) == ["handoff"],
         )
         self.record(
             "SuggestionDraft still has no probability field and forbids one",
             "probability" not in SuggestionDraft.model_fields
             and SuggestionDraft.model_config.get("extra") == "forbid",
         )
-
-    def _crowded_critique_validates(self) -> bool:
-        # Builds the exact artifact shape the Diversity section asks for and validates it.
-        item = SuggestionCritiqueRubricItem(score=88, explanation="Shares the export-queue lever.")
-        issue = SuggestionCritiqueIssue(
-            code="slate_crowding",
-            severity=CritiqueIssueSeverity.NOTE,
-            explanation="Four of five candidates retry the same export queue.",
-        )
-        critique = SuggestionCritique(
-            idea_id="idea-002",
-            verdict=CritiqueVerdict.KEEP,
-            confidence=CritiqueConfidence.HIGH,
-            evidence_check=CritiqueEvidenceCheck.SUPPORTED,
-            review_summary="Sound and next, though crowded with its siblings.",
-            issues=(issue,),
-            rubric=SuggestionCritiqueRubric(
-                **{name: item for name in SuggestionCritiqueRubric.model_fields}
-            ),
-        )
-        return critique.issues[0].code == "slate_crowding"
 
     def _source(self, prompt: PromptFile) -> SimpleNamespace:
         # Adapts a prompt to the minimal SourceFile surface the C003 analyzer reads.
