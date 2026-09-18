@@ -46,6 +46,9 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     SUGGESTIONS_RESULT_KIND,
     ContextManifestEntry,
     CriticObservationKind,
+    CritiqueConfidence,
+    CritiqueEvidenceCheck,
+    CritiqueVerdict,
     StopReason,
     SuggestionAgentContext,
     SuggestionCandidateBatch,
@@ -54,6 +57,12 @@ from vidbyte_cli.types.suggestions import (  # noqa: E402
     SuggestionCriticContext,
     SuggestionCriticContextPrimitive,
     SuggestionCriticObservation,
+    SuggestionCriticReview,
+    SuggestionCritique,
+    SuggestionCritiqueIssue,
+    SuggestionCritiqueRubric,
+    SuggestionCritiqueRubricItem,
+    SuggestionCritiqueSignals,
     SuggestionDraft,
     SuggestionRequest,
     SuggestionSettings,
@@ -162,24 +171,31 @@ class FakeSdk:
         settings = agent.settings
         if settings.role == "critic":
             self.critic_calls += 1
-            ids = tuple(candidate.idea_id for candidate in settings.context.candidates)
-            return SuggestionCriticContext(
-                overall_assessment=(
-                    "The slate is grounded and distinct, with one action to clarify."
-                ),
-                strengths_to_preserve=("The candidates cite the supplied trajectory.",),
-                observations=(
-                    SuggestionCriticObservation(
-                        kind=CriticObservationKind.ACTIONABILITY,
-                        candidate_ids=ids[:1],
-                        evidence_refs=("ctx-001",) if settings.context.evidence else (),
-                        signal="The first action could state a smaller verification step.",
-                        implication="A bounded first step would make execution easier to evaluate.",
-                        possible_response="Clarify the first action while preserving its intent.",
+            ids = tuple(
+                candidate.idea_id
+                for candidate in settings.context.candidates
+                if candidate.idea_id is not None
+            )
+            return SuggestionCriticReview(
+                critiques=tuple(_critique(idea_id) for idea_id in ids),
+                context=SuggestionCriticContext(
+                    overall_assessment=(
+                        "The slate is grounded and distinct, with one action to clarify."
                     ),
+                    strengths_to_preserve=("The candidates cite the supplied trajectory.",),
+                    observations=(
+                        SuggestionCriticObservation(
+                            kind=CriticObservationKind.ACTIONABILITY,
+                            candidate_ids=ids[:1],
+                            evidence_refs=("ctx-001",) if settings.context.evidence else (),
+                            signal="The first action could state a smaller check.",
+                            implication="A bounded first step is easier to evaluate.",
+                            possible_response="Clarify the first action but keep its intent.",
+                        ),
+                    ),
+                    coverage_gaps=("The slate could make its ordering rationale more visible.",),
+                    uncertainties=("The caller has not supplied a deadline.",),
                 ),
-                coverage_gaps=("The slate could make its ordering rationale more visible.",),
-                uncertainties=("The caller has not supplied a deadline.",),
             )
 
         self.generator_calls += 1
@@ -214,6 +230,50 @@ def _categories_from_context(text: str) -> tuple[str, ...]:
         if line.startswith("# ")
     )
     return headings or ("verification",)
+
+
+def _critique(
+    idea_id: str,
+    *,
+    verdict: CritiqueVerdict = CritiqueVerdict.KEEP,
+    fix: str = "",
+    preserve: tuple[str, ...] = (),
+    signals: SuggestionCritiqueSignals | None = None,
+    issues: tuple[SuggestionCritiqueIssue, ...] = (),
+) -> SuggestionCritique:
+    return SuggestionCritique(
+        idea_id=idea_id,
+        verdict=verdict,
+        confidence=CritiqueConfidence.HIGH,
+        evidence_check=CritiqueEvidenceCheck.SUPPORTED,
+        fix_instruction=fix,
+        preserve=preserve,
+        review_summary=f"Reviewed {idea_id} with no unsupported claim.",
+        signals=signals or SuggestionCritiqueSignals(),
+        issues=issues,
+        rubric=_rubric(idea_id),
+    )
+
+
+def _rubric(idea_id: str) -> SuggestionCritiqueRubric:
+    # Supplies the complete general rubric artifact used by the offline SDK fake.
+    names = (
+        "current_state_grounding",
+        "goal_contribution",
+        "next_action_appropriateness",
+        "action_definition",
+        "problem_action_fit",
+        "constraint_compliance",
+        "distinctness_non_redundancy",
+        "communication_handoff",
+        "internal_coherence",
+        "suggestion_substance",
+    )
+    item = SuggestionCritiqueRubricItem(
+        score=75,
+        explanation=f"The {idea_id} fake supplies an adequate general review section.",
+    )
+    return SuggestionCritiqueRubric(**{name: item for name in names})
 
 
 def _draft(
@@ -547,7 +607,7 @@ class SuggestionSuite:
                 role="critic",
                 system_prompt="Critic system prompt.",
                 context=context,
-                output_schema=SuggestionCriticContext,
+                output_schema=SuggestionCriticReview,
             )
         )
         results.check(
@@ -630,6 +690,17 @@ class SuggestionSuite:
         results.check(
             "refinement advances one persistent generator agent",
             len(fake.session_agents) == 1 and fake.generator_calls == 3,
+        )
+        results.check(
+            "final ideas carry per-candidate critique with the complete rubric",
+            all(idea.critique is not None for idea in result.ideas)
+            and all(idea.review_summary for idea in result.ideas)
+            and all(
+                idea.critique is not None
+                and idea.critique.rubric.current_state_grounding.score == 75
+                and idea.critique.rubric.suggestion_substance.score == 75
+                for idea in result.ideas
+            ),
         )
         dry_request = _request().model_copy(
             update={"settings": SuggestionSettings(requested_count=4, dry_run=True)}

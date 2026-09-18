@@ -74,8 +74,10 @@ values. It does not accept a run-level JSON input file: callers pass argv values
 request dataclass, which keeps defaults and validation in one place. The generator always uses
 the configured provider default, while `--critic-model` is the only model override and applies
 only to independent review. `--count` accepts 2–15, and `--rounds` accepts 1–8 complete
-critic-to-generator cycles. Each critic returns one block of signal about the whole slate, which
-the persistent generator may use to preserve, revise, merge, remove, reorder, or add ideas.
+critic-to-generator cycles. Each critic returns per-candidate critiques with rubric scores plus
+one block of signal about the whole slate, which the persistent generator may use to preserve,
+revise, merge, remove, reorder, or add ideas. Per-candidate critiques stay on final ideas for
+traceability under prompt version `suggestions.v4`.
 `--extra-compute` runs one focused generator context per selected category before refinement.
 The default run uses the configured provider through `vidbyte-sdk`; `--dry-run`, `categories`,
 and `handoff` are credential-free.

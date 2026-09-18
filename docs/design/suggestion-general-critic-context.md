@@ -3,7 +3,14 @@
 **Status:** Draft
 **Author:** Codex
 **Created:** 2026-09-16
-**Last Updated:** 2026-09-16
+**Last Updated:** 2026-09-18
+
+> Merge note (2026-09-18): `main` added the ten-section general rubric to the
+> per-candidate critique protocol after this branch was cut. The merge keeps both
+> systems under prompt version `suggestions.v4`: each critic returns per-candidate
+> critiques with rubric scores for traceability plus one whole-slate context block
+> that the persistent generator refines against. Generator and critic prompt wording
+> follows current `main`; `revision.md` is still replaced by `refinement.md`.
 
 ---
 

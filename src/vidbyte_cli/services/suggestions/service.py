@@ -21,6 +21,8 @@ from ...types.suggestions import (
     SuggestionCandidateBatch,
     SuggestionCriticContext,
     SuggestionCriticContextPrimitive,
+    SuggestionCriticReview,
+    SuggestionCritique,
     SuggestionDraft,
     SuggestionHorizon,
     SuggestionIdea,
@@ -62,6 +64,7 @@ class _WorkflowOutcome:
     usage: Usage
     stop_reason: StopReason
     warnings: tuple[str, ...] = ()
+    critiques: tuple[SuggestionCritique, ...] = ()
 
 
 @dataclass(slots=True)
@@ -130,6 +133,7 @@ class SuggestionService:
             },
         )
         contexts: list[SuggestionCriticContext] = []
+        critiques_by_id: dict[str, SuggestionCritique] = {}
         warnings = list(request.context_warnings)
         current: Ideas = ()
         seeded_context = request.settings.extra_compute
@@ -148,7 +152,14 @@ class SuggestionService:
                 )
                 current = self._ideas_from_drafts(batch, request)
             if not current:
-                return self._outcome(current, contexts, state, StopReason.COUNT_SHORTFALL, warnings)
+                return self._outcome(
+                    current,
+                    contexts,
+                    state,
+                    StopReason.COUNT_SHORTFALL,
+                    warnings,
+                    critiques_by_id,
+                )
             if not seeded_context:
                 sdk.replace_stage_context(
                     session,
@@ -157,12 +168,14 @@ class SuggestionService:
                 seeded_context = True
             for _round_index in range(request.settings.rounds):
                 self._check_limit(state)
-                critic_context = await self._critique(state, current)
-                self._validate_critic_context(critic_context, current, request)
-                contexts.append(critic_context)
+                review = await self._critique(state, current)
+                self._validate_critic_review(review, current, request)
+                contexts.append(review.context)
+                for critique in review.critiques:
+                    critiques_by_id[critique.idea_id] = critique
                 sdk.place_critic_context(
                     session,
-                    SuggestionCriticContextPrimitive(critic_context),
+                    SuggestionCriticContextPrimitive(review.context),
                 )
                 self._check_limit(state)
                 batch = await self._call_session(
@@ -177,15 +190,22 @@ class SuggestionService:
                 refined = self._reconcile(batch, current, request)
                 if not refined:
                     return self._outcome(
-                        refined, contexts, state, StopReason.COUNT_SHORTFALL, warnings
+                        refined,
+                        contexts,
+                        state,
+                        StopReason.COUNT_SHORTFALL,
+                        warnings,
+                        critiques_by_id,
                     )
                 if self._same_slate(current, refined):
-                    return self._completed_outcome(refined, contexts, state, warnings)
+                    return self._completed_outcome(
+                        refined, contexts, state, warnings, critiques_by_id
+                    )
                 current = refined
         except _WorkflowLimit as limit:
-            return self._outcome(current, contexts, state, limit.reason, warnings)
+            return self._outcome(current, contexts, state, limit.reason, warnings, critiques_by_id)
         reason = StopReason.ROUND_LIMIT if current else StopReason.COUNT_SHORTFALL
-        return self._outcome(current, contexts, state, reason, warnings)
+        return self._outcome(current, contexts, state, reason, warnings, critiques_by_id)
 
     async def _fanout_ideas(self, state: _RunState) -> Ideas:
         # Produces the initial pool from isolated category generators in extra-compute mode.
@@ -222,7 +242,7 @@ class SuggestionService:
         )
         return cast(SuggestionAgentSession, state.sdk.agent_session(settings))
 
-    async def _critique(self, state: _RunState, ideas: Ideas) -> SuggestionCriticContext:
+    async def _critique(self, state: _RunState, ideas: Ideas) -> SuggestionCriticReview:
         # Gives a fresh critic the whole current slate and the same bounded evidence.
         context = self._stage_context(state, tuple(idea.to_draft() for idea in ideas))
         prompt = self._prompts.critic_turn(state.request.goal, ", ".join(i.id for i in ideas))
@@ -234,14 +254,14 @@ class SuggestionService:
                 prompt,
                 context,
                 state.request.settings.critic_model,
-                SuggestionCriticContext,
+                SuggestionCriticReview,
                 "critique",
             ),
         )
-        return cast(SuggestionCriticContext, result)
+        return cast(SuggestionCriticReview, result)
 
     async def _call_agent(self, state: _RunState, turn: _AgentTurn) -> Any:
-        # Runs an independent model call for fan-out generation or whole-slate critique.
+        # Runs an independent model call for fan-out generation or combined critique.
         self._check_limit(state)
         settings = state.sdk.agent_settings(
             SuggestionAgentSettingsInput(
@@ -356,8 +376,22 @@ class SuggestionService:
             id=idea_id,
             revision=revision,
             rank=rank,
+            review_summary="Initial draft awaiting independent critique.",
+            critique=None,
             handoff=handoff,
         )
+
+    def _validate_critic_review(
+        self, review: SuggestionCriticReview, ideas: Ideas, request: SuggestionRequest
+    ) -> None:
+        # Rejects per-candidate coverage gaps plus context anchors outside the slate.
+        reviewed_ids = {idea.id for idea in ideas}
+        critique_ids = [critique.idea_id for critique in review.critiques]
+        if set(critique_ids) != reviewed_ids:
+            raise ValueError("critic review must cover every reviewed candidate exactly once")
+        if len(set(critique_ids)) != len(critique_ids):
+            raise ValueError("critic review repeated a candidate id")
+        self._validate_critic_context(review.context, ideas, request)
 
     def _validate_critic_context(
         self, context: SuggestionCriticContext, ideas: Ideas, request: SuggestionRequest
@@ -370,6 +404,23 @@ class SuggestionService:
                 raise ValueError("critic context referenced an unknown candidate id")
             if not set(observation.evidence_refs) <= evidence_refs:
                 raise ValueError("critic context referenced unknown evidence")
+
+    def _attach_reviews(
+        self, ideas: Ideas, critiques_by_id: dict[str, SuggestionCritique]
+    ) -> Ideas:
+        # Carries the latest per-candidate critique onto each surviving idea for traceability.
+        attached: list[SuggestionIdea] = []
+        for idea in ideas:
+            critique = critiques_by_id.get(idea.id)
+            if critique is None:
+                attached.append(idea)
+            else:
+                attached.append(
+                    idea.model_copy(
+                        update={"review_summary": critique.review_summary, "critique": critique}
+                    )
+                )
+        return tuple(attached)
 
     def _finalize(self, ideas: Ideas, request: SuggestionRequest) -> Ideas:
         # Applies deterministic eligibility checks and rebuilds handoffs before output.
@@ -448,15 +499,24 @@ class SuggestionService:
         contexts: list[SuggestionCriticContext],
         state: _RunState,
         warnings: list[str],
+        critiques_by_id: dict[str, SuggestionCritique] | None = None,
     ) -> _WorkflowOutcome:
         # Marks a converged slate complete unless deterministic filters create a shortfall.
         finalized = self._finalize(ideas, state.request)
+        finalized = self._attach_reviews(finalized, critiques_by_id or {})
         reason = (
             StopReason.COMPLETED
             if len(finalized) >= state.request.settings.requested_count
             else StopReason.COUNT_SHORTFALL
         )
-        return _WorkflowOutcome(finalized, tuple(contexts), state.usage, reason, tuple(warnings))
+        return _WorkflowOutcome(
+            finalized,
+            tuple(contexts),
+            state.usage,
+            reason,
+            tuple(warnings),
+            tuple((critiques_by_id or {}).values()),
+        )
 
     def _outcome(
         self,
@@ -465,15 +525,24 @@ class SuggestionService:
         state: _RunState,
         reason: StopReason,
         warnings: list[str],
+        critiques_by_id: dict[str, SuggestionCritique] | None = None,
     ) -> _WorkflowOutcome:
         # Finalizes the latest complete generator slate for every terminal path.
         finalized = self._finalize(ideas, state.request) if ideas else ()
+        finalized = self._attach_reviews(finalized, critiques_by_id or {})
         if (
             reason is StopReason.COMPLETED
             and len(finalized) < state.request.settings.requested_count
         ):
             reason = StopReason.COUNT_SHORTFALL
-        return _WorkflowOutcome(finalized, tuple(contexts), state.usage, reason, tuple(warnings))
+        return _WorkflowOutcome(
+            finalized,
+            tuple(contexts),
+            state.usage,
+            reason,
+            tuple(warnings),
+            tuple((critiques_by_id or {}).values()),
+        )
 
     def _result(self, request: SuggestionRequest, outcome: _WorkflowOutcome) -> SuggestionResult:
         # Converts internal accounting into the stable public result envelope.
