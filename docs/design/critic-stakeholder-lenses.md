@@ -153,9 +153,11 @@ New Markdown section (full text is in the implementation):
 #### Logic / Algorithm
 1. Intro paragraph: "ten pillars" → "eleven pillars".
 2. `<Algorithm>` step 5: "same ten grounds" / "all ten readings" → eleven.
-3. `<Output>`: "ten-section" → "eleven-section". Append `stakeholder_perspectives` to the key list,
-   and add one sentence telling the critic to name the lenses and what each surfaced in that
-   section's explanation, citing only real context references.
+3. `<Output>`: "ten-section" → "eleven-section". Append `stakeholder_perspectives` to the key list
+   and extend that same sentence to tell the critic to name the lenses and what each surfaced in
+   that section's explanation, citing only real context references. The instruction is folded
+   into the existing sentence rather than added as a new one, because lint rule C003 holds
+   `<Output>` to 6–8 sentences and it already has 8.
 4. Insert the pillar after pillar 10.
 
 #### Edge Cases & Error Handling
