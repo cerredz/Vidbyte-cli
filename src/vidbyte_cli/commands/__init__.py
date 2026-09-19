@@ -15,6 +15,7 @@ from .agents import AgentsGroup
 from .auth.login import LoginCommand
 from .auth.logout import LogoutCommand
 from .auth.whoami import WhoamiCommand
+from .billing import BillingTopUpCommand
 from .config.get import ConfigGetCommand
 from .config.set import ConfigSetCommand
 from .provider.login import ProviderLoginCommand
@@ -46,6 +47,10 @@ def register_all_commands(program: click.Group) -> None:
     WhoamiCommand().register(program)
     DoctorCommand().register(program)
     AgentsGroup().register(program)
+
+    billing = click.Group(name="billing", help="Manage Vidbyte API balance")
+    BillingTopUpCommand().register(billing)
+    program.add_command(billing)
 
     # The whole public API-key research surface: start, add, resume, read, watch, list.
     research = click.Group(name="research", help="Run and inspect Vidbyte research threads")
