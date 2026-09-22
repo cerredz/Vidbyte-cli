@@ -37,6 +37,7 @@ _CATEGORY_HELP = _HELP.load("category")
 _ALL_CATEGORIES_HELP = _HELP.load("all_categories")
 _HORIZON_HELP = _HELP.load("horizon")
 _ROUNDS_HELP = _HELP.load("rounds")
+_MAX_MESSAGES_HELP = _HELP.load("max_messages")
 _PROVIDER_HELP = _HELP.load("provider")
 _CRITIC_MODEL_HELP = _HELP.load("critic_model")
 _EXTRA_COMPUTE_HELP = _HELP.load("extra_compute")
@@ -108,6 +109,14 @@ class SuggestRunCommand:
         )
         @click.option(
             "--rounds", type=click.IntRange(1, 8), default=2, show_default=True, help=_ROUNDS_HELP
+        )
+        @click.option(
+            "--max-messages",
+            "max_messages",
+            type=click.IntRange(0, 8),
+            default=2,
+            show_default=True,
+            help=_MAX_MESSAGES_HELP,
         )
         @click.option(
             "--provider",

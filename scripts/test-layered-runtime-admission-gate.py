@@ -300,7 +300,7 @@ class PersistenceContracts(unittest.TestCase):
     def test_sdk_failure_is_safe_and_stops_all_later_turns(self):
         self.transport.results = [
             CodexAgentError(
-                "secret task and credential", failure_code="CODEX_TURN_FAILED", operation="turn_run"
+                "secret task and credential", failure_code="codex.turn_failed", operation="turn_run"
             )
         ]
         with self.assertRaises(PersistenceHostFailed) as caught:

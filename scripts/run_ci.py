@@ -158,6 +158,11 @@ class CiRunner:
             ("research-only surface", (python, "scripts/test_research_only_surface.py")),
             # Offline: verifies the typed suggestion boundary, context contract, and handoffs.
             ("suggestion agent", (python, "scripts/test_suggestions.py")),
+            # Offline: verifies suggestion message tools, turn stops, and the message budget.
+            (
+                "suggestion agent message tools",
+                (python, "scripts/test-suggestion-agent-message-tools.py"),
+            ),
             # Offline: generator and critic diversity prompts against C003 and the critic schema.
             (
                 "suggestion diversity prompts",

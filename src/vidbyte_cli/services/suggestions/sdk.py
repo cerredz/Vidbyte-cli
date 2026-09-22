@@ -1,8 +1,8 @@
 """Lazily binds the suggestion service to Vidbyte SDK Codex agents.
 
 This is the only module that imports SDK symbols. It constructs read-only,
-structured-output agents and places one validated stage context primitive in
-each fresh context manager.
+structured-output agents, places one validated stage context primitive in
+each fresh context manager, and wraps each CLI message tool as an SDK tool.
 """
 
 from __future__ import annotations
@@ -16,10 +16,12 @@ from ...lib.errors.failures import SuggestionSdkUnavailable
 from ...lib.io.codex_attachments import CodexAttachmentInputBuilder
 from ...types.attachments import AttachmentBundle
 from ...types.suggestions import SuggestionAgentContext
+from .message_tools import SuggestionMessageTool
 
 _CODEX_MODULE = "vidbyte.agents.codex"
 _CONTEXT_MODULE = "vidbyte.context"
 _ERRORS_MODULE = "vidbyte.lib.errors"
+_TOOLS_MODULE = "vidbyte.tools"
 _REQUIRED = (
     "CodexAgentSettings",
     "CodexApprovalMode",
@@ -29,6 +31,7 @@ _REQUIRED = (
     "CodexThreadSettings",
     "CodexTurnSettings",
 )
+_TOOL_SYMBOLS = ("BaseTool", "ToolParameter", "ToolResult", "ToolSpec")
 _PROVIDER_MAP = {"openai": "openai"}
 
 
@@ -42,7 +45,7 @@ class SuggestionSdkBindings:
     schema_error_type: type[Exception]
 
     def __post_init__(self) -> None:
-        expected = frozenset((*_REQUIRED, "ContextManager"))
+        expected = frozenset((*_REQUIRED, *_TOOL_SYMBOLS, "ContextManager"))
         if frozenset(self.symbols) != expected:
             raise ValueError("Suggestion SDK bindings do not match the required surface.")
         if any(not callable(symbol) for symbol in self.symbols.values()):
@@ -66,6 +69,7 @@ class SuggestionAgentSettingsInput:
     output_schema: type | Mapping[str, Any]
     provider: str | None = None
     model: str | None = None
+    tools: tuple[SuggestionMessageTool, ...] = ()
 
     def __post_init__(self) -> None:
         if self.role not in ("generator", "critic"):
@@ -76,6 +80,10 @@ class SuggestionAgentSettingsInput:
             raise TypeError("Suggestion agent context must be SuggestionAgentContext.")
         if not isinstance(self.output_schema, (type, Mapping)):
             raise TypeError("Suggestion agent output_schema must be a class or mapping.")
+        if not isinstance(self.tools, tuple) or any(
+            not isinstance(tool, SuggestionMessageTool) for tool in self.tools
+        ):
+            raise TypeError("Suggestion agent tools must be a tuple of SuggestionMessageTool.")
         for name, value in (("provider", self.provider), ("model", self.model)):
             if value is not None and (type(value) is not str or not value.strip()):
                 raise ValueError(f"Suggestion agent {name} must be None or non-empty.")
@@ -114,7 +122,9 @@ class SuggestionSdk:
             codex = __import__(_CODEX_MODULE, fromlist=["*"])
             context = __import__(_CONTEXT_MODULE, fromlist=["ContextManager"])
             errors = __import__(_ERRORS_MODULE, fromlist=["*"])
+            tools = __import__(_TOOLS_MODULE, fromlist=["*"])
             symbols = {name: getattr(codex, name) for name in _REQUIRED}
+            symbols.update({name: getattr(tools, name) for name in _TOOL_SYMBOLS})
             symbols["ContextManager"] = context.ContextManager
             bindings = SuggestionSdkBindings(
                 symbols=symbols,
@@ -175,7 +185,38 @@ class SuggestionSdk:
             codex=codex,
             context_manager=manager,
             output_schema=request.output_schema,
+            tools=tuple(self._message_tool(tool) for tool in request.tools),
         )
+
+    def _message_tool(self, tool: SuggestionMessageTool) -> Any:
+        # Codex runs custom tools as SDK BaseTools, so each CLI tool gets a thin BaseTool
+        # whose spec is its authored text and whose execute delivers the model's message.
+        symbols = self._bindings.symbols
+        spec = symbols["ToolSpec"](
+            name=tool.name,
+            description=tool.description,
+            parameters=(
+                symbols["ToolParameter"](
+                    name="message", type="string", description=tool.message_description
+                ),
+            ),
+        )
+        result = symbols["ToolResult"]
+        base: Any = symbols["BaseTool"]
+
+        # The base class is only known after the lazy SDK import, so mypy sees it as Any.
+        class _MessageTool(base):  # type: ignore[misc]
+            def spec(self) -> Any:
+                return spec
+
+            async def execute(self, call: Any) -> Any:
+                # An invalid message is returned to the model so it can retry the call.
+                try:
+                    return result.success(tool.name, tool.deliver(call.arguments.get("message")))
+                except ValueError as error:
+                    return result.error(tool.name, str(error))
+
+        return _MessageTool()
 
 
 __all__ = [
