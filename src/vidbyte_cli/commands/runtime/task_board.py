@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import click
 
+from ...lib.constants.runtime import TaskBoardLimit
 from ...lib.constants.runtime import TaskBoardProgress as Progress
 from ...lib.errors.failures import (
     LocalFileReadFailed,
@@ -23,6 +24,7 @@ from ...lib.errors.failures import (
     TaskBoardBoardIdInvalid,
     TaskBoardCheckpointMissing,
     TaskBoardCheckpointRootUnreadable,
+    TaskBoardDecomposeInvalid,
     TaskBoardDependencyInvalid,
     TaskBoardForkFailed,
     TaskBoardForkTargetExists,
@@ -86,7 +88,8 @@ _COMMAND_HELP = (
     "isolated. Pass --type dag with repeatable --depends-on links when tasks have explicit "
     "dependencies, so each agent reads only its own dependencies and runs after them instead "
     "of after every earlier task. Vidbyte charges two cents to admit the whole run and every "
-    "model call is billed to your own OpenAI account."
+    "model call is billed to your own OpenAI account. Use --allow-decompose for an unchecked "
+    "linear board whose parent may replace itself with isolated subtasks through a native tool."
 )
 _TYPE_HELP = (
     "Which loop structure the board run follows. In linear mode, the default, tasks run "
@@ -108,6 +111,22 @@ _DEPENDS_ON_HELP = (
     "duplicate links are rejected, and the full link set must be acyclic. Links require --type "
     "dag and are rejected with --type linear, and every link is validated before credentials, "
     "payment, or host execution."
+)
+_ALLOW_DECOMPOSE_HELP = (
+    "Whether an eligible parent task may call the native decompose_tool to replace itself with "
+    "ordered, self-contained subtasks at its current index. Decomposition forces isolated "
+    "parent and child prompts, children cannot decompose again, and the board remains linear. "
+    "Use this for a board whose tasks may benefit from one local planning pass before execution. "
+    "Because expansion shifts later indices, this option requires --no-checkpoint and cannot "
+    "be combined with --type dag."
+)
+_MAX_SUBTASKS_HELP = (
+    "The maximum number of normalized subtasks one parent may create through decompose_tool. "
+    "Candidates are stripped, blank or overlong values are dropped, and case-insensitive "
+    "duplicates collapse to their first occurrence before this cap applies. The board still "
+    "caps at 500 live tasks, so an expansion near that ceiling is truncated or skipped when "
+    "fewer than two children can fit. Leave the default in place unless the task shape calls "
+    "for a deliberately smaller or broader split."
 )
 _LIST_HELP = (
     "List every checkpointed board stored under one checkpoint root, one line each. Each row "
@@ -528,6 +547,19 @@ class TaskBoardCommand:
         @click.option(
             "--depends-on", "depends_on", multiple=True, default=(), help=_DEPENDS_ON_HELP
         )
+        @click.option(
+            "--allow-decompose/--no-allow-decompose",
+            default=False,
+            show_default=True,
+            help=_ALLOW_DECOMPOSE_HELP,
+        )
+        @click.option(
+            "--max-subtasks",
+            type=click.IntRange(int(TaskBoardLimit.MIN_SUBTASKS), int(TaskBoardLimit.MAX_SUBTASKS)),
+            default=5,
+            show_default=True,
+            help=_MAX_SUBTASKS_HELP,
+        )
         @click.option("--model", default="", help=_MODEL_HELP)
         @click.option(
             "--sandbox",
@@ -730,6 +762,8 @@ class TaskBoardCommand:
         stored = checkpointer if parsed.resumes else None
         board = self._board_tasks(tasks, parsed.task_files, parsed.task_list, stored)
         settings = self._settings(board, parsed)
+        if settings.allow_decompose:
+            progress(Progress.DECOMPOSE_ISOLATED)
         controls = parsed.controls()
         checkpointer = self._identified(checkpointer, parsed, board)
         # A prompt preview never starts an agent, so it returns before credentials or payment.
@@ -1029,6 +1063,10 @@ class TaskBoardCommand:
         links = self._parse_dependencies(parsed.depends_on, parsed.execution_type, len(board))
         if links and TaskBoardSettings.topological_order(len(board), links) is None:
             raise TaskBoardDependencyInvalid()
+        if parsed.allow_decompose and parsed.execution_type == "dag":
+            raise TaskBoardDecomposeInvalid("--type dag")
+        if parsed.allow_decompose and parsed.checkpoint:
+            raise TaskBoardDecomposeInvalid("checkpointing, which stays on unless --no-checkpoint")
         return TaskBoardSettings(
             tasks=board,
             window=parsed.window,
@@ -1041,6 +1079,8 @@ class TaskBoardCommand:
             execution_type=TaskBoardExecutionType(parsed.execution_type),
             dependencies=links,
             agent=parsed.agent(),
+            allow_decompose=parsed.allow_decompose,
+            max_subtasks=parsed.max_subtasks,
         )
 
     def _parse_dependencies(
@@ -1193,6 +1233,8 @@ class TaskBoardOptions:
         self.retries_per_task = int(str(options["retries_per_task"]))
         self.execution_type = str(options["execution_type"])
         self.depends_on = tuple(str(item) for item in self._items(options["depends_on"]))
+        self.allow_decompose = bool(options.get("allow_decompose", False))
+        self.max_subtasks = int(str(options.get("max_subtasks", 5)))
         self.model = str(options["model"])
         self.sandbox = str(options["sandbox"])
         self.reasoning_effort = str(options["reasoning_effort"])

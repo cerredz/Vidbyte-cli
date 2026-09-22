@@ -251,6 +251,15 @@ class TaskBoardTurn:
     total_tokens: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class TaskBoardTaskOutcome:
+    """One task attempt result plus subtasks accepted by its native tool, if any."""
+
+    turn: TaskBoardTurn | None
+    note: str
+    subtasks: tuple[str, ...] = ()
+
+
 class TaskBoardExecutionType(StrEnum):
     """Which loop structure a board run follows."""
 
@@ -396,6 +405,27 @@ class TaskBoardSettings(BaseModel):
             "task 2. Links are accepted only in dag mode and must form an acyclic graph with "
             "no self-links or duplicates; an empty set means every task is independent and "
             "runs in board order with empty dependency context."
+        ),
+    )
+    allow_decompose: bool = Field(
+        default=False,
+        description=(
+            "Whether an eligible task agent may replace its current task with subtasks by "
+            "calling the native decompose_tool. The default is off and preserves the normal "
+            "linear, DAG, and checkpoint behavior. When enabled, decomposition is a linear "
+            "unchecked mode: each parent and child sees only its own task, children cannot "
+            "decompose again, and every accepted split shifts later positions."
+        ),
+    )
+    max_subtasks: int = Field(
+        ge=2,
+        le=10,
+        default=5,
+        description=(
+            "The maximum number of normalized child tasks one parent may create through "
+            "decompose_tool. Candidates are ordered, stripped, deduplicated case-insensitively, "
+            "and bounded by the board's 20,000-character task limit before this cap applies. "
+            "The board-wide maximum of 500 live tasks still applies."
         ),
     )
 

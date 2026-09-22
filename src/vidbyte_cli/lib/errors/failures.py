@@ -437,6 +437,29 @@ class TaskBoardDependencyInvalid(CliError):
         )
 
 
+class TaskBoardDecomposeInvalid(CliError):
+    """Decomposition was combined with a feature that requires stable board indices."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, conflict: str) -> None:
+        # Names the conflicting option without repeating task text or other local input.
+        super().__init__(
+            f"--allow-decompose cannot be combined with {conflict}.",
+            description=(
+                "Decomposition replaces one task with subtasks at the same index, so every "
+                "later task shifts while the board runs. Checkpoints store steps by board "
+                "index and DAG links name board indices, so neither can describe a board that "
+                f"reshapes itself, and {conflict} was requested. The flags were rejected before "
+                "credentials, payment, or host execution, so nothing was charged. Run a "
+                "decomposing board as linear and unchecked for now."
+            ),
+            trace="TaskBoardCommand validated decompose flags before building a launch plan.",
+            hint="Re-run with --allow-decompose --no-checkpoint and without --type dag.",
+        )
+
+
 class InvalidCommandUsage(CliError):
     """Click rejected the invocation before any command body ran."""
 

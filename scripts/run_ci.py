@@ -186,6 +186,11 @@ class CiRunner:
             ("provider BYOK", (python, "scripts/test-provider-byok-login-extended.py")),
             # Offline: real summarizer, planner, gate, and executor with a faked SDK turn.
             ("task board", (python, "scripts/test-task-board.py")),
+            # Offline: native decompose-tool schema and depth-one mutable execution.
+            (
+                "task board native decomposition",
+                (python, "scripts/test-task-board-decompose-native-tool.py"),
+            ),
             # Offline: real checkpointer and file store on a temp root, faked SDK turns.
             (
                 "task board checkpoints",
