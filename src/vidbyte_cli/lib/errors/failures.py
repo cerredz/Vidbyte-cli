@@ -452,8 +452,11 @@ class TaskBoardDecomposeInvalid(CliError):
                 "later task shifts while the board runs. Checkpoints store steps by board "
                 "index and DAG links name board indices, so neither can describe a board that "
                 f"reshapes itself, and {conflict} was requested. The flags were rejected before "
-                "credentials, payment, or host execution, so nothing was charged. Run a "
-                "decomposing board as linear and unchecked for now."
+                "credentials, payment, or host execution, so nothing was charged. Checkpointing "
+                "is on by default, so a plain --allow-decompose run hits this until "
+                "--no-checkpoint is added as well. A decomposing board therefore runs as linear "
+                "and unchecked: it cannot be resumed, repaired, replayed, or forked afterwards, "
+                "so keep --allow-decompose off for any board you may need to continue later."
             ),
             trace="TaskBoardCommand validated decompose flags before building a launch plan.",
             hint="Re-run with --allow-decompose --no-checkpoint and without --type dag.",

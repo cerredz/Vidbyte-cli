@@ -115,11 +115,41 @@ class TaskBoardSummarizer:
 
 
 _DECOMPOSE_TOOL_DESCRIPTION = (
-    "Replace the current task with a short ordered list of self-contained subtasks. "
-    "Call this tool only when splitting the current task improves execution, and provide at "
-    "least two distinct subtasks within the configured maximum. "
-    "Each child runs in a fresh isolated agent and cannot decompose again, so include all "
-    "context needed to complete each child in its own string."
+    "Replace the current board task with a short ordered list of self-contained subtasks that "
+    "run in its place, one after another, before any later task on the board starts. "
+    "Call this tool only when the current task is genuinely better handled as separate steps, "
+    "for example when it bundles independent deliverables or needs one step's output before "
+    "the next can begin; if the task is small or already a single coherent change, do not "
+    "call it and complete the task yourself. "
+    "Pass at least two distinct subtasks and no more than the maximum named in your task "
+    "prompt; blank entries, entries over 20,000 characters, and case-insensitive duplicates "
+    "are dropped, and anything past the maximum is ignored, so a call left with fewer than two "
+    "valid subtasks is rejected and the task stays whole. "
+    "Only the first accepted call in this turn counts, so a second call cannot revise the "
+    "split; decide on the full list before calling. "
+    "Each child runs later in a fresh agent that sees only its own subtask string, with no "
+    "access to this conversation, the parent task, its siblings, or any prior results, and "
+    "that child cannot decompose again. "
+    "Write every subtask as a complete instruction that names the files, constraints, and "
+    "acceptance criteria it needs, because anything left implicit is lost. "
+    "After a call is accepted, end your turn with a brief final message describing the split "
+    "instead of doing the subtasks' work yourself, since the children will do it."
+)
+_DECOMPOSE_SUBTASKS_DESCRIPTION = (
+    "The ordered list of child task statements that replaces the current task at its board "
+    "position, where the first string runs first and the last runs last. "
+    "Provide between two and the maximum number of subtasks named in your task prompt, each "
+    "a distinct, non-blank instruction under 20,000 characters. "
+    "Every string is handed verbatim to a fresh isolated agent that has never seen the parent "
+    "task, its siblings, or any earlier board results, so each must restate the goal, the "
+    "relevant files or inputs, the constraints, and what done looks like. "
+    "Order the list so that any subtask relying on another's changes comes after it, because "
+    "children run strictly in list order and nothing passes between them except the files "
+    "they change. "
+    "Entries are stripped of surrounding whitespace, case-insensitive duplicates keep only "
+    "their first occurrence, and entries past the maximum are discarded rather than rejected. "
+    "Do not include numbering, bullet markers, or commentary about the split itself, since "
+    "each string becomes a task prompt exactly as written."
 )
 
 
@@ -145,7 +175,7 @@ class TaskBoardDecomposeCapture:
         def decompose_tool(
             subtasks: Annotated[
                 list[str],
-                Field(description="Ordered, self-contained child task statements."),
+                Field(description=_DECOMPOSE_SUBTASKS_DESCRIPTION),
             ],
         ) -> str:
             # Routes the model's structured call into this attempt's policy-bound capture.
@@ -305,16 +335,31 @@ class TaskBoardCodexSession:
         self, settings: TaskBoardSettings, admission_id: str
     ) -> TaskBoardResult:
         # Replaces eligible parents in a mutable linear board while preserving execution order.
+        # This loop exists apart from `_run` because a splice changes the board's length while
+        # it runs: `_run` iterates a precomputed execution order and seeds handoff entries by
+        # board index, and both assumptions break the moment one task becomes several.
+        # `work` is the live board and `depths` runs parallel to it, so the two lists must be
+        # spliced together or a child would inherit the wrong decompose eligibility. Every
+        # original task starts at depth zero, meaning it may still decompose.
         work = list(settings.tasks)
         depths = [0] * len(work)
         steps: list[TaskBoardStepResult] = []
+        # Counters are local to this invocation because the command rejects checkpointing for
+        # a decomposing board, so there is no stored prefix to resume from or add to.
         completed, failed, tokens = 0, 0, 0
         stopped: str | None = None
         self._progress(Progress.TASK_STARTING)
+        # A `while` over a manual index rather than a `for` over the list, because a splice
+        # must re-read `len(work)` and must be able to leave `index` where it is.
         index = 0
         while index < len(work):
             task = work[index]
+            # The limit is recomputed per task from the live board size, so a late parent on a
+            # board that has already grown near the 500-task ceiling gets a smaller cap, and
+            # `None` withholds the tool entirely for children and for a board with no room.
             decompose_limit = self._decompose_limit(len(work), depths[index], settings)
+            # Every task runs isolated with an empty entry list: a splice shifts board indices,
+            # so windowed or dependency context would point at the wrong earlier results.
             outcome = await self._run_task(
                 task,
                 index,
@@ -325,6 +370,8 @@ class TaskBoardCodexSession:
             )
             turn = outcome.turn
             if turn is None:
+                # A failed parent never splices, even if its tool call was accepted before the
+                # turn died: the capture is attempt-local, and only a completed turn returns it.
                 failed += 1
                 steps.append(self._step_of(task, index, None))
                 if settings.stop_on_error:
@@ -332,17 +379,32 @@ class TaskBoardCodexSession:
                     break
                 index += 1
                 continue
+            # A completed parent counts as completed and pays its tokens whether or not it
+            # decomposed, because its turn ran to the end either way and was billed for.
             completed += 1
             tokens += turn.total_tokens or 0
             children = outcome.subtasks
+            # The capture already rejects a call with fewer than two valid subtasks, so this
+            # threshold is a second guard that keeps a one-child "split" from ever replacing a
+            # task with a copy of itself.
             if len(children) >= int(TaskBoardLimit.MIN_SUBTASKS):
+                # The children take the parent's slot in place, so every later task shifts right
+                # by `len(children) - 1` and still runs after all of them. Depth one marks each
+                # child ineligible, which is what keeps decomposition to a single level.
                 work[index : index + 1] = list(children)
                 depths[index : index + 1] = [1] * len(children)
                 steps.append(self._decomposed_step(task, index, len(children), turn.thread_id))
+                # `index` is deliberately not advanced: the first child now sits at this
+                # position, so the next iteration runs it rather than skipping past it.
                 continue
+            # No accepted split means the parent's own final text is the task's result, the
+            # same step shape a board without --allow-decompose records.
             steps.append(self._step_of(task, index, turn))
             index += 1
         self._progress(Progress.COMPLETE)
+        # `steps` stays in append order because a splice reuses a parent's index for its first
+        # child, so the result lists each decomposed parent directly before the children that
+        # replaced it.
         return self._result(settings, admission_id, completed, failed, steps, tokens, stopped)
 
     def _decompose_limit(
