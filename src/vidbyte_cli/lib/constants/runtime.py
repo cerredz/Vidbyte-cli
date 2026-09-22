@@ -152,6 +152,22 @@ class RuntimePaymentConfig:
     PERSISTENCE_CENTS = 2
 
 
+class SuggestionAdmissionLimit(IntEnum):
+    """One admission unit buys up to ten requested suggestions; --count stops at fifteen."""
+
+    SUGGESTIONS_PER_UNIT = 10
+    MAX_UNITS = 2
+
+
+class SuggestionAdmissionProgress(StrEnum):
+    """Product-facing milestones for the paid half of a suggestion run."""
+
+    PREPARING = "Checking that Codex and the Vidbyte SDK can run the suggestion agent here."
+    ADMISSION = "Requesting the Vidbyte admission for this suggestion run."
+    VERIFYING = "Verifying your admission receipt before any model is called."
+    ADMITTED = "Your admission is verified. Generating and reviewing suggestions."
+
+
 class StagesLimit(IntEnum):
     """Execution bounds for the stages primitive."""
 

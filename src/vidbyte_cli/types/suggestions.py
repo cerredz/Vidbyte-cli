@@ -460,6 +460,15 @@ class SuggestionIdea(BaseModel):
         return SuggestionDraft.model_validate({**values, "idea_id": self.id})
 
 
+class SuggestionAdmissionReceipt(BaseModel):
+    """What one model-backed run paid Vidbyte, copied from its verified admission grant."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    admission_id: str = Field(min_length=1, max_length=128)
+    charged_cents: int = Field(ge=1)
+    units: int = Field(ge=1)
+
+
 class SuggestionResult(BaseModel):
     """Whole validated outcome of one run, including shortfalls and usage."""
 
@@ -481,6 +490,8 @@ class SuggestionResult(BaseModel):
     parent_message: str | None = Field(default=None, max_length=MAX_AGENT_MESSAGE_CHARS)
     feedback_capture: SuggestionFeedbackCapture | None = None
     prompt_version: str = Field(min_length=1, max_length=64, default="suggestions.v4")
+    # None for a dry run and for results saved before runs were priced, so old files still load.
+    admission: SuggestionAdmissionReceipt | None = None
 
 
 __all__ = [
@@ -511,6 +522,7 @@ __all__ = [
     "SuggestionIdea",
     "SuggestionProjectCatalog",
     "SuggestionProjectMemory",
+    "SuggestionAdmissionReceipt",
     "SuggestionProjectRecord",
     "SuggestionRequest",
     "SuggestionResult",

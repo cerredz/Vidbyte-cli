@@ -79,7 +79,16 @@ the configured provider default, while `--critic-model` is the only model overri
 only to independent review. `--count` accepts 2–15, `--rounds` accepts 1–8, and
 `--extra-compute` runs one focused generator context per selected category before critique.
 The default run uses the configured provider through `vidbyte-sdk`; `--dry-run`, `categories`,
-and `handoff` are credential-free.
+`handoff`, `project`, and `feedback` are credential-free and never charged.
+
+Every model-backed run buys one Vidbyte admission (`runtime.suggestion@1`) before any model is
+called: two cents per block of up to ten requested suggestions, so `--count` 2–10 costs 2 cents
+and 11–15 costs 4 cents, whatever the categories, rounds, or `--extra-compute`. That fee needs
+`vidbyte-cli login` and prepaid balance; model usage is billed separately to your own provider
+account. The SDK and the Codex host are checked before the purchase, the grant is verified
+online before the first model call, and the result's `admission` field records the admission
+id, charged cents, and units. Pass `--idempotency-key` only to recover an admission whose
+response was lost.
 
 Context is limited to 5,000,000 characters per item and in aggregate, with truncation or
 omission recorded in the result manifest. Category prompts are high-level guidance, and each

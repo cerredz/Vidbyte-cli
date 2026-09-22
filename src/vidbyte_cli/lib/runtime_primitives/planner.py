@@ -26,6 +26,7 @@ Product = Literal[
     "runtime.persistence@1",
     "runtime.task-board@1",
     "runtime.stages@1",
+    "runtime.suggestion@1",
 ]
 
 

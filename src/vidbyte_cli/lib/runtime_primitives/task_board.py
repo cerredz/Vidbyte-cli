@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from importlib.resources import files
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field
 
@@ -168,7 +168,7 @@ class TaskBoardDecomposeCapture:
         with self._lock:
             return self._accepted
 
-    def build_tool(self) -> object:
+    def build_tool(self) -> Any:
         # Uses the SDK's public decorator lazily so command help never starts Codex machinery.
         from vidbyte.tools import tool
 
@@ -181,11 +181,8 @@ class TaskBoardDecomposeCapture:
             # Routes the model's structured call into this attempt's policy-bound capture.
             return self._accept(subtasks)
 
-        return tool(
-            decompose_tool,
-            name="decompose_tool",
-            description=_DECOMPOSE_TOOL_DESCRIPTION,
-        )
+        # The pinned SDK's tool() takes name and description only in its decorator form.
+        return tool(name="decompose_tool", description=_DECOMPOSE_TOOL_DESCRIPTION)(decompose_tool)
 
     def _accept(self, candidates: list[str]) -> str:
         # Normalizes candidates before the first accepted call becomes immutable.
@@ -794,7 +791,7 @@ class TaskBoardCodexSession:
         return self._summarizer.render_prompt(task, index, context)
 
     def _build_agent(
-        self, index: int, settings: TaskBoardSettings, decompose_tool: object | None = None
+        self, index: int, settings: TaskBoardSettings, decompose_tool: Any | None = None
     ) -> CodexHarnessAgent:
         # Constructs a fresh agent so threads never leak across tasks. The client config is
         # built here rather than in a helper because its type only exists under this import.

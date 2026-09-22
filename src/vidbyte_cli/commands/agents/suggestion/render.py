@@ -55,6 +55,13 @@ class SuggestionRenderer:
             rendered = header + "\n\n" + "\n\n".join(blocks)
         if result.feedback_capture is not None:
             rendered += "\n\n" + self._human_feedback(result.feedback_capture)
+        if result.admission is not None:
+            # The Vidbyte charge is shown apart from model usage, which the provider bills.
+            admission = result.admission
+            rendered += (
+                f"\n\nVidbyte charge: {admission.charged_cents} cents for "
+                f"{admission.units} block(s) of ten suggestions ({admission.admission_id})."
+            )
         return rendered
 
     def _human_idea(self, idea: SuggestionIdea) -> str:

@@ -19,6 +19,8 @@ _ALLOWED_PRICES = {
     "runtime.persistence@1": 2,
     "runtime.task-board@1": 2,
     "runtime.stages@1": 1,
+    # A per-unit price: a suggestion admission charges this once per block of ten ideas.
+    "runtime.suggestion@1": 2,
 }
 _MAX_TTL_SECONDS = 3600
 Key = str | None
@@ -39,20 +41,23 @@ class RuntimeAdmissionGate:
             check = self._check_signature(grant, current, key)
         return self._verdict(plan, grant, check)
 
-    def verify_online(self, plan: Plan, grant: Grant, verified: Grant) -> Verdict:
+    def verify_online(self, plan: Plan, grant: Grant, verified: Grant, units: int = 1) -> Verdict:
         # The backend confirms signature, ownership and Mongo payment evidence for either method.
-        check = self._check_policy(plan, grant, datetime.now(UTC))
+        check = self._check_policy(plan, grant, datetime.now(UTC), units)
         if grant != verified:
             check = Check(Reason.RECEIPT_MISMATCH)
         return self._verdict(plan, grant, check)
 
-    def _check_policy(self, plan: Plan, grant: Grant | None, now: datetime) -> Check:
+    def _check_policy(
+        self, plan: Plan, grant: Grant | None, now: datetime, units: int = 1
+    ) -> Check:
         # Rejects unknown products, price drift and unbounded receipt lifetimes.
         if grant is None:
             return Check(Reason.MISSING)
         if grant.capability_id != plan.capability_id:
             return Check(Reason.CAPABILITY_MISMATCH)
-        if grant.charged_cents != _ALLOWED_PRICES.get(grant.capability_id):
+        unit_price = _ALLOWED_PRICES.get(grant.capability_id)
+        if unit_price is None or grant.charged_cents != unit_price * units:
             return Check(Reason.PRICE_MISMATCH)
         if not grant.admission_id.strip() or grant.execution_location != "local":
             return Check(Reason.LOCATION_OR_ID_INVALID)
