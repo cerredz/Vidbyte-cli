@@ -44,4 +44,6 @@ class OutputDocument(BaseModel):
             data["hint"] = error.hint
         if error.request_id is not None:
             data["request_id"] = error.request_id
+        if error.remediation is not None:
+            data["remediation"] = error.remediation
         return cls(kind="error", data=data)

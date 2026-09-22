@@ -156,6 +156,8 @@ class CiRunner:
             ("login key verification", (python, "scripts/test_login_key_verification.py")),
             # Offline: inspects the command tree and runs help/usage paths only.
             ("research-only surface", (python, "scripts/test_research_only_surface.py")),
+            # Offline: verifies the 402 remediation contract and explicit top-up boundary.
+            ("agent usage exhaustion", (python, "scripts/test-agent-usage-error.py")),
             # Offline: verifies the typed suggestion boundary, context contract, and handoffs.
             ("suggestion agent", (python, "scripts/test_suggestions.py")),
             # Offline: verifies suggestion message tools, turn stops, and the message budget.

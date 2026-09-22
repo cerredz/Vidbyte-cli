@@ -33,6 +33,7 @@ from vidbyte_cli.lib.runtime.options import RootInspection  # noqa: E402
 
 EXPECTED_TOP_LEVEL = {
     "agents",
+    "billing",
     "config",
     "doctor",
     "login",
@@ -199,13 +200,17 @@ class SurfaceSuite:
         results = self.results
         actual = set(self.program.commands)
         results.check(
-            "the CLI exposes exactly nine top-level commands",
+            "the CLI exposes exactly ten top-level commands",
             actual == EXPECTED_TOP_LEVEL,
             f"got {sorted(actual)}",
         )
         results.check(
             "agents exposes exactly the suggestion group",
             self._subcommands("agents") == EXPECTED_AGENTS,
+        )
+        results.check(
+            "billing exposes exactly the top-up command",
+            self._subcommands("billing") == {"top-up"},
         )
         agents = self.program.commands["agents"]
         assert isinstance(agents, click.Group)
