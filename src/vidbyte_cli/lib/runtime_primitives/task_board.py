@@ -47,6 +47,7 @@ from .task_board_checkpoints import TaskBoardCheckpointer
 if TYPE_CHECKING:
     from vidbyte.agents.codex import CodexHarnessAgent
     from vidbyte.agents.types import AgentMessage
+    from vidbyte.tools import FunctionTool
 
 
 class TaskBoardSummarizer:
@@ -168,7 +169,7 @@ class TaskBoardDecomposeCapture:
         with self._lock:
             return self._accepted
 
-    def build_tool(self) -> object:
+    def build_tool(self) -> FunctionTool:
         # Uses the SDK's public decorator lazily so command help never starts Codex machinery.
         from vidbyte.tools import tool
 
@@ -181,11 +182,7 @@ class TaskBoardDecomposeCapture:
             # Routes the model's structured call into this attempt's policy-bound capture.
             return self._accept(subtasks)
 
-        return tool(
-            decompose_tool,
-            name="decompose_tool",
-            description=_DECOMPOSE_TOOL_DESCRIPTION,
-        )
+        return tool(name="decompose_tool", description=_DECOMPOSE_TOOL_DESCRIPTION)(decompose_tool)
 
     def _accept(self, candidates: list[str]) -> str:
         # Normalizes candidates before the first accepted call becomes immutable.
@@ -794,7 +791,7 @@ class TaskBoardCodexSession:
         return self._summarizer.render_prompt(task, index, context)
 
     def _build_agent(
-        self, index: int, settings: TaskBoardSettings, decompose_tool: object | None = None
+        self, index: int, settings: TaskBoardSettings, decompose_tool: FunctionTool | None = None
     ) -> CodexHarnessAgent:
         # Constructs a fresh agent so threads never leak across tasks. The client config is
         # built here rather than in a helper because its type only exists under this import.
