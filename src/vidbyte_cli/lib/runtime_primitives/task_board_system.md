@@ -23,3 +23,11 @@ Return the task outcome as final text. Keep it self-contained because the next a
 ## Stop conditions
 
 Complete only the current task. Do not start later tasks or redo prior tasks.
+
+## Decompose contract
+
+When your task prompt mentions `decompose_tool`, you are the only agent reading that task: no
+sibling tasks or prior summaries reach you. Call the native tool only when the current task is
+better handled as at least two ordered, self-contained child tasks; otherwise complete the task
+normally. Each child runs in a fresh isolated agent and cannot decompose further, so every child
+must contain the context it needs and must not depend on sibling work.

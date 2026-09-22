@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 from pydantic import ValidationError
 from vidbyte.lib.dataclasses.codex import CodexRunResult, CodexUsage
 from vidbyte.lib.enums.codex import CodexSandbox
+from vidbyte.lib.enums.failure import FailureCode
 from vidbyte.lib.errors import CodexAgentError
 
 from vidbyte_cli.commands.runtime.persistence import PersistenceCommand
@@ -300,7 +301,9 @@ class PersistenceContracts(unittest.TestCase):
     def test_sdk_failure_is_safe_and_stops_all_later_turns(self):
         self.transport.results = [
             CodexAgentError(
-                "secret task and credential", failure_code="codex.turn_failed", operation="turn_run"
+                "secret task and credential",
+                failure_code=FailureCode.CODEX_TURN_FAILED.value,
+                operation="turn_run",
             )
         ]
         with self.assertRaises(PersistenceHostFailed) as caught:
@@ -410,7 +413,7 @@ class PersistenceCommandContracts(AdmissionContracts):
             "vidbyte.agents.codex.CodexHarnessAgent",
             side_effect=CodexAgentError(
                 "invalid",
-                failure_code="CODEX_VIDBYTE_TRANSLATION_FAILED",
+                failure_code=FailureCode.CODEX_VIDBYTE_TRANSLATION_FAILED.value,
                 operation="translate_agent",
             ),
         ):

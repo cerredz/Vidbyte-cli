@@ -13,7 +13,10 @@ import asyncio
 from collections.abc import Callable, Mapping
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING
+from threading import Lock
+from typing import TYPE_CHECKING, Annotated
+
+from pydantic import Field
 
 from ...types.runtime import RuntimeLaunchPlan as Plan
 from ...types.runtime import (
@@ -27,6 +30,7 @@ from ...types.runtime import (
     TaskBoardRunControls,
     TaskBoardSettings,
     TaskBoardStepResult,
+    TaskBoardTaskOutcome,
     TaskBoardTurn,
 )
 from ..constants.runtime import TaskBoardCodexConfig, TaskBoardLimit
@@ -79,6 +83,15 @@ class TaskBoardSummarizer:
         prior = context if context.strip() else "(no prior results)"
         return f"Task {index}: {task}\n\nPrior summaries:\n{prior}\n\nComplete only this task."
 
+    def render_decompose_prompt(self, task: str, index: int, max_subtasks: int) -> str:
+        # Names the native tool without putting control syntax into the final text channel.
+        return (
+            f"Task {index}: {task}\n\nComplete only this task. You see only this task. "
+            "If splitting it improves execution, call the provided decompose_tool with "
+            f"2 to {max_subtasks} ordered, self-contained subtasks. Otherwise complete the "
+            "task normally."
+        )
+
     def windowed(
         self, entries: list[str | None], index: int, window: int
     ) -> tuple[tuple[int, str], ...]:
@@ -99,6 +112,108 @@ class TaskBoardSummarizer:
         rest = limit - half
         removed = len(text) - limit
         return f"{text[:half]}...[truncated {removed} chars]...{text[len(text) - rest :]}"
+
+
+_DECOMPOSE_TOOL_DESCRIPTION = (
+    "Replace the current board task with a short ordered list of self-contained subtasks that "
+    "run in its place, one after another, before any later task on the board starts. "
+    "Call this tool only when the current task is genuinely better handled as separate steps, "
+    "for example when it bundles independent deliverables or needs one step's output before "
+    "the next can begin; if the task is small or already a single coherent change, do not "
+    "call it and complete the task yourself. "
+    "Pass at least two distinct subtasks and no more than the maximum named in your task "
+    "prompt; blank entries, entries over 20,000 characters, and case-insensitive duplicates "
+    "are dropped, and anything past the maximum is ignored, so a call left with fewer than two "
+    "valid subtasks is rejected and the task stays whole. "
+    "Only the first accepted call in this turn counts, so a second call cannot revise the "
+    "split; decide on the full list before calling. "
+    "Each child runs later in a fresh agent that sees only its own subtask string, with no "
+    "access to this conversation, the parent task, its siblings, or any prior results, and "
+    "that child cannot decompose again. "
+    "Write every subtask as a complete instruction that names the files, constraints, and "
+    "acceptance criteria it needs, because anything left implicit is lost. "
+    "After a call is accepted, end your turn with a brief final message describing the split "
+    "instead of doing the subtasks' work yourself, since the children will do it."
+)
+_DECOMPOSE_SUBTASKS_DESCRIPTION = (
+    "The ordered list of child task statements that replaces the current task at its board "
+    "position, where the first string runs first and the last runs last. "
+    "Provide between two and the maximum number of subtasks named in your task prompt, each "
+    "a distinct, non-blank instruction under 20,000 characters. "
+    "Every string is handed verbatim to a fresh isolated agent that has never seen the parent "
+    "task, its siblings, or any earlier board results, so each must restate the goal, the "
+    "relevant files or inputs, the constraints, and what done looks like. "
+    "Order the list so that any subtask relying on another's changes comes after it, because "
+    "children run strictly in list order and nothing passes between them except the files "
+    "they change. "
+    "Entries are stripped of surrounding whitespace, case-insensitive duplicates keep only "
+    "their first occurrence, and entries past the maximum are discarded rather than rejected. "
+    "Do not include numbering, bullet markers, or commentary about the split itself, since "
+    "each string becomes a task prompt exactly as written."
+)
+
+
+class TaskBoardDecomposeCapture:
+    """Captures one parent attempt's accepted native decomposition call."""
+
+    def __init__(self, max_subtasks: int) -> None:
+        # Keeps the attempt-local bound and prevents concurrent tool calls from overwriting it.
+        self._max_subtasks = max_subtasks
+        self._accepted: tuple[str, ...] = ()
+        self._lock = Lock()
+
+    @property
+    def accepted_subtasks(self) -> tuple[str, ...]:
+        # Returns an immutable snapshot for the session's post-turn splice decision.
+        with self._lock:
+            return self._accepted
+
+    def build_tool(self) -> object:
+        # Uses the SDK's public decorator lazily so command help never starts Codex machinery.
+        from vidbyte.tools import tool
+
+        def decompose_tool(
+            subtasks: Annotated[
+                list[str],
+                Field(description=_DECOMPOSE_SUBTASKS_DESCRIPTION),
+            ],
+        ) -> str:
+            # Routes the model's structured call into this attempt's policy-bound capture.
+            return self._accept(subtasks)
+
+        return tool(
+            decompose_tool,
+            name="decompose_tool",
+            description=_DECOMPOSE_TOOL_DESCRIPTION,
+        )
+
+    def _accept(self, candidates: list[str]) -> str:
+        # Normalizes candidates before the first accepted call becomes immutable.
+        cleaned = self._clean_candidates(candidates)
+        if len(cleaned) < int(TaskBoardLimit.MIN_SUBTASKS):
+            return "No decomposition accepted; provide at least two distinct valid subtasks."
+        with self._lock:
+            if self._accepted:
+                return "A decomposition was already accepted for this task attempt."
+            self._accepted = cleaned
+        return f"Accepted {len(cleaned)} subtasks for isolated execution."
+
+    def _clean_candidates(self, candidates: list[str]) -> tuple[str, ...]:
+        # Drops unsafe entries, preserves first occurrence order, and enforces the local cap.
+        seen: set[str] = set()
+        kept: list[str] = []
+        for candidate in candidates:
+            cleaned = candidate.strip()
+            if not cleaned or len(cleaned) > int(TaskBoardLimit.MAX_TASK_CHARS):
+                continue
+            folded = cleaned.casefold()
+            if folded in seen:
+                continue
+            seen.add(folded)
+            kept.append(cleaned)
+            if len(kept) >= self._max_subtasks:
+                break
+        return tuple(kept)
 
 
 class TaskBoardCodexSession:
@@ -167,6 +282,8 @@ class TaskBoardCodexSession:
         # aligned. A linear board runs in board order; a DAG board runs parents first, and a
         # task whose dependency failed is recorded failed without ever starting an agent.
         del plan
+        if settings.allow_decompose:
+            return await self._run_decomposing(settings, admission_id)
         order = self._order(settings)
         dag = settings.execution_type is TaskBoardExecutionType.DAG
         parents = self._dag_parents(settings)
@@ -194,7 +311,8 @@ class TaskBoardCodexSession:
                 self._progress(Progress.TASK_SKIPPED)
             else:
                 started += 1
-                turn, note = await self._run_task(settings.tasks[index], index, entries, settings)
+                outcome = await self._run_task(settings.tasks[index], index, entries, settings)
+                turn, note = outcome.turn, outcome.note
                 if turn is None and dag:
                     self._progress(Progress.TASK_FAILED)
             used = 0 if turn is None else (turn.total_tokens or 0)
@@ -213,6 +331,91 @@ class TaskBoardCodexSession:
         self._progress(Progress.COMPLETE)
         return self._result(settings, admission_id, completed, failed, steps, tokens, stopped)
 
+    async def _run_decomposing(
+        self, settings: TaskBoardSettings, admission_id: str
+    ) -> TaskBoardResult:
+        # Replaces eligible parents in a mutable linear board while preserving execution order.
+        # This loop exists apart from `_run` because a splice changes the board's length while
+        # it runs: `_run` iterates a precomputed execution order and seeds handoff entries by
+        # board index, and both assumptions break the moment one task becomes several.
+        # `work` is the live board and `depths` runs parallel to it, so the two lists must be
+        # spliced together or a child would inherit the wrong decompose eligibility. Every
+        # original task starts at depth zero, meaning it may still decompose.
+        work = list(settings.tasks)
+        depths = [0] * len(work)
+        steps: list[TaskBoardStepResult] = []
+        # Counters are local to this invocation because the command rejects checkpointing for
+        # a decomposing board, so there is no stored prefix to resume from or add to.
+        completed, failed, tokens = 0, 0, 0
+        stopped: str | None = None
+        self._progress(Progress.TASK_STARTING)
+        # A `while` over a manual index rather than a `for` over the list, because a splice
+        # must re-read `len(work)` and must be able to leave `index` where it is.
+        index = 0
+        while index < len(work):
+            task = work[index]
+            # The limit is recomputed per task from the live board size, so a late parent on a
+            # board that has already grown near the 500-task ceiling gets a smaller cap, and
+            # `None` withholds the tool entirely for children and for a board with no room.
+            decompose_limit = self._decompose_limit(len(work), depths[index], settings)
+            # Every task runs isolated with an empty entry list: a splice shifts board indices,
+            # so windowed or dependency context would point at the wrong earlier results.
+            outcome = await self._run_task(
+                task,
+                index,
+                [],
+                settings,
+                isolated=True,
+                decompose_max_subtasks=decompose_limit,
+            )
+            turn = outcome.turn
+            if turn is None:
+                # A failed parent never splices, even if its tool call was accepted before the
+                # turn died: the capture is attempt-local, and only a completed turn returns it.
+                failed += 1
+                steps.append(self._step_of(task, index, None))
+                if settings.stop_on_error:
+                    stopped = "stop-on-error"
+                    break
+                index += 1
+                continue
+            # A completed parent counts as completed and pays its tokens whether or not it
+            # decomposed, because its turn ran to the end either way and was billed for.
+            completed += 1
+            tokens += turn.total_tokens or 0
+            children = outcome.subtasks
+            # The capture already rejects a call with fewer than two valid subtasks, so this
+            # threshold is a second guard that keeps a one-child "split" from ever replacing a
+            # task with a copy of itself.
+            if len(children) >= int(TaskBoardLimit.MIN_SUBTASKS):
+                # The children take the parent's slot in place, so every later task shifts right
+                # by `len(children) - 1` and still runs after all of them. Depth one marks each
+                # child ineligible, which is what keeps decomposition to a single level.
+                work[index : index + 1] = list(children)
+                depths[index : index + 1] = [1] * len(children)
+                steps.append(self._decomposed_step(task, index, len(children), turn.thread_id))
+                # `index` is deliberately not advanced: the first child now sits at this
+                # position, so the next iteration runs it rather than skipping past it.
+                continue
+            # No accepted split means the parent's own final text is the task's result, the
+            # same step shape a board without --allow-decompose records.
+            steps.append(self._step_of(task, index, turn))
+            index += 1
+        self._progress(Progress.COMPLETE)
+        # `steps` stays in append order because a splice reuses a parent's index for its first
+        # child, so the result lists each decomposed parent directly before the children that
+        # replaced it.
+        return self._result(settings, admission_id, completed, failed, steps, tokens, stopped)
+
+    def _decompose_limit(
+        self, current_size: int, depth: int, settings: TaskBoardSettings
+    ) -> int | None:
+        # Omits the tool for children and for a board with fewer than two available slots.
+        capacity = int(TaskBoardLimit.MAX_TASKS) - current_size + 1
+        if depth or capacity < int(TaskBoardLimit.MIN_SUBTASKS):
+            return None
+        return min(settings.max_subtasks, capacity)
+
     async def _replay(
         self, settings: TaskBoardSettings, admission_id: str, index: int
     ) -> TaskBoardResult:
@@ -226,7 +429,8 @@ class TaskBoardCodexSession:
         entries = self._empty_entries(settings)
         self._progress(Progress.TASK_STARTING)
         self._seed(entries, [], checkpointer.load_prefix(order.index(index), order), settings)
-        turn, note = await self._run_task(settings.tasks[index], index, entries, settings)
+        outcome = await self._run_task(settings.tasks[index], index, entries, settings)
+        turn, note = outcome.turn, outcome.note
         dag = settings.execution_type is TaskBoardExecutionType.DAG
         step = self._step_of(settings.tasks[index], index, turn, note if dag else "")
         tokens = 0 if turn is None else (turn.total_tokens or 0)
@@ -443,8 +647,15 @@ class TaskBoardCodexSession:
         return {index: tuple(sorted(parents)) for index, parents in grouped.items()}
 
     async def _run_task(
-        self, task: str, index: int, entries: list[str | None], settings: TaskBoardSettings
-    ) -> tuple[TaskBoardTurn | None, str]:
+        self,
+        task: str,
+        index: int,
+        entries: list[str | None],
+        settings: TaskBoardSettings,
+        *,
+        isolated: bool = False,
+        decompose_max_subtasks: int | None = None,
+    ) -> TaskBoardTaskOutcome:
         # One task start to finish. Every attempt builds its own agent and renders the same
         # prompt, so a retry recovers from a dead host rather than re-deciding the context.
         # A failure also returns the note a DAG step records: attempt count, failure kind, and
@@ -456,8 +667,26 @@ class TaskBoardCodexSession:
                 self._progress(Progress.TASK_RETRYING)
             reply: AgentMessage | None = None
             try:
-                prompt = self._build_prompt(task, index, entries, settings)
-                reply = await self._turn(self._build_agent(index, settings), prompt, settings)
+                capture = (
+                    None
+                    if decompose_max_subtasks is None
+                    else TaskBoardDecomposeCapture(decompose_max_subtasks)
+                )
+                prompt = self._build_prompt(
+                    task,
+                    index,
+                    entries,
+                    settings,
+                    isolated=isolated,
+                    decompose_max_subtasks=decompose_max_subtasks,
+                )
+                tool = None if capture is None else capture.build_tool()
+                agent = (
+                    self._build_agent(index, settings)
+                    if tool is None
+                    else self._build_agent(index, settings, tool)
+                )
+                reply = await self._turn(agent, prompt, settings)
                 result = self._completed_text(reply)
                 turn = TaskBoardTurn(
                     prompt=prompt,
@@ -468,13 +697,17 @@ class TaskBoardCodexSession:
                     thread_id=self._thread_id(reply),
                     total_tokens=self._usage_of(reply),
                 )
-                return (turn, "")
+                subtasks = () if capture is None else capture.accepted_subtasks
+                return TaskBoardTaskOutcome(turn=turn, note="", subtasks=subtasks)
             except Exception as error:
                 # Attempt failures stay local: stop-on-error is the caller's policy, and
                 # only the final note survives so earlier attempts never leak stale causes.
                 last_note = self._attempt_note(error, reply, settings, attempt, attempts)
                 continue
-        return (None, f"Ran {attempts} attempt(s), all exhausted. {last_note}")
+        return TaskBoardTaskOutcome(
+            turn=None,
+            note=f"Ran {attempts} attempt(s), all exhausted. {last_note}",
+        )
 
     def _attempt_note(
         self,
@@ -525,10 +758,21 @@ class TaskBoardCodexSession:
         return total if isinstance(total, int) and total >= 0 else None
 
     def _build_prompt(
-        self, task: str, index: int, entries: list[str | None], settings: TaskBoardSettings
+        self,
+        task: str,
+        index: int,
+        entries: list[str | None],
+        settings: TaskBoardSettings,
+        *,
+        isolated: bool = False,
+        decompose_max_subtasks: int | None = None,
     ) -> str:
         # An isolated board hands its agents no prior-results channel at all; a windowed board
         # renders exactly the trailing slice the window admits and nothing older.
+        if decompose_max_subtasks is not None:
+            return self._summarizer.render_decompose_prompt(task, index, decompose_max_subtasks)
+        if isolated:
+            return self._summarizer.render_prompt(task, index, None)
         if settings.context_mode is TaskBoardContextMode.ISOLATED:
             return self._summarizer.render_prompt(task, index, None)
         if settings.execution_type is TaskBoardExecutionType.DAG:
@@ -549,7 +793,9 @@ class TaskBoardCodexSession:
         context = self._summarizer.render_context(tuple(selected))
         return self._summarizer.render_prompt(task, index, context)
 
-    def _build_agent(self, index: int, settings: TaskBoardSettings) -> CodexHarnessAgent:
+    def _build_agent(
+        self, index: int, settings: TaskBoardSettings, decompose_tool: object | None = None
+    ) -> CodexHarnessAgent:
         # Constructs a fresh agent so threads never leak across tasks. The client config is
         # built here rather than in a helper because its type only exists under this import.
         from vidbyte.agents.codex import CodexHarnessAgent
@@ -566,6 +812,7 @@ class TaskBoardCodexSession:
             codex_bin=self._executable,
             cwd=self._working_directory,
             env=self._environment,
+            experimental_api=True,
             config_overrides=tuple(setting.value for setting in TaskBoardCodexConfig),
         )
         return CodexHarnessAgent(
@@ -582,6 +829,7 @@ class TaskBoardCodexSession:
                         effort=CodexReasoningEffort(settings.agent.reasoning_effort.value)
                     ),
                 ),
+                tools=() if decompose_tool is None else (decompose_tool,),
             )
         )
 
@@ -635,6 +883,18 @@ class TaskBoardCodexSession:
             thread_id=turn.thread_id,
         )
 
+    def _decomposed_step(
+        self, task: str, index: int, count: int, thread: str
+    ) -> TaskBoardStepResult:
+        # Records the parent turn that expanded into children at its current position.
+        return TaskBoardStepResult(
+            index=index,
+            task=task,
+            summary=f"Task {index} decomposed into {count} subtasks.",
+            status="completed",
+            thread_id=thread,
+        )
+
     def _result(
         self,
         settings: TaskBoardSettings,
@@ -648,8 +908,12 @@ class TaskBoardCodexSession:
         # Joins step summaries into the board-level text and names where the board lives, so a
         # calling agent can address it later by absolute path rather than by remembering a run.
         # Steps are listed in execution order, which is board order unless the board is a DAG.
-        position = {index: rank for rank, index in enumerate(self._order(settings))}
-        ordered = sorted(steps, key=lambda step: position[step.index])
+        if settings.allow_decompose:
+            # Mutable expansion can repeat an index, so append order is the only stable order.
+            ordered = list(steps)
+        else:
+            position = {index: rank for rank, index in enumerate(self._order(settings))}
+            ordered = sorted(steps, key=lambda step: position[step.index])
         text = "\n".join(f"[{step.index}] {step.summary}" for step in ordered)
         checkpointer = self._checkpointer
         return TaskBoardResult(

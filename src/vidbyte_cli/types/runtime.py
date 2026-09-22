@@ -251,6 +251,15 @@ class TaskBoardTurn:
     total_tokens: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class TaskBoardTaskOutcome:
+    """One task attempt result plus subtasks accepted by its native tool, if any."""
+
+    turn: TaskBoardTurn | None
+    note: str
+    subtasks: tuple[str, ...] = ()
+
+
 class TaskBoardExecutionType(StrEnum):
     """Which loop structure a board run follows."""
 
@@ -396,6 +405,40 @@ class TaskBoardSettings(BaseModel):
             "task 2. Links are accepted only in dag mode and must form an acyclic graph with "
             "no self-links or duplicates; an empty set means every task is independent and "
             "runs in board order with empty dependency context."
+        ),
+    )
+    allow_decompose: bool = Field(
+        default=False,
+        description=(
+            "Whether a task's agent may call the native decompose_tool to replace its current "
+            "task with an ordered list of self-contained subtasks that run in its place. The "
+            "default is off and preserves the normal linear, DAG, windowed-context, and "
+            "checkpoint behavior exactly. When enabled, the board runs as a mutable linear "
+            "list: an accepted split is spliced in at the parent's position, every later task "
+            "shifts right, and the children run one at a time before anything after them. "
+            "Every parent and child runs isolated, so no agent reads prior summaries, and each "
+            "child sees only its own subtask string. Children are never offered the tool, "
+            "which keeps decomposition to exactly one level. Because a splice moves board "
+            "indices while the run is in progress, the command rejects this setting together "
+            "with checkpointing or DAG execution before any credential, payment, or agent."
+        ),
+    )
+    max_subtasks: int = Field(
+        ge=2,
+        le=10,
+        default=5,
+        description=(
+            "The maximum number of child tasks one parent may create in a single "
+            "decompose_tool call, between 2 and 10, and it has no effect unless "
+            "allow_decompose is true. The default of 5 separates the distinct pieces of a "
+            "broad task without letting one parent fan out into many small billed turns. "
+            "Candidates are stripped, entries that are blank or longer than the board's "
+            "20,000-character task limit are dropped, and case-insensitive duplicates keep "
+            "only their first occurrence before this cap truncates the remainder. A call left "
+            "with fewer than two valid children is rejected, so the parent's task stays whole "
+            "and its own final text becomes the result. The board-wide ceiling of 500 live "
+            "tasks still applies, so a parent near that ceiling receives a smaller effective "
+            "cap, and one with room for fewer than two children is not offered the tool."
         ),
     )
 
