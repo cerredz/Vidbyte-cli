@@ -67,6 +67,7 @@ _WHEEL_RUNTIME_PROMPTS = (
             "max_total_tokens",
             "timeout",
             "dry_run",
+            "idempotency_key",
             "mistakes",
             "forbidden",
             "approaches",
@@ -172,6 +173,11 @@ class CiRunner:
             (
                 "suggestion project memory",
                 (python, "scripts/test_suggestion_project_memory.py"),
+            ),
+            # Offline: suggestion admission units, gate price per unit, and the pay-last order.
+            (
+                "suggestion admission",
+                (python, "scripts/test-suggestion-admission.py"),
             ),
             (
                 "runtime admission and persistence",

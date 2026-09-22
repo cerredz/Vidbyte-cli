@@ -17,6 +17,7 @@ from ....types.runtime import (
 from ....types.runtime import (
     RuntimeCapabilityCatalog,
     RuntimeGrantVerificationRequest,
+    RuntimeSuggestionAdmissionRequest,
 )
 from ..client import ApiClient
 from ..response import ResponseDecoder, ResponseShape
@@ -32,6 +33,7 @@ SAME_HOST_ENSEMBLE_ADMISSION_PATH = "/api/x402/runtime/same-host-ensemble/activa
 PERSISTENCE_ADMISSION_PATH = "/api/x402/runtime/persistence/activate"
 TASK_BOARD_ADMISSION_PATH = "/api/x402/runtime/task-board/activate"
 STAGES_ADMISSION_PATH = "/api/x402/runtime/stages/admissions"
+SUGGESTION_ADMISSION_PATH = "/api/x402/runtime/suggestion/admissions"
 
 
 class RuntimeEndpoints:
@@ -106,6 +108,18 @@ class RuntimeEndpoints:
         # Purchases one replay-safe local stages admission at the one-cent floor.
         return self._client.post(
             STAGES_ADMISSION_PATH,
+            request,
+            AdmissionGrant,
+            shape=ResponseShape.DIRECT,
+            idempotency_key=key,
+        )
+
+    def admit_suggestion(
+        self, request: RuntimeSuggestionAdmissionRequest, key: str
+    ) -> AdmissionGrant:
+        # Purchases one replay-safe suggestion admission of two cents per unit of ten ideas.
+        return self._client.post(
+            SUGGESTION_ADMISSION_PATH,
             request,
             AdmissionGrant,
             shape=ResponseShape.DIRECT,

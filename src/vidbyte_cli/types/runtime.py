@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..lib.constants.runtime import AdmissionReason, StagesLimit
+from ..lib.constants.runtime import AdmissionReason, StagesLimit, SuggestionAdmissionLimit
 
 
 class RuntimeHost(StrEnum):
@@ -60,6 +60,12 @@ class RuntimeX402AdmissionRequest(RuntimeAdmissionRequest):
     with_x402_payment: Literal[True] = True
 
 
+class RuntimeSuggestionAdmissionRequest(RuntimeAdmissionRequest):
+    """Suggestion admission buys whole blocks of ten ideas; other runtimes never send units."""
+
+    units: int = Field(ge=1, le=SuggestionAdmissionLimit.MAX_UNITS)
+
+
 class RuntimeAdmissionGrant(BaseModel):
     """Receipt returned after the backend durably charges admission."""
 
@@ -93,6 +99,7 @@ class RuntimeLaunchPlan(BaseModel):
         "runtime.persistence@1",
         "runtime.task-board@1",
         "runtime.stages@1",
+        "runtime.suggestion@1",
     ] = "runtime.review.adversarial-team@1"
     host: RuntimeHost
     executable: Path
