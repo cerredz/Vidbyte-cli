@@ -42,7 +42,8 @@ EXPECTED_TOP_LEVEL = {
     "runtime",
     "whoami",
 }
-EXPECTED_AGENTS = {"suggest"}
+EXPECTED_AGENTS = {"suggest", "rules"}
+EXPECTED_RULES = {"scan", "resume", "hosts", "sessions", "limits", "list", "show"}
 EXPECTED_SUGGESTION = {"categories", "feedback", "handoff", "project", "run"}
 EXPECTED_RESEARCH = {"add", "resume", "start", "status", "thread", "threads", "watch"}
 EXPECTED_RUNTIME = {
@@ -204,7 +205,7 @@ class SurfaceSuite:
             f"got {sorted(actual)}",
         )
         results.check(
-            "agents exposes exactly the suggestion group",
+            "agents exposes exactly the suggestion and rules groups",
             self._subcommands("agents") == EXPECTED_AGENTS,
         )
         agents = self.program.commands["agents"]
@@ -214,6 +215,13 @@ class SurfaceSuite:
         results.check(
             "suggest exposes run, categories, handoff, project, and feedback",
             set(suggest.commands) == EXPECTED_SUGGESTION,
+        )
+        rules = agents.commands["rules"]
+        assert isinstance(rules, click.Group)
+        results.check(
+            "rules exposes scan, resume, hosts, sessions, limits, list, and show",
+            set(rules.commands) == EXPECTED_RULES,
+            f"got {sorted(rules.commands)}",
         )
         research = self._subcommands("research")
         results.check(
