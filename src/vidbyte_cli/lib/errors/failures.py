@@ -2863,3 +2863,91 @@ class SuggestionFeedbackInvalid(CliError):
                 "Pass --project and --suggestion, and call the command only for explicit feedback."
             ),
         )
+
+
+class RulesInputInvalid(CliError):
+    """One rules-agent scope or limit value could not be interpreted."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, option: str, expected: str) -> None:
+        # Names the option and its accepted shape; never echoes a prompt or path content.
+        super().__init__(
+            f"Invalid value for {option}: expected {expected}.",
+            description=(
+                "The rules agent validates every scope and limit before it reads transcripts, "
+                "resolves credentials, or spends anything. This value did not match the accepted "
+                "shape, so nothing was read or charged. Durations look like 30d, 12h, or 45m; "
+                "dates look like 2026-09-01 or 2026-09-01T12:00:00; money looks like 2.50."
+            ),
+            trace="RulesScopeOptions or RulesLimitOptions parsed the option before planning.",
+            hint=f"Re-run with {option} set to {expected}.",
+        )
+
+
+class RulesNoPromptsFound(CliError):
+    """The selected hosts, dates, and project matched no user-typed prompts."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self) -> None:
+        # Static text: the scope that matched nothing is reported by `rules sessions`.
+        super().__init__(
+            "No prompts matched this scan's scope.",
+            description=(
+                "The rules agent read the transcript folders of the selected hosts and found no "
+                "user-typed prompt inside the requested dates, project, and session limits. No "
+                "scan was created and nothing was charged. The host may keep its transcripts "
+                "elsewhere, or the window may be too narrow."
+            ),
+            trace="TranscriptLibrary.prompts returned an empty selection before planning.",
+            hint=(
+                "Run `vidbyte-cli agents rules hosts` and `vidbyte-cli agents rules sessions` "
+                "to see what is found."
+            ),
+        )
+
+
+class RulesScanNotFound(CliError):
+    """No stored scan has the requested ID."""
+
+    code = CliErrorCode.INVALID_ARGUMENT
+    exit_status = ExitCode.USAGE
+
+    def __init__(self, scan_id: str) -> None:
+        # The scan ID is a local, caller-supplied identifier and safe to echo.
+        super().__init__(
+            f"No stored rules scan has ID {scan_id!r}.",
+            description=(
+                "Rules scans are stored under the Vidbyte CLI data directory, one folder per scan "
+                "ID, and this ID has no manifest there. Nothing was read, resumed, or charged. "
+                "The ID may be mistyped, or the scan may have been created under another profile "
+                "or on another machine."
+            ),
+            trace="RulesScanStore.load_manifest found no manifest document for the ID.",
+            hint="Run `vidbyte-cli agents rules list` to see stored scan IDs.",
+        )
+
+
+class RulesScanStorageFailed(CliError):
+    """A rules scan's local manifest, batch record, or document could not be read or written."""
+
+    code = CliErrorCode.OPERATION_FAILED
+    exit_status = ExitCode.OPERATIONAL_FAILURE
+
+    def __init__(self, cause: Exception) -> None:
+        # Keeps only the underlying failure's type; its message may contain file paths.
+        super().__init__(
+            "The rules scan's local files could not be read or written.",
+            description=(
+                "The rules agent keeps each scan's plan, finished batches, and rules document "
+                "under the Vidbyte CLI data directory. Reading or writing one of those files "
+                f"failed with {type(cause).__name__}. Batches already paid for stay recorded if "
+                "their files were written, and a later resume never pays for them again."
+            ),
+            trace="RulesScanStore wrapped a LocalFileStore or LocalDocumentStore failure.",
+            hint="Check disk space and permissions on the CLI data folder, then resume the scan.",
+            cause=cause,
+        )

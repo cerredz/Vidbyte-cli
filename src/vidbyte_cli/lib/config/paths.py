@@ -64,3 +64,7 @@ class VidbytePaths:
     def suggestions_dir(self) -> Path:
         # Durable suggestion memory belongs beside other local user data, not cache state.
         return self.data_root / "suggestions"
+
+    def rules_dir(self) -> Path:
+        # Rules scans hold paid batch results, so they are user data rather than cache.
+        return self.data_root / "rules"

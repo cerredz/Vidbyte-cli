@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from ...types.provider import Provider
 from ..api.client import ApiClient
 from ..api.endpoints.research import ResearchEndpoints
+from ..api.endpoints.rules import RulesEndpoints
 from ..api.endpoints.runtime import RuntimeEndpoints
 from ..auth import (
     ApiCredentialVerifier,
@@ -35,6 +36,7 @@ from ..auth.provider_verifier import ProviderVerifier, verifier_for_provider
 from ..config import ConfigResolver, ConfigStore, ResolvedConfig, VidbytePaths
 from ..config.migration import StateMigration
 from ..config.models import DEFAULT_API_URL, DEFAULT_PROFILE
+from ..constants.rules import RulesDefault
 from ..errors.failures import AuthenticationRequired, ProviderAuthenticationRequired
 from ..errors.handler import ErrorHandler
 from ..io import IOStreams
@@ -86,6 +88,8 @@ class ApplicationContext:
         self._api_client: ApiClient | None = None
         self._research_endpoints: ResearchEndpoints | None = None
         self._runtime_endpoints: RuntimeEndpoints | None = None
+        self._rules_client: ApiClient | None = None
+        self._rules_endpoints: RulesEndpoints | None = None
         self._runtime_hosts: RuntimeHostRegistry | None = None
         self._runtime_launch_planner: RuntimeLaunchPlanner | None = None
         self._runtime_executor: RuntimeExecutor | None = None
@@ -177,6 +181,20 @@ class ApplicationContext:
             self._runtime_endpoints = RuntimeEndpoints(self.api_client())
         return self._runtime_endpoints
 
+    def rules_endpoints(self) -> RulesEndpoints:
+        # A separate client whose timeout covers one hosted Jev-and-writer batch.
+        if self._rules_endpoints is None:
+            config = self.resolved_config()
+            timeout = max(
+                config.request_timeout_seconds, float(RulesDefault.REQUEST_TIMEOUT_SECONDS)
+            )
+            self._rules_client = ApiClient(
+                config.model_copy(update={"request_timeout_seconds": timeout}),
+                self.require_credentials(),
+            )
+            self._rules_endpoints = RulesEndpoints(self._rules_client)
+        return self._rules_endpoints
+
     def runtime_hosts(self) -> RuntimeHostRegistry:
         # Shares one PATH discovery policy between doctor and launch planning.
         if self._runtime_hosts is None:
@@ -199,6 +217,8 @@ class ApplicationContext:
         # Releases network resources this invocation opened; a help path opened none.
         if self._api_client is not None:
             self._api_client.close()
+        if self._rules_client is not None:
+            self._rules_client.close()
 
     def output(self) -> OutputManager:
         # Callers share one policy object so stdout cardinality stays enforceable.
