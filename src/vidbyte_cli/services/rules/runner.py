@@ -124,7 +124,7 @@ class RulesScanRunner:
             and time.monotonic() - started >= limits.time_limit_seconds
         ):
             return RulesStopReason.TIME_LIMIT
-        if self._batch_budget(manifest) < RulesBackendLimit.ADMISSION_FLOOR_CENTS:
+        if self._batch_budget(manifest) < RulesBackendLimit.MIN_BATCH_COST_CENTS:
             return RulesStopReason.SPEND_LIMIT
         return None
 
@@ -150,13 +150,15 @@ class RulesScanRunner:
 
     @staticmethod
     def _payload(prompt: TranscriptPrompt) -> RulesPromptPayload:
-        # Truncates to the backend's bound rather than letting one long paste fail the batch.
+        # Clamps every field to the backend's bounds so one long paste or path never fails a batch.
         return RulesPromptPayload(
             prompt_id=prompt.prompt_id,
             host=prompt.host,
-            session_id=prompt.session_id,
+            session_id=prompt.session_id[: RulesBackendLimit.SESSION_ID_MAX_CHARS],
             text=prompt.text[: RulesBackendLimit.PROMPT_MAX_CHARS],
-            project=prompt.project,
+            project=prompt.project[: RulesBackendLimit.PROJECT_MAX_CHARS]
+            if prompt.project
+            else None,
             created_at=prompt.created_at,
         )
 

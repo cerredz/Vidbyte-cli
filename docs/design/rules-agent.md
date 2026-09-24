@@ -72,7 +72,7 @@ Every scan is stored locally, so an interrupted or capped scan continues with `r
 5. `--dry-run` stops after step 5. It reports the prompt and batch counts and the spend cap, and makes no request.
 6. Before each batch the runner stops with a recorded `stop_reason` when either of these is true:
    - `time_limit`: the elapsed time is at or past `--time-limit`,
-   - `spend_limit`: the remaining budget (`max_spend_cents - spent_cents`) is below the backend's admission floor (10¢).
+   - `spend_limit`: the remaining budget (`max_spend_cents - spent_cents`) is below the backend's minimum batch cost (40¢; see §11a).
 7. Each batch sends `max_cost_cents = min(--max-batch-cost, remaining budget)`, and the idempotency key `rules-<scan_id>-<batch_index>`.
 8. After each successful batch, the runner writes its record and updates the manifest (completed batches, spent cents, rule count) before the next batch starts.
 9. A batch failure stops the scan and records the reason:
@@ -169,7 +169,7 @@ class TranscriptLibrary:
 - Every help string meets lint rule C001: at least four sentences averaging eight or more words.
 
 ### 6.8 Constants, paths, failures
-- `src/vidbyte_cli/lib/constants/rules.py` (new): backend bounds (`RULES_BATCH_MAX_PROMPTS = 20`, `RULES_PROMPT_MAX_CHARS = 6000`, `RULES_ADMISSION_FLOOR_CENTS = 10`, `RULES_MAX_BATCH_COST_CENTS = 500`) and CLI defaults (`--since 30d`, `--max-spend 2.00`, `--batch-size 20`, `--max-batch-cost 0.50`, request timeout 180 s).
+- `src/vidbyte_cli/lib/constants/rules.py` (new): backend bounds (`RULES_BATCH_MAX_PROMPTS = 20`, `RULES_PROMPT_MAX_CHARS = 6000`, `MIN_BATCH_COST_CENTS = 40`, `PROMPT_ID_MAX_CHARS = 128`, `SESSION_ID_MAX_CHARS = 200`, `PROJECT_MAX_CHARS = 300`, `RULES_MAX_BATCH_COST_CENTS = 500`) and CLI defaults (`--since 30d`, `--max-spend 2.00`, `--batch-size 20`, `--max-batch-cost 0.50`, request timeout 180 s).
 - `lib/config/paths.py`: `rules_dir()` returns `data_root / "rules"`.
 - `lib/errors/failures.py` adds four failures:
   - `RulesInputInvalid` (usage),
@@ -236,6 +236,8 @@ N/A for this repo: it consumes the new `POST /api/x402/runtime/rules/batches` de
   - `python scripts/run_ci.py` passes (exit 0). It needs a working `vidbyte` SDK on `PYTHONPATH`, because this machine's editable SDK install is stale, which is a known pre-existing issue.
   - The readers were run against real local transcripts on all four hosts.
   - A loopback stand-in for the batch route exercised the paid flow end to end: spend-limit stop, resume with a raised cap, `--out`, a 402 leading to `credit_exhausted`, and the dry-run plan executed through `resume`.
+
+- **Refinement: 40¢ minimum batch cost, and clamped fields.** The backend's writer pre-authorizes its worst case (about 36¢) before its first call, so the backend now rejects `max_cost_cents` below 40. The CLI mirrors this in three places: `--max-batch-cost` must be at least $0.40, the stop check uses 40¢, and `limits` reports it. Payload fields are clamped to the backend's bounds (`session_id` 200 characters, `project` 300). Prompt IDs replace characters outside `[A-Za-z0-9._-]` and fall back to a hashed session ID beyond 128 characters, so an unusual path or ID can never fail a whole batch with a 422.
 
 ## 12. Open Questions
 

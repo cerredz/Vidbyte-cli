@@ -69,14 +69,17 @@ MAX_SPEND_HELP = (
     "Stop the scan before it spends more than this many dollars in total, for example 2.50. The "
     "cap counts the metered charge every finished batch reported, including batches from earlier "
     "runs of the same scan. A scan stops before any batch whose remaining budget is below the "
-    f"backend's minimum, and the default is ${RulesDefault.MAX_SPEND_CENTS / 100:.2f}."
+    f"backend's minimum, and the default is ${RulesDefault.MAX_SPEND_CENTS / 100:.2f}. "
+    "Raise it for a large history, or raise it later on a stopped scan with the resume verb."
 )
 MAX_BATCH_COST_HELP = (
     "Cap what any single batch may spend, in dollars, for example 0.50. The backend enforces this "
     "cap while the batch runs, so a batch that would cost more stops instead of overspending. The "
     "value used for each batch is the smaller of this cap and the scan's remaining budget. The "
-    f"default is ${RulesDefault.MAX_BATCH_COST_CENTS / 100:.2f}, and the backend allows at most "
-    f"${RulesBackendLimit.MAX_BATCH_COST_CENTS / 100:.2f}."
+    f"default is ${RulesDefault.MAX_BATCH_COST_CENTS / 100:.2f}, and the backend accepts between "
+    f"${RulesBackendLimit.MIN_BATCH_COST_CENTS / 100:.2f} and "
+    f"${RulesBackendLimit.MAX_BATCH_COST_CENTS / 100:.2f}, because the writer reserves its "
+    "worst case before it starts."
 )
 TIME_LIMIT_HELP = (
     "Stop sending new batches once this much wall-clock time has passed, such as 20m or 1h. A "
@@ -122,21 +125,23 @@ class DurationParser:
     def _duration_seconds(raw: str) -> int | None:
         # None when the text is not a duration at all.
         match = _DURATION.match(raw.strip())
-        return int(match.group(1)) * _UNIT_SECONDS[match.group(2).lower()] if match else None
+        return int(match[1]) * _UNIT_SECONDS[match[2].lower()] if match else None
 
 
 class MoneyParser:
     """Turns dollar strings into whole cents."""
 
     @staticmethod
-    def cents(option: str, raw: str, *, maximum: int) -> int:
-        # Rounds to the nearest cent and rejects values below one cent or above the cap.
+    def cents(option: str, raw: str, *, maximum: int, minimum: int = 1) -> int:
+        # Rounds to the nearest cent and rejects values outside [minimum, maximum].
         try:
             cents = int((Decimal(raw.strip().lstrip("$")) * _CENTS_PER_DOLLAR).quantize(Decimal(1)))
         except (InvalidOperation, ValueError) as error:
             raise RulesInputInvalid(option, "a dollar amount such as 2.50") from error
-        if not 1 <= cents <= maximum:
-            raise RulesInputInvalid(option, f"an amount between $0.01 and ${maximum / 100:.2f}")
+        if not minimum <= cents <= maximum:
+            raise RulesInputInvalid(
+                option, f"an amount between ${minimum / 100:.2f} and ${maximum / 100:.2f}"
+            )
         return cents
 
 
@@ -259,6 +264,7 @@ class RulesLimitOptions:
                 "--max-batch-cost",
                 str(values.get("max_batch_cost_text")),
                 maximum=RulesBackendLimit.MAX_BATCH_COST_CENTS,
+                minimum=RulesBackendLimit.MIN_BATCH_COST_CENTS,
             ),
             batch_size=int(str(values.get("batch_size") or RulesDefault.BATCH_SIZE)),
             time_limit_seconds=seconds,

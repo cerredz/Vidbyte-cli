@@ -17,8 +17,13 @@ class RulesBackendLimit(IntEnum):
 
     BATCH_MAX_PROMPTS = 20
     PROMPT_MAX_CHARS = 6000
-    ADMISSION_FLOOR_CENTS = 10
+    # The writer pre-authorizes its worst case (~36 cents) before its first call, so this is
+    # both the gatekeeper's minimum balance and the smallest cap a batch may be sent with.
+    MIN_BATCH_COST_CENTS = 40
     MAX_BATCH_COST_CENTS = 500
+    PROMPT_ID_MAX_CHARS = 128
+    SESSION_ID_MAX_CHARS = 200
+    PROJECT_MAX_CHARS = 300
 
 
 class RulesDefault(IntEnum):

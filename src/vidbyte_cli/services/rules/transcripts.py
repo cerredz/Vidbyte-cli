@@ -9,8 +9,10 @@ on top of every reader, newest sessions first.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -18,9 +20,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
+from ...lib.constants.rules import RulesBackendLimit
 from ...types.rules import RulesHost, RulesScanScope
 
 _MILLISECONDS_THRESHOLD = 10**11
+_UNSAFE_ID_CHARACTERS = re.compile(r"[^A-Za-z0-9._-]")
+_SESSION_DIGEST_CHARS = 32
 
 
 @dataclass(frozen=True)
@@ -51,6 +56,20 @@ class TranscriptSession:
         # The newest prompt time, falling back to the session start.
         times = [prompt.created_at for prompt in self.prompts if prompt.created_at is not None]
         return max(times) if times else self.started_at
+
+
+class PromptIdentity:
+    """Builds prompt IDs that satisfy the batch route's character set and length bound."""
+
+    @staticmethod
+    def of(host: RulesHost, session_id: str, ordinal: int) -> str:
+        # host:session:ordinal, with unsafe characters replaced and long session IDs hashed.
+        safe = _UNSAFE_ID_CHARACTERS.sub("_", session_id)
+        candidate = f"{host.value}:{safe}:{ordinal}"
+        if len(candidate) <= RulesBackendLimit.PROMPT_ID_MAX_CHARS:
+            return candidate
+        digest = hashlib.sha256(session_id.encode()).hexdigest()[:_SESSION_DIGEST_CHARS]
+        return f"{host.value}:{digest}:{ordinal}"
 
 
 class TranscriptTime:
@@ -178,7 +197,7 @@ class TranscriptSource:
             TranscriptPrompt(
                 self.host,
                 session_id,
-                f"{self.host.value}:{session_id}:{ordinal}",
+                PromptIdentity.of(self.host, session_id, ordinal),
                 text,
                 project,
                 created_at,

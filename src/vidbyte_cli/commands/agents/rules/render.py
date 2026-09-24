@@ -147,7 +147,7 @@ class RulesRenderer:
             "default_batch_size": int(RulesDefault.BATCH_SIZE),
             "backend_batch_max_prompts": int(RulesBackendLimit.BATCH_MAX_PROMPTS),
             "backend_prompt_max_chars": int(RulesBackendLimit.PROMPT_MAX_CHARS),
-            "backend_admission_floor_cents": int(RulesBackendLimit.ADMISSION_FLOOR_CENTS),
+            "backend_min_batch_cost_cents": int(RulesBackendLimit.MIN_BATCH_COST_CENTS),
             "time_limit_cap_seconds": int(RulesCap.TIME_LIMIT_SECONDS),
             "max_sessions_cap": int(RulesCap.MAX_SESSIONS),
             "max_prompts_cap": int(RulesCap.MAX_PROMPTS),
@@ -165,7 +165,7 @@ class RulesRenderer:
                 f"--max-sessions    no default, cap {RulesCap.MAX_SESSIONS}",
                 f"--max-prompts     no default, cap {RulesCap.MAX_PROMPTS}",
                 f"Each prompt is truncated to {RulesBackendLimit.PROMPT_MAX_CHARS} characters.",
-                f"A batch needs at least ${RulesBackendLimit.ADMISSION_FLOOR_CENTS / 100:.2f} of "
+                f"A batch needs at least ${RulesBackendLimit.MIN_BATCH_COST_CENTS / 100:.2f} of "
                 "wallet balance and remaining budget to start.",
             )
         )
