@@ -11,14 +11,16 @@ import click
 
 
 class AgentsGroup:
-    """Attaches agents/suggest with run, categories, and handoff verbs."""
+    """Attaches the suggestion agent and the rules agent."""
 
     def register(self, parent: click.Group) -> None:
         # Builds nested groups here so commands/__init__.py stays declarative.
+        from .rules import RulesAgentGroup
         from .suggestion import SuggestionAgentGroup
 
         agents = click.Group(name="agents", help=_AGENTS_HELP)
         SuggestionAgentGroup().register(agents)
+        RulesAgentGroup().register(agents)
         parent.add_command(agents)
 
 
