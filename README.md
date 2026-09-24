@@ -69,6 +69,9 @@ let an agent calling this CLI diagnose and correct its own invocation.
 | `vidbyte-cli agents suggest project create --key KEY --title TITLE --description TEXT` | Create a local suggestion-memory project (no model) |
 | `vidbyte-cli agents suggest project list` | List local suggestion-memory projects (no model) |
 | `vidbyte-cli agents suggest feedback accept\|reject --project KEY --suggestion TEXT [--reason TEXT]` | Record explicit user feedback for a project (no model) |
+| `vidbyte-cli agents rules scan [--since 30d] [--max-spend 2.00] [--time-limit 20m]` | Turn past coding-agent prompts into one standing-rules document (metered) |
+| `vidbyte-cli agents rules resume SCAN_ID [--max-spend 5.00]` | Continue a stopped scan from its first unfinished batch |
+| `vidbyte-cli agents rules hosts\|sessions\|limits\|list\|show` | Inspect transcript sources, scopes, limits, and stored scans (no charge) |
 
 ### Suggestion agent
 
@@ -102,6 +105,24 @@ vidbyte-cli agents suggest project create \n  --key vidbyte-cli \n  --title "Vid
 vidbyte-cli agents suggest run --project vidbyte-cli --goal "Choose the next CLI improvement."
 vidbyte-cli agents suggest feedback reject \n  --project vidbyte-cli \n  --suggestion "Use MongoDB for project memory" \n  --reason "It adds unnecessary backend infrastructure."
 ```
+
+### Rules agent
+
+`agents rules scan` reads the prompts you typed into Claude Code, Codex, Grok Build, and OpenCode from the
+transcripts those hosts save on this machine, then sends them in small batches to the hosted
+`runtime.rules@1` route. There, TypeSafe Jev flags the prompts that state a lasting preference or
+correction, and a hosted agent writes them up as rules. The result is one Markdown document, stored
+under the CLI data directory and optionally copied with `--out`.
+
+- **Scope:** `--host` (repeat it for several hosts), `--since` / `--until` (a duration such as `30d`, or an ISO date), `--project`,
+  `--max-sessions`, and `--max-prompts`. `agents rules sessions` previews a scope for free.
+- **Limits:** `--max-spend` (default $2.00), `--max-batch-cost` (default $0.50), `--time-limit`, and `--batch-size`.
+  Batches run one at a time, and each batch is metered against your API wallet. A scan stops before any batch its
+  remaining budget cannot cover.
+- **Resume:** every scan is stored by ID. `agents rules resume SCAN_ID` never sends or charges a finished batch
+  again, and `--dry-run` stores a plan that `resume` later executes.
+- **No BYOK:** all model usage is Vidbyte-hosted and billed as metered usage. Only user-typed prompt text leaves the
+  machine, and the backend does not store it.
 
 ### Research threads
 

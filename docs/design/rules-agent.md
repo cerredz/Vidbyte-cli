@@ -207,7 +207,8 @@ N/A for this repo: it consumes the new `POST /api/x402/runtime/rules/batches` de
 | CREATE | `src/vidbyte_cli/services/rules/store.py` | Scan storage |
 | CREATE | `src/vidbyte_cli/services/rules/runner.py` | Planner + runner |
 | CREATE | `src/vidbyte_cli/services/rules/document.py` | Markdown document |
-| CREATE | `src/vidbyte_cli/commands/agents/rules/*.py` | Seven verbs + options + renderer |
+| CREATE | `src/vidbyte_cli/commands/agents/rules/{__init__,options,scan,sources,history,execution,render}.py` | Seven verbs + options + shared execution + renderer |
+| MODIFY | `scripts/test_research_only_surface.py` | Pin the new `agents rules` surface |
 | MODIFY | `src/vidbyte_cli/commands/agents/__init__.py` | Register `rules` |
 | MODIFY | `README.md` | Command reference entry |
 
@@ -223,6 +224,18 @@ N/A for this repo: it consumes the new `POST /api/x402/runtime/rules/batches` de
 - There is no flag. Deploy backend #560 (with `TYPESAFE_API_KEY` set) first, then merge this.
 - It is not a breaking change: new commands only.
 - Rollback: revert. Local scan folders are inert.
+
+## 11a. Implementation notes (deviations from the first draft)
+
+- **File layout.** The seven verbs live in fewer files: `scan.py` holds `scan` and `resume`, `sources.py` holds `hosts`, `sessions`, and `limits`, and `history.py` holds `list` and `show`. Both paid verbs share `execution.py` (`RulesScanExecution`), so run, publish, and report exist once.
+- **Stopped scans exit 0.** Requirement 9 said a stopped scan would exit with a partial outcome. The CLI has no pattern for "print a result, then exit non-zero", because a raised `CliError` replaces the result document. A stopped scan therefore prints its full result (`status: stopped`, `stop_reason`, and `resume`) on stdout, adds a stderr warning with the continuation command, and exits 0. Agents branch on `data.status`.
+- **Resume drops count caps on re-read.** It drops `max_sessions` and `max_prompts` when re-reading transcripts, so newer sessions can't push planned prompts out of the window. Planned prompts are then looked up by ID.
+- **`--dry-run` stores a real plan and writes an empty document.** Running `resume` with the printed command executes that plan.
+- **Surface contract.** `scripts/test_research_only_surface.py` pins `agents` to `{suggest, rules}` and pins the seven rules verbs.
+- **Verification.**
+  - `python scripts/run_ci.py` passes (exit 0). It needs a working `vidbyte` SDK on `PYTHONPATH`, because this machine's editable SDK install is stale, which is a known pre-existing issue.
+  - The readers were run against real local transcripts on all four hosts.
+  - A loopback stand-in for the batch route exercised the paid flow end to end: spend-limit stop, resume with a raised cap, `--out`, a 402 leading to `credit_exhausted`, and the dry-run plan executed through `resume`.
 
 ## 12. Open Questions
 
