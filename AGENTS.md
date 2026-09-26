@@ -16,7 +16,7 @@ GitHub Actions configuration, and nothing else — this repository has no issue 
 
 #### `.github/workflows/`
 
-A single `ci.yml`, whose header states the rule the repository is built around: the workflow is *the OS/Python matrix only*, and every verification step lives in `scripts/run_ci.py` so local and remote gates cannot drift. Nothing may inline lint or build commands here, and nothing may publish packages here. The matrix covers Ubuntu on Python 3.11 and 3.14, plus Windows and macOS on 3.11, and runs on every pull request and every push to `main` with no path filter.
+`ci.yml`, whose header states the rule the repository is built around: the workflow is *the OS/Python matrix only*, and every verification step lives in `scripts/run_ci.py` so local and remote gates cannot drift. Nothing may inline lint or build commands here, and nothing may publish packages here. The matrix covers Ubuntu on Python 3.11 and 3.14, plus Windows and macOS on 3.11, and runs on every pull request and every push to `main` with no path filter. Beside it, `agents-md-placement.yml` is not a verification gate: on every opened or updated pull request it runs Codex with the instructions in `.github/prompts/agents-md-placement.md` to move code the PR placed against this Map, and pushes the relocation back to the PR branch.
 
 ### `docs/`
 
