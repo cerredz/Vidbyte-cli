@@ -1,0 +1,75 @@
+name: AGENTS.md placement
+
+# Runs Codex (gpt-6-luna, high effort) on every opened or updated pull request
+# to move code the PR put in the wrong place, per the repo's AGENTS.md, and
+# pushes the fix back to the PR branch. Codex only edits the working tree; this
+# workflow commits and pushes. Instructions live in
+# .github/prompts/agents-md-placement.md.
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agents-md-placement-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  placement:
+    name: AGENTS.md placement
+    # Same-repo branches only: fork PRs get no secrets and cannot be pushed to.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build prompt
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          {
+            cat .github/prompts/agents-md-placement.md
+            printf '\n## Pull request\n\nBase branch: %s\nChanges in scope: git diff %s...HEAD\n' "$BASE_REF" "$BASE_SHA"
+          } > "$RUNNER_TEMP/prompt.md"
+
+      - name: Run Codex
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/prompt.md
+          output-file: ${{ runner.temp }}/report.md
+          model: gpt-6-luna
+          effort: high
+          permission-profile: ":workspace"
+          safety-strategy: drop-sudo
+
+      # PLACEMENT_PUSH_TOKEN (a fine-grained PAT with Contents: write) is optional.
+      # Without it, the push uses GITHUB_TOKEN, which never triggers other
+      # workflows, so required checks will not run on the relocation commit.
+      # With it, CI runs normally and this workflow re-runs once as a no-op.
+      - name: Commit and push relocations
+        env:
+          PUSH_TOKEN: ${{ secrets.PLACEMENT_PUSH_TOKEN || github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No placement changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Move PR code to the locations AGENTS.md assigns" -m "$(cat "$RUNNER_TEMP/report.md")"
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${REPO}.git" "HEAD:${HEAD_REF}"
