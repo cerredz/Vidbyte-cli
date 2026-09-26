@@ -32,6 +32,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Require OPENAI_API_KEY
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [[ -z "$OPENAI_API_KEY" ]]; then
+            echo "::error::Add an OPENAI_API_KEY Actions secret to this repository to enable AGENTS.md placement."
+            exit 1
+          fi
+
       - name: Build prompt
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
